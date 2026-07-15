@@ -1,0 +1,104 @@
+<Window x:Class="PosApp.Wpf.Views.PaymentDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource Pay_Title}"
+        Width="640" Height="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource BackgroundBrush}">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Amount due -->
+        <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}" CornerRadius="8" Padding="20" Margin="0,0,0,16">
+            <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="{DynamicResource Pay_AmountDue}" Foreground="#DBEAFE" FontSize="13" HorizontalAlignment="Center"/>
+                <TextBlock x:Name="AmountDueText" FontSize="36" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Payment method tabs -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">
+            <Button x:Name="MethodCash" Style="{StaticResource PrimaryButton}" Content="{DynamicResource Pay_Cash}"
+                    Margin="0,0,4,0" Padding="14,10" Click="Method_Click" Tag="0"/>
+            <Button x:Name="MethodCard" Style="{StaticResource OutlineButton}" Content="{DynamicResource Pay_Card}"
+                    Margin="4,0" Padding="14,10" Click="Method_Click" Tag="1"/>
+            <Button x:Name="MethodMobile" Style="{StaticResource OutlineButton}" Content="{DynamicResource Pay_Mobile}"
+                    Margin="4,0" Padding="14,10" Click="Method_Click" Tag="2"/>
+            <Button x:Name="MethodBank" Style="{StaticResource OutlineButton}" Content="{DynamicResource Pay_Bank}"
+                    Margin="4,0" Padding="14,10" Click="Method_Click" Tag="3"/>
+        </StackPanel>
+
+        <!-- Tendered + change -->
+        <Grid Grid.Row="2" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,8,0">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource Pay_Tendered}" Style="{StaticResource Muted}"/>
+                    <TextBox x:Name="TenderedBox" FontSize="22" FontWeight="Bold" Margin="0,4,0,0"
+                             TextChanged="TenderedBox_TextChanged" PreviewTextInput="TenderedBox_PreviewTextInput"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="8,0,0,0" Background="#F0FDF4">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource Pay_Change}" Foreground="#15803D" FontSize="12"/>
+                    <TextBlock x:Name="ChangeText" FontSize="22" FontWeight="Bold" Foreground="#15803D" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Number pad -->
+        <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,0,0,16" Padding="8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Button Grid.Row="0" Grid.Column="0" Style="{StaticResource PadButton}" Content="7" Click="Pad_Click" Tag="7"/>
+                <Button Grid.Row="0" Grid.Column="1" Style="{StaticResource PadButton}" Content="8" Click="Pad_Click" Tag="8"/>
+                <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource PadButton}" Content="9" Click="Pad_Click" Tag="9"/>
+                <Button Grid.Row="1" Grid.Column="0" Style="{StaticResource PadButton}" Content="4" Click="Pad_Click" Tag="4"/>
+                <Button Grid.Row="1" Grid.Column="1" Style="{StaticResource PadButton}" Content="5" Click="Pad_Click" Tag="5"/>
+                <Button Grid.Row="1" Grid.Column="2" Style="{StaticResource PadButton}" Content="6" Click="Pad_Click" Tag="6"/>
+                <Button Grid.Row="2" Grid.Column="0" Style="{StaticResource PadButton}" Content="1" Click="Pad_Click" Tag="1"/>
+                <Button Grid.Row="2" Grid.Column="1" Style="{StaticResource PadButton}" Content="2" Click="Pad_Click" Tag="2"/>
+                <Button Grid.Row="2" Grid.Column="2" Style="{StaticResource PadButton}" Content="3" Click="Pad_Click" Tag="3"/>
+                <Button Grid.Row="3" Grid.Column="0" Style="{StaticResource PadButton}" Content="0" Click="Pad_Click" Tag="0"/>
+                <Button Grid.Row="3" Grid.Column="1" Style="{StaticResource PadButton}" Content="." Click="Pad_Click" Tag="."/>
+                <Button Grid.Row="3" Grid.Column="2" Style="{StaticResource PadButton}" Content="⌫" Click="Pad_Click" Tag="back"/>
+                <Button Grid.Row="4" Grid.Column="0" Style="{StaticResource PadButton}" Content="100" Click="QuickCash_Click" Tag="100"/>
+                <Button Grid.Row="4" Grid.Column="1" Style="{StaticResource PadButton}" Content="500" Click="QuickCash_Click" Tag="500"/>
+                <Button Grid.Row="4" Grid.Column="2" Style="{StaticResource PadButton}" Content="{DynamicResource Pay_Exact}" Click="QuickCash_Click" Tag="exact"/>
+            </Grid>
+        </Border>
+
+        <!-- Action buttons -->
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="{DynamicResource Pay_Cancel}" Style="{StaticResource OutlineButton}"
+                    Margin="0,0,4,0" Padding="0,14" Click="Cancel_Click"/>
+            <Button Grid.Column="1" Content="{DynamicResource Pay_Complete}" Style="{StaticResource SuccessButton}"
+                    Margin="4,0,0,0" Padding="0,14" FontSize="15" Click="Complete_Click"/>
+        </Grid>
+    </Grid>
+</Window>

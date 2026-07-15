@@ -1,0 +1,200 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+
+    <!-- App -->
+    <sys:String x:Key="App_Title">পসঅ্যাপ</sys:String>
+    <sys:String x:Key="App_Tagline">স্থানীয় পয়েন্ট অফ সেল</sys:String>
+
+    <!-- Login -->
+    <sys:String x:Key="Login_Title">ক্যাশিয়ার লগইন</sys:String>
+    <sys:String x:Key="Login_Username">ব্যবহারকারী নাম</sys:String>
+    <sys:String x:Key="Login_Password">পাসওয়ার্ড / পিন</sys:String>
+    <sys:String x:Key="Login_Button">সাইন ইন</sys:String>
+    <sys:String x:Key="Login_Invalid">ভুল ব্যবহারকারী নাম বা পিন</sys:String>
+    <sys:String x:Key="Login_Exit">প্রস্থান</sys:String>
+
+    <!-- Nav -->
+    <sys:String x:Key="Nav_POS">পিওএস</sys:String>
+    <sys:String x:Key="Nav_Products">পণ্য</sys:String>
+    <sys:String x:Key="Nav_Inventory">ইনভেন্টরি</sys:String>
+    <sys:String x:Key="Nav_Customers">গ্রাহক</sys:String>
+    <sys:String x:Key="Nav_Sales">বিক্রয়</sys:String>
+    <sys:String x:Key="Nav_Reports">রিপোর্ট</sys:String>
+    <sys:String x:Key="Nav_Users">ব্যবহারকারী</sys:String>
+    <sys:String x:Key="Nav_Settings">সেটিংস</sys:String>
+    <sys:String x:Key="Nav_Logout">লগআউট</sys:String>
+
+    <!-- POS -->
+    <sys:String x:Key="POS_Search">পণ্য খুঁজুন বা বারকোড স্ক্যান করুন...</sys:String>
+    <sys:String x:Key="POS_All">সব</sys:String>
+    <sys:String x:Key="POS_Cart">কার্ট</sys:String>
+    <sys:String x:Key="POS_EmptyCart">কার্ট খালি। শুরু করতে একটি পণ্য ট্যাপ করুন।</sys:String>
+    <sys:String x:Key="POS_Subtotal">সাবটোটাল</sys:String>
+    <sys:String x:Key="POS_Discount">ছাড়</sys:String>
+    <sys:String x:Key="POS_Tax">ট্যাক্স</sys:String>
+    <sys:String x:Key="POS_Total">মোট</sys:String>
+    <sys:String x:Key="POS_Checkout">চেকআউট</sys:String>
+    <sys:String x:Key="POS_Suspend">স্থগিত</sys:String>
+    <sys:String x:Key="POS_Recall">পুনরুদ্ধার</sys:String>
+    <sys:String x:Key="POS_Clear">মুছুন</sys:String>
+    <sys:String x:Key="POS_AddDiscount">ছাড় যোগ করুন</sys:String>
+    <sys:String x:Key="POS_SelectCustomer">গ্রাহক নির্বাচন</sys:String>
+    <sys:String x:Key="POS_WalkIn">ওয়াক-ইন গ্রাহক</sys:String>
+    <sys:String x:Key="POS_Weigh">ওজন</sys:String>
+
+    <!-- Payment -->
+    <sys:String x:Key="Pay_Title">পেমেন্ট</sys:String>
+    <sys:String x:Key="Pay_AmountDue">প্রদেয় পরিমাণ</sys:String>
+    <sys:String x:Key="Pay_Tendered">প্রদত্ত</sys:String>
+    <sys:String x:Key="Pay_Change">খুচরা</sys:String>
+    <sys:String x:Key="Pay_Cash">নগদ</sys:String>
+    <sys:String x:Key="Pay_Card">কার্ড</sys:String>
+    <sys:String x:Key="Pay_Mobile">মোবাইল ওয়ালেট</sys:String>
+    <sys:String x:Key="Pay_Bank">ব্যাংক ট্রান্সফার</sys:String>
+    <sys:String x:Key="Pay_StoreCredit">স্টোর ক্রেডিট</sys:String>
+    <sys:String x:Key="Pay_Complete">বিক্রয় সম্পূর্ণ</sys:String>
+    <sys:String x:Key="Pay_Cancel">বাতিল</sys:String>
+    <sys:String x:Key="Pay_QuickCash">দ্রুত নগদ</sys:String>
+    <sys:String x:Key="Pay_Exact">ঠিক পরিমাণ</sys:String>
+    <sys:String x:Key="Pay_Insufficient">প্রদত্ত পরিমাণ মোটের চেয়ে কম</sys:String>
+
+    <!-- Products -->
+    <sys:String x:Key="Prod_Title">পণ্য</sys:String>
+    <sys:String x:Key="Prod_Add">পণ্য যোগ</sys:String>
+    <sys:String x:Key="Prod_Edit">সম্পাদনা</sys:String>
+    <sys:String x:Key="Prod_Delete">মুছুন</sys:String>
+    <sys:String x:Key="Prod_Name">নাম</sys:String>
+    <sys:String x:Key="Prod_Sku">এসকেইউ / বারকোড</sys:String>
+    <sys:String x:Key="Prod_Category">বিভাগ</sys:String>
+    <sys:String x:Key="Prod_Price">মূল্য</sys:String>
+    <sys:String x:Key="Prod_Cost">ক্রয়মূল্য</sys:String>
+    <sys:String x:Key="Prod_Stock">স্টক</sys:String>
+    <sys:String x:Key="Prod_TaxRate">ট্যাক্স %</sys:String>
+    <sys:String x:Key="Prod_Weighted">ওজনযুক্ত</sys:String>
+    <sys:String x:Key="Prod_Save">সংরক্ষণ</sys:String>
+    <sys:String x:Key="Prod_Cancel">বাতিল</sys:String>
+    <sys:String x:Key="Prod_LowStock">কম</sys:String>
+    <sys:String x:Key="Prod_OutOfStock">শেষ</sys:String>
+
+    <!-- Inventory -->
+    <sys:String x:Key="Inv_Title">ইনভেন্টরি</sys:String>
+    <sys:String x:Key="Inv_Adjust">স্টক সমন্বয়</sys:String>
+    <sys:String x:Key="Inv_History">ইতিহাস</sys:String>
+    <sys:String x:Key="Inv_LowStock">কম স্টক সতর্কতা</sys:String>
+    <sys:String x:Key="Inv_AdjustQty">সমন্বয় পরিমাণ</sys:String>
+    <sys:String x:Key="Inv_Reason">কারণ</sys:String>
+    <sys:String x:Key="Inv_Type">ধরন</sys:String>
+    <sys:String x:Key="Inv_Balance">ব্যালেন্স</sys:String>
+    <sys:String x:Key="Inv_Date">তারিখ</sys:String>
+    <sys:String x:Key="Inv_Note">নোট</sys:String>
+    <sys:String x:Key="Inv_Purchase">ক্রয় (স্টক ইন)</sys:String>
+    <sys:String x:Key="Inv_Wastage">অপচয়</sys:String>
+    <sys:String x:Key="Inv_Adjustment">সমন্বয়</sys:String>
+
+    <!-- Customers -->
+    <sys:String x:Key="Cust_Title">গ্রাহক</sys:String>
+    <sys:String x:Key="Cust_Add">গ্রাহক যোগ</sys:String>
+    <sys:String x:Key="Cust_Name">নাম</sys:String>
+    <sys:String x:Key="Cust_Phone">ফোন</sys:String>
+    <sys:String x:Key="Cust_Email">ইমেইল</sys:String>
+    <sys:String x:Key="Cust_Address">ঠিকানা</sys:String>
+    <sys:String x:Key="Cust_Points">লয়ালটি পয়েন্ট</sys:String>
+    <sys:String x:Key="Cust_Credit">স্টোর ক্রেডিট</sys:String>
+    <sys:String x:Key="Cust_History">ক্রয় ইতিহাস</sys:String>
+    <sys:String x:Key="Cust_Save">সংরক্ষণ</sys:String>
+
+    <!-- Sales -->
+    <sys:String x:Key="Sales_Title">বিক্রয় ইতিহাস</sys:String>
+    <sys:String x:Key="Sales_Date">তারিখ</sys:String>
+    <sys:String x:Key="Sales_Receipt">রসিদ নং</sys:String>
+    <sys:String x:Key="Sales_Customer">গ্রাহক</sys:String>
+    <sys:String x:Key="Sales_Cashier">ক্যাশিয়ার</sys:String>
+    <sys:String x:Key="Sales_Total">মোট</sys:String>
+    <sys:String x:Key="Sales_Status">অবস্থা</sys:String>
+    <sys:String x:Key="Sales_Items">পণ্য</sys:String>
+    <sys:String x:Key="Sales_View">দেখুন</sys:String>
+    <sys:String x:Key="Sales_Refund">ফেরত</sys:String>
+    <sys:String x:Key="Sales_Void">বাতিল</sys:String>
+    <sys:String x:Key="Sales_Print">প্রিন্ট</sys:String>
+    <sys:String x:Key="Sales_From">থেকে</sys:String>
+    <sys:String x:Key="Sales_To">পর্যন্ত</sys:String>
+    <sys:String x:Key="Sales_Filter">ফিল্টার</sys:String>
+    <sys:String x:Key="Sales_Export">সিএসভি রপ্তানি</sys:String>
+
+    <!-- Reports -->
+    <sys:String x:Key="Rpt_Title">রিপোর্ট ও ড্যাশবোর্ড</sys:String>
+    <sys:String x:Key="Rpt_Today">আজ</sys:String>
+    <sys:String x:Key="Rpt_Week">এই সপ্তাহ</sys:String>
+    <sys:String x:Key="Rpt_Month">এই মাস</sys:String>
+    <sys:String x:Key="Rpt_Custom">কাস্টম</sys:String>
+    <sys:String x:Key="Rpt_GrossSales">মোট বিক্রয়</sys:String>
+    <sys:String x:Key="Rpt_NetSales">নিট বিক্রয়</sys:String>
+    <sys:String x:Key="Rpt_Profit">মোট লাভ</sys:String>
+    <sys:String x:Key="Rpt_TaxCollected">আদায়কৃত ট্যাক্স</sys:String>
+    <sys:String x:Key="Rpt_Transactions">লেনদেন</sys:String>
+    <sys:String x:Key="Rpt_Items">বিক্রিত পণ্য</sys:String>
+    <sys:String x:Key="Rpt_TopProducts">শীর্ষ পণ্য</sys:String>
+    <sys:String x:Key="Rpt_ByHour">ঘণ্টাভিত্তিক বিক্রয়</sys:String>
+    <sys:String x:Key="Rpt_ByCategory">বিভাগভিত্তিক বিক্রয়</sys:String>
+    <sys:String x:Key="Rpt_ByPayment">পেমেন্ট বিশ্লেষণ</sys:String>
+    <sys:String x:Key="Rpt_DailyTrend">দৈনিক প্রবণতা</sys:String>
+    <sys:String x:Key="Rpt_Export">পিডিএফ রপ্তানি</sys:String>
+
+    <!-- Users -->
+    <sys:String x:Key="Usr_Title">ব্যবহারকারী ও ভূমিকা</sys:String>
+    <sys:String x:Key="Usr_Add">ব্যবহারকারী যোগ</sys:String>
+    <sys:String x:Key="Usr_Username">ব্যবহারকারী নাম</sys:String>
+    <sys:String x:Key="Usr_FullName">পূর্ণ নাম</sys:String>
+    <sys:String x:Key="Usr_Role">ভূমিকা</sys:String>
+    <sys:String x:Key="Usr_Pin">পিন</sys:String>
+    <sys:String x:Key="Usr_Active">সক্রিয়</sys:String>
+    <sys:String x:Key="Usr_Cashier">ক্যাশিয়ার</sys:String>
+    <sys:String x:Key="Usr_Manager">ম্যানেজার</sys:String>
+    <sys:String x:Key="Usr_Admin">অ্যাডমিন</sys:String>
+    <sys:String x:Key="Usr_LastLogin">শেষ লগইন</sys:String>
+
+    <!-- Settings -->
+    <sys:String x:Key="Set_Title">সেটিংস</sys:String>
+    <sys:String x:Key="Set_Store">দোকানের তথ্য</sys:String>
+    <sys:String x:Key="Set_StoreName">দোকানের নাম</sys:String>
+    <sys:String x:Key="Set_Address">ঠিকানা</sys:String>
+    <sys:String x:Key="Set_Phone">ফোন</sys:String>
+    <sys:String x:Key="Set_Email">ইমেইল</sys:String>
+    <sys:String x:Key="Set_TaxId">ট্যাক্স আইডি</sys:String>
+    <sys:String x:Key="Set_Currency">মুদ্রা প্রতীক</sys:String>
+    <sys:String x:Key="Set_Footer">রসিদ ফুটার</sys:String>
+    <sys:String x:Key="Set_Hardware">হার্ডওয়্যার</sys:String>
+    <sys:String x:Key="Set_Printer">রসিদ প্রিন্টার</sys:String>
+    <sys:String x:Key="Set_DrawerPort">ক্যাশ ড্রয়ার পোর্ট</sys:String>
+    <sys:String x:Key="Set_ScalePort">স্কেল পোর্ট</sys:String>
+    <sys:String x:Key="Set_AutoPrint">অটো-প্রিন্ট রসিদ</sys:String>
+    <sys:String x:Key="Set_OpenDrawer">নগদ বিক্রয়ে ড্রয়ার খোলা</sys:String>
+    <sys:String x:Key="Set_Language">ভাষা</sys:String>
+    <sys:String x:Key="Set_Theme">থিম</sys:String>
+    <sys:String x:Key="Set_Light">হালকা</sys:String>
+    <sys:String x:Key="Set_Dark">গাঢ়</sys:String>
+    <sys:String x:Key="Set_English">English</sys:String>
+    <sys:String x:Key="Set_Bengali">বাংলা</sys:String>
+    <sys:String x:Key="Set_Save">সেটিংস সংরক্ষণ</sys:String>
+    <sys:String x:Key="Set_TestPrint">টেস্ট প্রিন্ট</sys:String>
+    <sys:String x:Key="Set_TestDrawer">টেস্ট ড্রয়ার</sys:String>
+    <sys:String x:Key="Set_Tax">ট্যাক্স হার</sys:String>
+    <sys:String x:Key="Set_Discounts">ছাড়</sys:String>
+
+    <!-- Common -->
+    <sys:String x:Key="Common_Save">সংরক্ষণ</sys:String>
+    <sys:String x:Key="Common_Cancel">বাতিল</sys:String>
+    <sys:String x:Key="Common_Delete">মুছুন</sys:String>
+    <sys:String x:Key="Common_Close">বন্ধ</sys:String>
+    <sys:String x:Key="Common_Yes">হ্যাঁ</sys:String>
+    <sys:String x:Key="Common_No">না</sys:String>
+    <sys:String x:Key="Common_Confirm">নিশ্চিত</sys:String>
+    <sys:String x:Key="Common_Search">অনুসন্ধান</sys:String>
+    <sys:String x:Key="Common_Loading">লোড হচ্ছে...</sys:String>
+    <sys:String x:Key="Common_None">কিছু না</sys:String>
+    <sys:String x:Key="Common_Error">ত্রুটি</sys:String>
+    <sys:String x:Key="Common_Success">সফল</sys:String>
+    <sys:String x:Key="Common_Actions">অ্যাকশন</sys:String>
+
+</ResourceDictionary>
