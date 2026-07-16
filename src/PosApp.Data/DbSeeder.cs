@@ -65,7 +65,7 @@ public static class DbSeeder
             var groceries = await db.Categories.FirstAsync(c => c.Name == "Groceries");
             var produce = await db.Categories.FirstAsync(c => c.Name == "Produce");
 
-            db.Products.AddRange(new[]
+            var products = new[]
             {
                 new Product { Name = "Mineral Water 500ml", Sku = "BV-001", CategoryId = beverages.Id, Price = 20m, CostPrice = 12m, StockQuantity = 100, LowStockThreshold = 10 },
                 new Product { Name = "Cola 330ml", Sku = "BV-002", CategoryId = beverages.Id, Price = 40m, CostPrice = 28m, StockQuantity = 80, LowStockThreshold = 10 },
@@ -82,16 +82,20 @@ public static class DbSeeder
                 new Product { Name = "Tomato (per kg)", Sku = "PR-002", CategoryId = produce.Id, Price = 60m, CostPrice = 40m, StockQuantity = 40, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
                 new Product { Name = "Potato (per kg)", Sku = "PR-003", CategoryId = produce.Id, Price = 45m, CostPrice = 30m, StockQuantity = 60, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
                 new Product { Name = "Onion (per kg)", Sku = "PR-004", CategoryId = produce.Id, Price = 70m, CostPrice = 50m, StockQuantity = 50, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram }
-            });
+            };
+
+            db.Products.AddRange(products);
 
             // Seed initial stock transactions
-            foreach (var p in db.Products.Local)
+            foreach (var p in products)
             {
                 if (p.StockQuantity is > 0)
                 {
                     db.StockTransactions.Add(new StockTransaction
                     {
-                        ProductId = p.Id,
+                        // Use the navigation property so EF propagates the generated
+                        // product key to the stock transaction during SaveChanges.
+                        Product = p,
                         Type = StockTransactionType.InitialStock,
                         Quantity = p.StockQuantity.Value,
                         BalanceAfter = p.StockQuantity.Value,
