@@ -12,11 +12,11 @@
     <ApplicationIcon>Assets\PosApp.ico</ApplicationIcon>
     <AssemblyName>PosApp</AssemblyName>
     <RootNamespace>PosApp.Wpf</RootNamespace>
-    <Version>1.3.2</Version>
+    <Version>1.3.3</Version>
     <Company>PosApp</Company>
     <Product>PosApp - Local POS</Product>
-    <AssemblyVersion>1.3.2.0</AssemblyVersion>
-    <FileVersion>1.3.2.0</FileVersion>
+    <AssemblyVersion>1.3.3.0</AssemblyVersion>
+    <FileVersion>1.3.3.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">

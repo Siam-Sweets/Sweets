@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Printing;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;

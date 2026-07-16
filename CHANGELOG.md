@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.3 — WPF safe-update build correction
+
+- Fixed Release compilation of the Update &amp; Recovery page by explicitly importing `System.IO` for `Path` and `Directory` in the WPF XAML temporary project.
+- Kept the v1.3.2 safe-update behavior and data-preservation workflow unchanged.
+
 ## 1.3.2 — Safe offline updates and automatic upgrade recovery
 
 - Added **Settings → Update & recovery** for selecting a newer local PosApp setup installer without adding any online update dependency.
