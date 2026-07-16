@@ -4,14 +4,18 @@
     <!-- Base window -->
     <Style TargetType="Window">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
-        <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+    </Style>
+
+    <Style TargetType="UserControl">
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
     </Style>
 
     <!-- TextBlock base -->
     <Style TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
     </Style>
 
     <!-- Headings -->
@@ -32,7 +36,7 @@
     </Style>
     <Style x:Key="Muted" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Foreground" Value="{StaticResource TextMutedBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
     </Style>
 
     <!-- Primary button -->
@@ -88,9 +92,9 @@
 
     <!-- Outline button -->
     <Style x:Key="OutlineButton" TargetType="Button">
-        <Setter Property="Background" Value="{StaticResource CardBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="16,10"/>
         <Setter Property="FontSize" Value="14"/>
@@ -108,7 +112,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceHoverBrush}"/>
+                            <Setter TargetName="border" Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -129,10 +133,10 @@
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Padding" Value="10,8"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Background" Value="{StaticResource InputBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource InputBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
@@ -163,10 +167,10 @@
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Padding" Value="10,8"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Background" Value="{StaticResource InputBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource InputBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="PasswordBox">
@@ -198,27 +202,45 @@
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Padding" Value="10,8"/>
         <Setter Property="MinHeight" Value="34"/>
-        <Setter Property="Background" Value="{StaticResource InputBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource InputBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+    </Style>
+
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+        <Setter Property="Padding" Value="8,6"/>
+        <Style.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="DatePicker">
+        <Setter Property="Background" Value="{DynamicResource InputBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
     </Style>
 
     <Style TargetType="CheckBox">
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
     </Style>
 
     <Style TargetType="RadioButton">
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
     </Style>
 
     <!-- DataGrid -->
     <Style TargetType="DataGrid">
-        <Setter Property="Background" Value="{StaticResource CardBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="RowBackground" Value="{StaticResource CardBrush}"/>
-        <Setter Property="AlternatingRowBackground" Value="{StaticResource AlternateRowBrush}"/>
+        <Setter Property="RowBackground" Value="{DynamicResource CardBrush}"/>
+        <Setter Property="AlternatingRowBackground" Value="{DynamicResource AlternateRowBrush}"/>
         <Setter Property="GridLinesVisibility" Value="Horizontal"/>
-        <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="HeadersVisibility" Value="Column"/>
         <Setter Property="SelectionMode" Value="Single"/>
         <Setter Property="AutoGenerateColumns" Value="False"/>
@@ -228,11 +250,11 @@
         <Setter Property="ColumnHeaderStyle">
             <Setter.Value>
                 <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}"/>
-                    <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+                    <Setter Property="Background" Value="{DynamicResource SurfaceMutedBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
                     <Setter Property="FontWeight" Value="SemiBold"/>
                     <Setter Property="Padding" Value="12,10"/>
-                    <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
                     <Setter Property="BorderThickness" Value="0,0,1,1"/>
                 </Style>
             </Setter.Value>
@@ -243,8 +265,8 @@
                     <Setter Property="Padding" Value="12,8"/>
                     <Style.Triggers>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
-                            <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+                            <Setter Property="Background" Value="{DynamicResource SelectionBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
                         </Trigger>
                     </Style.Triggers>
                 </Style>
@@ -254,9 +276,9 @@
 
     <!-- Card (border with shadow-ish) -->
     <Style x:Key="Card" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
         <Setter Property="CornerRadius" Value="{StaticResource CardRadius}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="{StaticResource CardPadding}"/>
     </Style>
@@ -276,7 +298,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter/>
+                        <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -300,8 +322,8 @@
 
     <!-- Product tile (POS) -->
     <Style x:Key="ProductTile" TargetType="Button">
-        <Setter Property="Background" Value="{StaticResource CardBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="0"/>
         <Setter Property="Margin" Value="4"/>

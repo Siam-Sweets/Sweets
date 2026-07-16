@@ -2,7 +2,7 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:PosApp.Wpf.Converters"
-             Background="{StaticResource BackgroundBrush}">
+             Background="{DynamicResource BackgroundBrush}">
     <UserControl.Resources>
         <conv:SaleStatusToStringConverter x:Key="StatusStr"/>
         <conv:MoneyConverter x:Key="Money"/>
@@ -61,22 +61,22 @@
                     <TextBlock x:Name="TxnCountText" FontSize="22" FontWeight="Bold"/>
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource StatCard}" Margin="8,0" Background="#EFF6FF">
+            <Border Style="{StaticResource StatCard}" Margin="8,0" Background="{DynamicResource InfoSurfaceBrush}">
                 <StackPanel>
                     <TextBlock Text="{DynamicResource Rpt_GrossSales}" Style="{StaticResource Muted}"/>
-                    <TextBlock x:Name="GrossText" FontSize="22" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
+                    <TextBlock x:Name="GrossText" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource InfoTextBrush}"/>
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource StatCard}" Margin="8,0" Background="#FEF2F2">
+            <Border Style="{StaticResource StatCard}" Margin="8,0" Background="{DynamicResource DangerSurfaceBrush}">
                 <StackPanel>
                     <TextBlock Text="{DynamicResource POS_Discount}" Style="{StaticResource Muted}"/>
-                    <TextBlock x:Name="DiscountText" FontSize="22" FontWeight="Bold" Foreground="#DC2626"/>
+                    <TextBlock x:Name="DiscountText" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource DangerTextBrush}"/>
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource StatCard}" Margin="8,0,0,0" Background="#F0FDF4">
+            <Border Style="{StaticResource StatCard}" Margin="8,0,0,0" Background="{DynamicResource SuccessSurfaceBrush}">
                 <StackPanel>
                     <TextBlock Text="{DynamicResource POS_Tax}" Style="{StaticResource Muted}"/>
-                    <TextBlock x:Name="TaxText" FontSize="22" FontWeight="Bold" Foreground="#15803D"/>
+                    <TextBlock x:Name="TaxText" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource SuccessTextBrush}"/>
                 </StackPanel>
             </Border>
         </UniformGrid>

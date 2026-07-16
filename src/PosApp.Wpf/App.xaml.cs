@@ -216,6 +216,12 @@ public partial class App : Application
         SetThemeBrush("SurfaceHoverBrush", dark ? "#334155" : "#F8FAFC");
         SetThemeBrush("AlternateRowBrush", dark ? "#243247" : "#F8FAFC");
         SetThemeBrush("SelectionBrush", dark ? "#1D4ED8" : "#DBEAFE");
+        SetThemeBrush("SuccessSurfaceBrush", dark ? "#153A2B" : "#F0FDF4");
+        SetThemeBrush("SuccessTextBrush", dark ? "#86EFAC" : "#15803D");
+        SetThemeBrush("DangerSurfaceBrush", dark ? "#451A24" : "#FEF2F2");
+        SetThemeBrush("DangerTextBrush", dark ? "#FCA5A5" : "#DC2626");
+        SetThemeBrush("InfoSurfaceBrush", dark ? "#172554" : "#EFF6FF");
+        SetThemeBrush("InfoTextBrush", dark ? "#93C5FD" : "#2563EB");
         SetThemeBrush("SidebarBrush", dark ? "#020617" : "#1E293B");
         SetThemeBrush("SidebarActiveBrush", dark ? "#000000" : "#0F172A");
     }

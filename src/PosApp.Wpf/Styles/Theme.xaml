@@ -22,6 +22,12 @@
     <Color x:Key="SurfaceHoverColor">#F8FAFC</Color>
     <Color x:Key="AlternateRowColor">#F8FAFC</Color>
     <Color x:Key="SelectionColor">#DBEAFE</Color>
+    <Color x:Key="SuccessSurfaceColor">#F0FDF4</Color>
+    <Color x:Key="SuccessTextColor">#15803D</Color>
+    <Color x:Key="DangerSurfaceColor">#FEF2F2</Color>
+    <Color x:Key="DangerTextColor">#DC2626</Color>
+    <Color x:Key="InfoSurfaceColor">#EFF6FF</Color>
+    <Color x:Key="InfoTextColor">#2563EB</Color>
 
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="PrimaryDarkBrush" Color="{StaticResource PrimaryDarkColor}" options:Freeze="False"/>
@@ -42,6 +48,12 @@
     <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource SurfaceHoverColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="AlternateRowBrush" Color="{StaticResource AlternateRowColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="SelectionBrush" Color="{StaticResource SelectionColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="SuccessSurfaceBrush" Color="{StaticResource SuccessSurfaceColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="SuccessTextBrush" Color="{StaticResource SuccessTextColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="DangerSurfaceBrush" Color="{StaticResource DangerSurfaceColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="DangerTextBrush" Color="{StaticResource DangerTextColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="InfoSurfaceBrush" Color="{StaticResource InfoSurfaceColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="InfoTextBrush" Color="{StaticResource InfoTextColor}" options:Freeze="False"/>
 
     <!-- Typography -->
     <FontFamily x:Key="DefaultFont">Segoe UI, Inter, Noto Sans, sans-serif</FontFamily>
@@ -55,7 +67,7 @@
 
     <Style x:Key="PageTextStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
-        <Setter Property="Foreground" Value="{StaticResource TextDarkBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
     </Style>
 
 </ResourceDictionary>

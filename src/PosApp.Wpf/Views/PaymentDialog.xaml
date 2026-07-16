@@ -5,7 +5,7 @@
         Width="640" Height="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource BackgroundBrush}">
+        Background="{DynamicResource BackgroundBrush}">
     <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -48,10 +48,10 @@
                              TextChanged="TenderedBox_TextChanged" PreviewTextInput="TenderedBox_PreviewTextInput"/>
                 </StackPanel>
             </Border>
-            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="8,0,0,0" Background="#F0FDF4">
+            <Border Grid.Column="1" Style="{StaticResource Card}" Margin="8,0,0,0" Background="{DynamicResource SuccessSurfaceBrush}">
                 <StackPanel>
-                    <TextBlock Text="{DynamicResource Pay_Change}" Foreground="#15803D" FontSize="12"/>
-                    <TextBlock x:Name="ChangeText" FontSize="22" FontWeight="Bold" Foreground="#15803D" Margin="0,4,0,0"/>
+                    <TextBlock Text="{DynamicResource Pay_Change}" Foreground="{DynamicResource SuccessTextBrush}" FontSize="12"/>
+                    <TextBlock x:Name="ChangeText" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource SuccessTextBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
             </Border>
         </Grid>

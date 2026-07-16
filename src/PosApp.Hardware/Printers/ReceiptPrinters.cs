@@ -93,9 +93,15 @@ public class EscPosPrinter : IReceiptPrinter
         sb.Append(EscPosConst.DoubleOff);
         sb.AppendLine();
 
-        foreach (var pay in sale.Payments)
+        var payments = sale.Payments.ToList();
+        foreach (var pay in payments)
         {
-            sb.AppendLine($"{pay.Method}: {pay.Amount:0.00}");
+            var isSingleCashPayment = payments.Count == 1 && pay.Method == PaymentMethod.Cash;
+            var displayedAmount = isSingleCashPayment && sale.AmountPaid > 0m
+                ? sale.AmountPaid
+                : pay.Amount;
+            var label = isSingleCashPayment ? "Cash tendered" : pay.Method.ToString();
+            sb.AppendLine($"{label}: {displayedAmount:0.00}");
         }
         if (sale.Change > 0) sb.AppendLine($"Change: {sale.Change:0.00}");
 
@@ -271,8 +277,16 @@ public class WindowsPrinter : IReceiptPrinter
         if (sale.DiscountTotal > 0) lines.Add($"Discount:    -{sale.DiscountTotal:0.00}");
         if (sale.TaxTotal > 0) lines.Add($"Tax:         {sale.TaxTotal:0.00}");
         lines.Add($"TOTAL:       {sale.Total:0.00}");
-        foreach (var pay in sale.Payments)
-            lines.Add($"{pay.Method}: {pay.Amount:0.00}");
+        var payments = sale.Payments.ToList();
+        foreach (var pay in payments)
+        {
+            var isSingleCashPayment = payments.Count == 1 && pay.Method == PaymentMethod.Cash;
+            var displayedAmount = isSingleCashPayment && sale.AmountPaid > 0m
+                ? sale.AmountPaid
+                : pay.Amount;
+            var label = isSingleCashPayment ? "Cash tendered" : pay.Method.ToString();
+            lines.Add($"{label}: {displayedAmount:0.00}");
+        }
         if (sale.Change > 0) lines.Add($"Change: {sale.Change:0.00}");
         lines.Add("");
         lines.Add(store.FooterNote ?? "");

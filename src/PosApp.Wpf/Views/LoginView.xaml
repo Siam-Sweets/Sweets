@@ -5,7 +5,7 @@
         Width="520" Height="700"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
-        Background="{StaticResource BackgroundBrush}">
+        Background="{DynamicResource BackgroundBrush}">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="220"/>
@@ -27,7 +27,7 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="1" Background="{StaticResource CardBrush}" CornerRadius="12" Margin="40,24"
+        <Border Grid.Row="1" Background="{DynamicResource CardBrush}" CornerRadius="12" Margin="40,24"
                 Padding="32" VerticalAlignment="Stretch">
             <Border.Effect>
                 <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.15"/>
@@ -56,7 +56,7 @@
                         Margin="0,4,0,0" Padding="0,10"
                         Click="Exit_Click"/>
 
-                <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="6" Padding="12" Margin="0,16,0,0">
+                <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="6" Padding="12" Margin="0,16,0,0">
                     <StackPanel>
                         <TextBlock Text="Demo accounts" Style="{StaticResource Muted}" FontWeight="SemiBold"/>
                         <TextBlock Text="admin / 1234  -  full access" Style="{StaticResource Muted}" Margin="0,4,0,0"/>

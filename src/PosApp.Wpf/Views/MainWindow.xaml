@@ -4,7 +4,7 @@
         Title="PosApp" Width="1366" Height="800"
         WindowStartupLocation="CenterScreen"
         WindowState="Maximized"
-        Background="{StaticResource BackgroundBrush}"
+        Background="{DynamicResource BackgroundBrush}"
         Loaded="MainWindow_Loaded">
     <Grid>
         <Grid.ColumnDefinitions>
@@ -13,7 +13,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar -->
-        <Border Grid.Column="0" Background="{StaticResource SidebarBrush}">
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBrush}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
