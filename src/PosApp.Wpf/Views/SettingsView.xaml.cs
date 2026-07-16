@@ -15,6 +15,7 @@ public partial class SettingsView : UserControl, IRefreshable
     private readonly IBackupService _backup;
     private StoreSettings _current = new();
     private bool _isLoading;
+    private readonly SemaphoreSlim _appearanceSaveGate = new(1, 1);
 
     public SettingsView(ISettingsService settings, IHardwareService hardware, IBackupService backup)
     {
@@ -86,18 +87,44 @@ public partial class SettingsView : UserControl, IRefreshable
         }
     }
 
-    private void Lang_Checked(object sender, RoutedEventArgs e)
+    private async void Lang_Checked(object sender, RoutedEventArgs e)
     {
-        if (_isLoading) return;
-        // Live preview of language switch
-        var code = LangBn.IsChecked == true ? "bn" : "en";
+        if (_isLoading || sender is not RadioButton selected || selected.IsChecked != true) return;
+
+        // WPF raises Checked before unchecking the other radio button. Use the
+        // button that raised the event instead of reading the old selection.
+        var code = ReferenceEquals(selected, LangBn) ? "bn" : "en";
+        _current.Language = code;
         App.ApplyLanguage(code);
+        await PersistAppearanceAsync();
     }
 
-    private void Theme_Checked(object sender, RoutedEventArgs e)
+    private async void Theme_Checked(object sender, RoutedEventArgs e)
     {
-        if (_isLoading) return;
-        App.ApplyTheme(ThemeDark.IsChecked == true ? "Dark" : "Light");
+        if (_isLoading || sender is not RadioButton selected || selected.IsChecked != true) return;
+
+        var theme = ReferenceEquals(selected, ThemeDark) ? "Dark" : "Light";
+        _current.Theme = theme;
+        App.ApplyTheme(theme);
+        await PersistAppearanceAsync();
+    }
+
+    private async Task PersistAppearanceAsync()
+    {
+        await _appearanceSaveGate.WaitAsync();
+        try
+        {
+            await _settings.SetStoreSettingsAsync(_current);
+            App.StoreSettings = _current;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to save appearance", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _appearanceSaveGate.Release();
+        }
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)
@@ -140,10 +167,18 @@ public partial class SettingsView : UserControl, IRefreshable
     private async Task SaveCurrentSettingsAsync()
     {
         UpdateCurrentFromForm();
-        await _settings.SetStoreSettingsAsync(_current);
-        App.StoreSettings = _current;
-        App.ApplyLanguage(_current.Language);
-        App.ApplyTheme(_current.Theme);
+        await _appearanceSaveGate.WaitAsync();
+        try
+        {
+            await _settings.SetStoreSettingsAsync(_current);
+            App.StoreSettings = _current;
+            App.ApplyLanguage(_current.Language);
+            App.ApplyTheme(_current.Theme);
+        }
+        finally
+        {
+            _appearanceSaveGate.Release();
+        }
     }
 
     private async void TestPrint_Click(object sender, RoutedEventArgs e)

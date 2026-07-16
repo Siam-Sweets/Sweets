@@ -37,6 +37,10 @@
     <sys:String x:Key="POS_Tax">ট্যাক্স</sys:String>
     <sys:String x:Key="POS_Total">মোট</sys:String>
     <sys:String x:Key="POS_Checkout">চেকআউট</sys:String>
+    <sys:String x:Key="POS_QuickCash">নগদ (F12)</sys:String>
+    <sys:String x:Key="POS_QuickCashHint">ঠিক নগদে সঙ্গে সঙ্গে বিক্রয় সম্পন্ন করুন</sys:String>
+    <sys:String x:Key="POS_Payment">পেমেন্ট (F10)</sys:String>
+    <sys:String x:Key="POS_PaymentHint">পেমেন্ট, খুচরা ও ভাগ করা পেমেন্ট খুলুন</sys:String>
     <sys:String x:Key="POS_Suspend">স্থগিত</sys:String>
     <sys:String x:Key="POS_Recall">পুনরুদ্ধার</sys:String>
     <sys:String x:Key="POS_Clear">মুছুন</sys:String>
@@ -44,10 +48,12 @@
     <sys:String x:Key="POS_SelectCustomer">গ্রাহক নির্বাচন</sys:String>
     <sys:String x:Key="POS_WalkIn">ওয়াক-ইন গ্রাহক</sys:String>
     <sys:String x:Key="POS_Weigh">ওজন</sys:String>
+    <sys:String x:Key="POS_Stock">স্টক</sys:String>
 
     <!-- Payment -->
     <sys:String x:Key="Pay_Title">পেমেন্ট</sys:String>
     <sys:String x:Key="Pay_AmountDue">প্রদেয় পরিমাণ</sys:String>
+    <sys:String x:Key="Pay_Remaining">বাকি</sys:String>
     <sys:String x:Key="Pay_Tendered">প্রদত্ত</sys:String>
     <sys:String x:Key="Pay_Change">খুচরা</sys:String>
     <sys:String x:Key="Pay_Cash">নগদ</sys:String>
@@ -59,6 +65,14 @@
     <sys:String x:Key="Pay_Cancel">বাতিল</sys:String>
     <sys:String x:Key="Pay_QuickCash">দ্রুত নগদ</sys:String>
     <sys:String x:Key="Pay_Exact">ঠিক পরিমাণ</sys:String>
+    <sys:String x:Key="Pay_Backspace">পেছনে</sys:String>
+    <sys:String x:Key="Pay_Payments">পেমেন্টসমূহ</sys:String>
+    <sys:String x:Key="Pay_Remove">সরান</sys:String>
+    <sys:String x:Key="Pay_Received">গ্রহণ করা হয়েছে</sys:String>
+    <sys:String x:Key="Pay_AddPayment">পেমেন্ট যোগ করুন</sys:String>
+    <sys:String x:Key="Pay_EnterAmount">গ্রহণ করা টাকার পরিমাণ লিখুন।</sys:String>
+    <sys:String x:Key="Pay_ChangeCashOnly">শুধু নগদ পেমেন্ট বাকি টাকার চেয়ে বেশি হতে পারে।</sys:String>
+    <sys:String x:Key="Pay_RemainingWarning">বিক্রয়ে এখনও অপরিশোধিত টাকা বাকি আছে।</sys:String>
     <sys:String x:Key="Pay_Insufficient">প্রদত্ত পরিমাণ মোটের চেয়ে কম</sys:String>
 
     <!-- Products -->
@@ -96,13 +110,12 @@
 
     <!-- Customers -->
     <sys:String x:Key="Cust_Title">গ্রাহক</sys:String>
+    <sys:String x:Key="Cust_Subtitle">গ্রাহকের যোগাযোগের তথ্য ও ক্রয় ইতিহাস পরিচালনা করুন</sys:String>
     <sys:String x:Key="Cust_Add">গ্রাহক যোগ</sys:String>
     <sys:String x:Key="Cust_Name">নাম</sys:String>
     <sys:String x:Key="Cust_Phone">ফোন</sys:String>
     <sys:String x:Key="Cust_Email">ইমেইল</sys:String>
     <sys:String x:Key="Cust_Address">ঠিকানা</sys:String>
-    <sys:String x:Key="Cust_Points">লয়ালটি পয়েন্ট</sys:String>
-    <sys:String x:Key="Cust_Credit">স্টোর ক্রেডিট</sys:String>
     <sys:String x:Key="Cust_History">ক্রয় ইতিহাস</sys:String>
     <sys:String x:Key="Cust_Save">সংরক্ষণ</sys:String>
 
@@ -158,6 +171,7 @@
 
     <!-- Settings -->
     <sys:String x:Key="Set_Title">সেটিংস</sys:String>
+    <sys:String x:Key="Set_Subtitle">দোকান, হার্ডওয়্যার, ডেটা সুরক্ষা, ভাষা ও চেহারা কনফিগার করুন</sys:String>
     <sys:String x:Key="Set_Store">দোকানের তথ্য</sys:String>
     <sys:String x:Key="Set_StoreName">দোকানের নাম</sys:String>
     <sys:String x:Key="Set_Address">ঠিকানা</sys:String>
@@ -181,6 +195,17 @@
     <sys:String x:Key="Set_Save">সেটিংস সংরক্ষণ</sys:String>
     <sys:String x:Key="Set_TestPrint">টেস্ট প্রিন্ট</sys:String>
     <sys:String x:Key="Set_TestDrawer">টেস্ট ড্রয়ার</sys:String>
+    <sys:String x:Key="Set_DataSafety">ডেটা সুরক্ষা ও ব্যাকআপ</sys:String>
+    <sys:String x:Key="Set_BackupDescription">ব্যাকআপ এই কম্পিউটারেই থাকে। রিস্টোর নিরাপদে প্রস্তুত হয়ে পরবর্তীবার চালুর সময় প্রয়োগ হয়।</sys:String>
+    <sys:String x:Key="Set_AutoBackup">স্বয়ংক্রিয় স্থানীয় ব্যাকআপ চালু করুন</sys:String>
+    <sys:String x:Key="Set_OnStartup">চালুর সময়</sys:String>
+    <sys:String x:Key="Set_OnExit">বন্ধের সময়</sys:String>
+    <sys:String x:Key="Set_KeepLatest">সর্বশেষ</sys:String>
+    <sys:String x:Key="Set_AutomaticBackups">টি স্বয়ংক্রিয় ব্যাকআপ রাখুন</sys:String>
+    <sys:String x:Key="Set_BackupFolder">স্থানীয় ব্যাকআপ ফোল্ডার</sys:String>
+    <sys:String x:Key="Set_BackupNow">এখনই ব্যাকআপ</sys:String>
+    <sys:String x:Key="Set_Restore">রিস্টোর…</sys:String>
+    <sys:String x:Key="Set_OpenFolder">ফোল্ডার খুলুন</sys:String>
     <sys:String x:Key="Set_Tax">ট্যাক্স হার</sys:String>
     <sys:String x:Key="Set_Discounts">ছাড়</sys:String>
 

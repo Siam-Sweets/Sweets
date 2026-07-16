@@ -77,7 +77,9 @@ public class StoreSettings
     public string ReceiptPrinterName { get; set; } = "";
     public string CashDrawerPort { get; set; } = "COM1";
     public string ScalePort { get; set; } = "COM3";
-    public bool EnableLoyalty { get; set; } = true;
+    // Retained for backward-compatible settings deserialization. Loyalty is
+    // intentionally disabled until the feature is reintroduced end-to-end.
+    public bool EnableLoyalty { get; set; } = false;
     public decimal DefaultTaxRate { get; set; } = 0m;
     public int ReceiptWidth { get; set; } = 80; // mm
     public string Language { get; set; } = "en";

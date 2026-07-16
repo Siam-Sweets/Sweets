@@ -113,9 +113,21 @@
                             <TextBlock x:Name="UserName" Text="Admin" Foreground="White" FontSize="13" FontWeight="Medium"/>
                             <TextBlock x:Name="UserRoleLabel" Text="Admin" Foreground="#94A3B8" FontSize="11"/>
                         </StackPanel>
-                        <Button Grid.Column="2" Background="Transparent" BorderThickness="0" Cursor="Hand"
-                                Click="Logout_Click" ToolTip="Logout">
-                            <TextBlock Text="⏻" Foreground="#94A3B8" FontSize="18"/>
+                        <Button Grid.Column="2" Width="32" Height="32" Padding="5"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                Click="Logout_Click" ToolTip="{DynamicResource Nav_Logout}">
+                            <!-- Vector icon avoids the missing-font square shown by the old glyph. -->
+                            <Viewbox Width="18" Height="18">
+                                <Canvas Width="24" Height="24">
+                                    <Path Data="M10,4 L5,4 L5,20 L10,20"
+                                          Stroke="#CBD5E1" StrokeThickness="2"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                    <Path Data="M13,8 L17,12 L13,16 M17,12 L9,12"
+                                          Stroke="#CBD5E1" StrokeThickness="2"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"/>
+                                </Canvas>
+                            </Viewbox>
                         </Button>
                     </Grid>
                 </Border>

@@ -14,7 +14,10 @@ public class SalePayment
 
     public PaymentMethod Method { get; set; }
 
-    /// <summary>Amount tendered in this payment.</summary>
+    /// <summary>
+    /// Amount applied to the sale. Gross cash received and returned change are
+    /// stored on Sale.AmountPaid and Sale.Change so register totals remain net.
+    /// </summary>
     public decimal Amount { get; set; }
 
     /// <summary>For card: last 4 digits, for cash: nothing, for wallet: ref id.</summary>

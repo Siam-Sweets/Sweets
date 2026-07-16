@@ -93,16 +93,8 @@ public class EscPosPrinter : IReceiptPrinter
         sb.Append(EscPosConst.DoubleOff);
         sb.AppendLine();
 
-        var payments = sale.Payments.ToList();
-        foreach (var pay in payments)
-        {
-            var isSingleCashPayment = payments.Count == 1 && pay.Method == PaymentMethod.Cash;
-            var displayedAmount = isSingleCashPayment && sale.AmountPaid > 0m
-                ? sale.AmountPaid
-                : pay.Amount;
-            var label = isSingleCashPayment ? "Cash tendered" : pay.Method.ToString();
-            sb.AppendLine($"{label}: {displayedAmount:0.00}");
-        }
+        foreach (var payment in ReceiptPaymentSummary.Build(sale))
+            sb.AppendLine($"{payment.Label}: {payment.Amount:0.00}");
         if (sale.Change > 0) sb.AppendLine($"Change: {sale.Change:0.00}");
 
         sb.Append(EscPosConst.AlignCenter);
@@ -112,6 +104,66 @@ public class EscPosPrinter : IReceiptPrinter
         sb.Append(EscPosConst.Cut);
         return sb.ToString();
     }
+}
+
+internal sealed class ReceiptPaymentLine
+{
+    public ReceiptPaymentLine(string label, decimal amount)
+    {
+        Label = label;
+        Amount = amount;
+    }
+
+    public string Label { get; }
+    public decimal Amount { get; }
+}
+
+internal static class ReceiptPaymentSummary
+{
+    public static IReadOnlyList<ReceiptPaymentLine> Build(Sale sale)
+    {
+        var payments = sale.Payments.ToList();
+        var lines = new List<ReceiptPaymentLine>();
+        if (payments.Count == 0) return lines;
+
+        var cashApplied = payments
+            .Where(payment => payment.Method == PaymentMethod.Cash)
+            .Sum(payment => payment.Amount);
+        var nonCashApplied = payments
+            .Where(payment => payment.Method != PaymentMethod.Cash)
+            .Sum(payment => payment.Amount);
+        var grossReceived = sale.AmountPaid > 0m
+            ? sale.AmountPaid
+            : cashApplied + nonCashApplied;
+        var cashTendered = Math.Max(cashApplied, grossReceived - nonCashApplied);
+        var cashWritten = false;
+
+        foreach (var payment in payments)
+        {
+            if (payment.Method == PaymentMethod.Cash)
+            {
+                if (cashWritten) continue;
+                lines.Add(new ReceiptPaymentLine("Cash tendered", cashTendered));
+                cashWritten = true;
+                continue;
+            }
+
+            lines.Add(new ReceiptPaymentLine(MethodName(payment.Method), payment.Amount));
+        }
+
+        return lines;
+    }
+
+    private static string MethodName(PaymentMethod method) => method switch
+    {
+        PaymentMethod.Card => "Card",
+        PaymentMethod.MobileWallet => "Mobile wallet",
+        PaymentMethod.BankTransfer => "Bank transfer",
+        PaymentMethod.StoreCredit => "Store credit",
+        PaymentMethod.Coupon => "Coupon",
+        PaymentMethod.Other => "Other",
+        _ => method.ToString()
+    };
 }
 
 internal static class EscPosConst
@@ -283,16 +335,8 @@ public class WindowsPrinter : IReceiptPrinter
         if (sale.DiscountTotal > 0) lines.Add($"Discount:    -{sale.DiscountTotal:0.00}");
         if (sale.TaxTotal > 0) lines.Add($"Tax:         {sale.TaxTotal:0.00}");
         lines.Add($"TOTAL:       {sale.Total:0.00}");
-        var payments = sale.Payments.ToList();
-        foreach (var pay in payments)
-        {
-            var isSingleCashPayment = payments.Count == 1 && pay.Method == PaymentMethod.Cash;
-            var displayedAmount = isSingleCashPayment && sale.AmountPaid > 0m
-                ? sale.AmountPaid
-                : pay.Amount;
-            var label = isSingleCashPayment ? "Cash tendered" : pay.Method.ToString();
-            lines.Add($"{label}: {displayedAmount:0.00}");
-        }
+        foreach (var payment in ReceiptPaymentSummary.Build(sale))
+            lines.Add($"{payment.Label}: {payment.Amount:0.00}");
         if (sale.Change > 0) lines.Add($"Change: {sale.Change:0.00}");
         lines.Add("");
         lines.Add(store.FooterNote ?? "");

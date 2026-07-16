@@ -100,10 +100,24 @@ public class SaleService : ISaleService
             throw new InvalidOperationException("Cannot checkout an empty cart");
         if (draft.Payments.Count == 0)
             throw new InvalidOperationException("A payment is required to complete the sale");
+        if (draft.Payments.Any(payment => payment.Amount <= 0m))
+            throw new InvalidOperationException("Payment amounts must be greater than zero");
 
         var appliedPayment = draft.Payments.Sum(p => p.Amount);
-        if (appliedPayment < draft.Total)
-            throw new InvalidOperationException("The payment does not cover the sale total");
+        if (Math.Abs(appliedPayment - draft.Total) > 0.0001m)
+            throw new InvalidOperationException("Applied payments must equal the sale total");
+
+        // SalePayment.Amount is the portion applied to the invoice. AmountTendered
+        // is the gross amount received, which may be higher only when cash change
+        // is returned (for example: total 500, cash received 600, change 100).
+        var amountTendered = draft.AmountTendered > 0m
+            ? draft.AmountTendered
+            : appliedPayment;
+        if (amountTendered + 0.0001m < appliedPayment)
+            throw new InvalidOperationException("The received amount is less than the applied payments");
+        if (amountTendered - appliedPayment > 0.0001m &&
+            !draft.Payments.Any(payment => payment.Method == PaymentMethod.Cash))
+            throw new InvalidOperationException("Only cash payments can produce change");
 
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
@@ -135,8 +149,8 @@ public class SaleService : ISaleService
                 Subtotal = draft.Subtotal,
                 DiscountTotal = draft.DiscountTotal,
                 TaxTotal = draft.TaxTotal,
-                AmountPaid = draft.AmountTendered > 0m ? draft.AmountTendered : appliedPayment,
-                Change = Math.Max(0m, (draft.AmountTendered > 0m ? draft.AmountTendered : appliedPayment) - draft.Total),
+                AmountPaid = amountTendered,
+                Change = Math.Max(0m, amountTendered - draft.Total),
                 Note = draft.Note
             };
 
@@ -180,17 +194,6 @@ public class SaleService : ISaleService
                         _db.StockTransactions.Add(stockTransaction);
                         stockLinks.Add((stockTransaction, item));
                     }
-                }
-            }
-
-            // Loyalty points accrual
-            if (draft.CustomerId.HasValue)
-            {
-                var customer = await _db.Customers.FindAsync(draft.CustomerId.Value);
-                if (customer != null && customer.LoyaltyRate > 0)
-                {
-                    customer.LoyaltyPoints += draft.Subtotal * customer.LoyaltyRate / 100m;
-                    customer.UpdatedAt = DateTime.UtcNow;
                 }
             }
 
@@ -353,16 +356,6 @@ public class SaleService : ISaleService
 
         original.Status = SaleStatus.Refunded;
         original.UpdatedAt = DateTime.UtcNow;
-
-        // Issue store credit if customer attached
-        if (original.CustomerId.HasValue)
-        {
-            var customer = await _db.Customers.FindAsync(original.CustomerId.Value);
-            if (customer != null)
-            {
-                customer.StoreCredit += original.Total;
-            }
-        }
 
         _db.Sales.Add(refund);
         await _db.SaveChangesAsync();

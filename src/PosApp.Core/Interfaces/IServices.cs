@@ -78,7 +78,6 @@ public interface ICustomerService
     Task<Customer> CreateOrUpdateCustomerAsync(Customer customer);
     Task DeleteCustomerAsync(int id);
     Task<IReadOnlyList<Sale>> GetCustomerHistoryAsync(int customerId);
-    Task AddStoreCreditAsync(int customerId, decimal amount, string? note = null);
 }
 
 public interface IReportService

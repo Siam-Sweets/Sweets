@@ -24,13 +24,13 @@ public class Customer
     [MaxLength(20)]
     public string? TaxId { get; set; }
 
-    /// <summary>Loyalty points balance.</summary>
+    /// <summary>Legacy balance retained so existing databases remain compatible.</summary>
     public decimal LoyaltyPoints { get; set; }
 
-    /// <summary>Store credit issued from refunds.</summary>
+    /// <summary>Legacy balance retained so existing databases remain compatible.</summary>
     public decimal StoreCredit { get; set; }
 
-    /// <summary>Points earned per currency unit spent.</summary>
+    /// <summary>Legacy earning rate; inactive while loyalty is disabled.</summary>
     public decimal LoyaltyRate { get; set; } = 0m;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -37,6 +37,10 @@
     <sys:String x:Key="POS_Tax">Tax</sys:String>
     <sys:String x:Key="POS_Total">Total</sys:String>
     <sys:String x:Key="POS_Checkout">Checkout</sys:String>
+    <sys:String x:Key="POS_QuickCash">Cash (F12)</sys:String>
+    <sys:String x:Key="POS_QuickCashHint">Complete immediately with exact cash</sys:String>
+    <sys:String x:Key="POS_Payment">Payment (F10)</sys:String>
+    <sys:String x:Key="POS_PaymentHint">Open payment, change, and split tender</sys:String>
     <sys:String x:Key="POS_Suspend">Suspend</sys:String>
     <sys:String x:Key="POS_Recall">Recall</sys:String>
     <sys:String x:Key="POS_Clear">Clear</sys:String>
@@ -44,10 +48,12 @@
     <sys:String x:Key="POS_SelectCustomer">Select Customer</sys:String>
     <sys:String x:Key="POS_WalkIn">Walk-in Customer</sys:String>
     <sys:String x:Key="POS_Weigh">Weigh</sys:String>
+    <sys:String x:Key="POS_Stock">Stock</sys:String>
 
     <!-- Payment -->
     <sys:String x:Key="Pay_Title">Payment</sys:String>
     <sys:String x:Key="Pay_AmountDue">Amount Due</sys:String>
+    <sys:String x:Key="Pay_Remaining">Remaining</sys:String>
     <sys:String x:Key="Pay_Tendered">Tendered</sys:String>
     <sys:String x:Key="Pay_Change">Change</sys:String>
     <sys:String x:Key="Pay_Cash">Cash</sys:String>
@@ -59,6 +65,14 @@
     <sys:String x:Key="Pay_Cancel">Cancel</sys:String>
     <sys:String x:Key="Pay_QuickCash">Quick Cash</sys:String>
     <sys:String x:Key="Pay_Exact">Exact</sys:String>
+    <sys:String x:Key="Pay_Backspace">Back</sys:String>
+    <sys:String x:Key="Pay_Payments">Payments</sys:String>
+    <sys:String x:Key="Pay_Remove">Remove</sys:String>
+    <sys:String x:Key="Pay_Received">Received</sys:String>
+    <sys:String x:Key="Pay_AddPayment">Add Payment</sys:String>
+    <sys:String x:Key="Pay_EnterAmount">Enter the amount received.</sys:String>
+    <sys:String x:Key="Pay_ChangeCashOnly">Only cash payments can be greater than the remaining balance.</sys:String>
+    <sys:String x:Key="Pay_RemainingWarning">The sale still has an unpaid balance.</sys:String>
     <sys:String x:Key="Pay_Insufficient">Tendered amount is less than total</sys:String>
 
     <!-- Products -->
@@ -96,13 +110,12 @@
 
     <!-- Customers -->
     <sys:String x:Key="Cust_Title">Customers</sys:String>
+    <sys:String x:Key="Cust_Subtitle">Manage customer contacts and purchase history</sys:String>
     <sys:String x:Key="Cust_Add">Add Customer</sys:String>
     <sys:String x:Key="Cust_Name">Name</sys:String>
     <sys:String x:Key="Cust_Phone">Phone</sys:String>
     <sys:String x:Key="Cust_Email">Email</sys:String>
     <sys:String x:Key="Cust_Address">Address</sys:String>
-    <sys:String x:Key="Cust_Points">Loyalty Points</sys:String>
-    <sys:String x:Key="Cust_Credit">Store Credit</sys:String>
     <sys:String x:Key="Cust_History">Purchase History</sys:String>
     <sys:String x:Key="Cust_Save">Save</sys:String>
 
@@ -158,6 +171,7 @@
 
     <!-- Settings -->
     <sys:String x:Key="Set_Title">Settings</sys:String>
+    <sys:String x:Key="Set_Subtitle">Configure store, hardware, data safety, language, and appearance</sys:String>
     <sys:String x:Key="Set_Store">Store Information</sys:String>
     <sys:String x:Key="Set_StoreName">Store Name</sys:String>
     <sys:String x:Key="Set_Address">Address</sys:String>
@@ -181,6 +195,17 @@
     <sys:String x:Key="Set_Save">Save Settings</sys:String>
     <sys:String x:Key="Set_TestPrint">Test Print</sys:String>
     <sys:String x:Key="Set_TestDrawer">Test Drawer</sys:String>
+    <sys:String x:Key="Set_DataSafety">Data Safety &amp; Backups</sys:String>
+    <sys:String x:Key="Set_BackupDescription">Backups stay on this computer. Restore is staged safely and applied on the next start.</sys:String>
+    <sys:String x:Key="Set_AutoBackup">Enable automatic local backups</sys:String>
+    <sys:String x:Key="Set_OnStartup">On startup</sys:String>
+    <sys:String x:Key="Set_OnExit">On exit</sys:String>
+    <sys:String x:Key="Set_KeepLatest">Keep latest</sys:String>
+    <sys:String x:Key="Set_AutomaticBackups">automatic backups</sys:String>
+    <sys:String x:Key="Set_BackupFolder">Local backup folder</sys:String>
+    <sys:String x:Key="Set_BackupNow">Back Up Now</sys:String>
+    <sys:String x:Key="Set_Restore">Restore…</sys:String>
+    <sys:String x:Key="Set_OpenFolder">Open Folder</sys:String>
     <sys:String x:Key="Set_Tax">Tax Rates</sys:String>
     <sys:String x:Key="Set_Discounts">Discounts</sys:String>
 

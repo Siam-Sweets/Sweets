@@ -4,7 +4,7 @@ A feature-rich, **local-only** Point of Sale desktop application for Windows, bu
 
 ## Offline Boundary
 
-Version 1.1 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Purchases, register sessions, reports, CSV transfer, backups, and restores all read or write local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or by GitHub Actions when building a release.
+Version 1.2 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, and restores all read or write local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or by GitHub Actions when building a release.
 
 This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
 
@@ -12,12 +12,12 @@ This is an original POS implementation inspired by the publicly known feature se
 
 | Module              | Highlights |
 |---------------------|------------|
-| **POS / Checkout**  | Product grid with category filter, barcode scan, weighted items, cart with qty +/-, customer attach, suspend/recall, multi-tender checkout with on-screen number pad, quick-cash buttons, automatic change calculation |
+| **POS / Checkout**  | Product grid with category filter, barcode scan, weighted items, cart with qty +/-, customer attach, suspend/recall, F10 advanced payment, F12 exact cash, multi-tender checkout with on-screen number pad, quick-cash suggestions, automatic change calculation |
 | **Products & Inventory** | Full CRUD for products and categories, SKU/barcode tracking, stock levels, low-stock alerts, stock adjustments, physical inventory counts, stock movement history, stock valuation at cost, CSV catalog import/export |
 | **Purchases & Suppliers** | Supplier directory, posted purchase documents, supplier invoice references, multi-line receiving, tax totals, automatic stock increases, moving-average cost, and purchase history |
 | **Cash Register** | Opening float, paid-in / paid-out movements with reasons, live expected cash, payment breakdown, printable X reports, manager-only close, counted cash, variance, and final Z reports |
-| **Customers**       | CRUD, loyalty points, store credit, purchase history, search by name/phone/email |
-| **Sales / Transactions** | Filter by date and status, view receipt detail, reprint, void (restores stock), refund (issues store credit), suspend/recall, CSV export |
+| **Customers**       | Contact records, purchase history, and search by name/phone/email |
+| **Sales / Transactions** | Filter by date and status, view receipt detail, reprint, void (restores stock), refund tracking, suspend/recall, CSV export |
 | **Users & Roles**   | PIN-based login, three roles (Cashier, Manager, Admin) with sidebar access gated by role, last-admin protection, PIN reset |
 | **Reports & Dashboard** | KPI cards (gross, profit, tax, transactions), top products, sales by category, daily trend, payment breakdown, date-range filters (today/week/month/custom) |
 | **Taxes & Discounts** | Per-product tax rate, percentage and fixed discounts, promo codes, cart-level discounts |

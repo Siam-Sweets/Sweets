@@ -195,7 +195,7 @@ public class SaleDetailDialog : Window
     public SaleDetailDialog(Sale sale)
     {
         Title = $"Receipt {sale.ReceiptNumber}";
-        Width = 600; Height = 640;
+        Width = 660; Height = 700;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("BackgroundBrush");
 
@@ -218,7 +218,7 @@ public class SaleDetailDialog : Window
             ItemsSource = sale.Items.ToList(),
             AutoGenerateColumns = false,
             IsReadOnly = true,
-            Height = 280,
+            Height = 260,
             Margin = new Thickness(0, 0, 0, 16)
         };
         dg.Columns.Add(new DataGridTextColumn { Header = "Product", Binding = new System.Windows.Data.Binding("ProductName"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
@@ -230,13 +230,20 @@ public class SaleDetailDialog : Window
 
         var totals = new Grid { Margin = new Thickness(0, 8, 0, 0) };
         totals.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        totals.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
-        for (int i = 0; i < 4; i++) totals.RowDefinitions.Add(new RowDefinition());
+        totals.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(260) });
+        for (int i = 0; i < 7; i++) totals.RowDefinitions.Add(new RowDefinition());
 
         AddRow(totals, 0, "Subtotal", $"৳ {sale.Subtotal:0.00}");
         AddRow(totals, 1, "Discount", $"- ৳ {sale.DiscountTotal:0.00}");
         AddRow(totals, 2, "Tax", $"৳ {sale.TaxTotal:0.00}");
         AddRow(totals, 3, "TOTAL", $"৳ {sale.Total:0.00}", bold: true);
+        var paymentSummary = sale.Payments.Count == 0
+            ? "-"
+            : string.Join(" + ", sale.Payments.Select(payment =>
+                $"{PaymentName(payment.Method)} ৳ {payment.Amount:0.00}"));
+        AddRow(totals, 4, "Payments applied", paymentSummary);
+        AddRow(totals, 5, "Received", $"৳ {sale.AmountPaid:0.00}");
+        AddRow(totals, 6, "Change", $"৳ {sale.Change:0.00}");
 
         panel.Children.Add(totals);
 
@@ -278,4 +285,12 @@ public class SaleDetailDialog : Window
         Grid.SetRow(val, row); Grid.SetColumn(val, 1);
         grid.Children.Add(val);
     }
+
+    private static string PaymentName(PaymentMethod method) => method switch
+    {
+        PaymentMethod.MobileWallet => "Mobile wallet",
+        PaymentMethod.BankTransfer => "Bank transfer",
+        PaymentMethod.StoreCredit => "Store credit",
+        _ => method.ToString()
+    };
 }

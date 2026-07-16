@@ -14,7 +14,7 @@
 
             <StackPanel Grid.Row="0" Margin="0,0,0,16">
                 <TextBlock Text="{DynamicResource Set_Title}" Style="{StaticResource Heading1}"/>
-                <TextBlock Text="Configure store, hardware, data safety, language, and appearance" Style="{StaticResource Muted}"/>
+                <TextBlock Text="{DynamicResource Set_Subtitle}" Style="{StaticResource Muted}"/>
             </StackPanel>
 
             <!-- Store info -->
@@ -108,8 +108,8 @@
             <!-- Data safety -->
             <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,0,0,16">
                 <StackPanel>
-                    <TextBlock Text="Data Safety &amp; Backups" Style="{StaticResource Heading3}" Margin="0,0,0,6"/>
-                    <TextBlock Text="Backups stay on this computer. Restore is staged safely and applied on the next start."
+                    <TextBlock Text="{DynamicResource Set_DataSafety}" Style="{StaticResource Heading3}" Margin="0,0,0,6"/>
+                    <TextBlock Text="{DynamicResource Set_BackupDescription}"
                                Style="{StaticResource Muted}" Margin="0,0,0,16"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -117,27 +117,27 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                            <CheckBox x:Name="AutoBackupCheckbox" Content="Enable automatic local backups"
+                            <CheckBox x:Name="AutoBackupCheckbox" Content="{DynamicResource Set_AutoBackup}"
                                       Margin="0,0,0,10"/>
                             <StackPanel Orientation="Horizontal" Margin="20,0,0,10">
-                                <CheckBox x:Name="BackupStartupCheckbox" Content="On startup" Margin="0,0,20,0"/>
-                                <CheckBox x:Name="BackupExitCheckbox" Content="On exit"/>
+                                <CheckBox x:Name="BackupStartupCheckbox" Content="{DynamicResource Set_OnStartup}" Margin="0,0,20,0"/>
+                                <CheckBox x:Name="BackupExitCheckbox" Content="{DynamicResource Set_OnExit}"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                                <TextBlock Text="Keep latest" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock Text="{DynamicResource Set_KeepLatest}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBox x:Name="BackupRetentionBox" Width="70" Padding="8,6"/>
-                                <TextBlock Text="automatic backups" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                <TextBlock Text="{DynamicResource Set_AutomaticBackups}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                             </StackPanel>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                            <TextBlock Text="Local backup folder" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{DynamicResource Set_BackupFolder}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
                             <TextBlock x:Name="BackupFolderText" TextWrapping="Wrap" Margin="0,0,0,12"/>
                             <StackPanel Orientation="Horizontal">
-                                <Button Content="Back Up Now" Style="{StaticResource PrimaryButton}"
+                                <Button Content="{DynamicResource Set_BackupNow}" Style="{StaticResource PrimaryButton}"
                                         Click="BackupNow_Click" Padding="14,8" Margin="0,0,8,0"/>
-                                <Button Content="Restore…" Style="{StaticResource OutlineButton}"
+                                <Button Content="{DynamicResource Set_Restore}" Style="{StaticResource OutlineButton}"
                                         Click="Restore_Click" Padding="14,8" Margin="0,0,8,0"/>
-                                <Button Content="Open Folder" Style="{StaticResource OutlineButton}"
+                                <Button Content="{DynamicResource Set_OpenFolder}" Style="{StaticResource OutlineButton}"
                                         Click="OpenBackupFolder_Click" Padding="14,8"/>
                             </StackPanel>
                         </StackPanel>

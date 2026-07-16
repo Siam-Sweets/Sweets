@@ -38,7 +38,7 @@ public class Sale
 
     public decimal Total => Subtotal - DiscountTotal + TaxTotal + Rounding;
 
-    /// <summary>Amount paid by the customer (may differ from Total for split/multi-tender).</summary>
+    /// <summary>Gross amount received from the customer before returning change.</summary>
     public decimal AmountPaid { get; set; }
 
     /// <summary>Change given back to the customer.</summary>

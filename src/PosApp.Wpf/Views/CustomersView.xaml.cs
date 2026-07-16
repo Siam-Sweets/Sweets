@@ -109,7 +109,7 @@ public class CustomerEditDialog : Window
         _c = existing ?? new Customer();
 
         Title = _isNew ? "Add Customer" : "Edit Customer";
-        Width = 480; Height = 560;
+        Width = 480; Height = 500;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("BackgroundBrush");
 
@@ -119,18 +119,11 @@ public class CustomerEditDialog : Window
         var phoneBox = new TextBox { Text = _c.Phone ?? "" };
         var emailBox = new TextBox { Text = _c.Email ?? "" };
         var addressBox = new TextBox { Text = _c.Address ?? "", AcceptsReturn = true, Height = 70, TextWrapping = TextWrapping.Wrap };
-        var pointsBox = new TextBox { Text = _c.LoyaltyPoints.ToString("0.##") };
-        var creditBox = new TextBox { Text = _c.StoreCredit.ToString("0.00") };
 
         panel.Children.Add(MakeRow("Name", nameBox));
         panel.Children.Add(MakeRow("Phone", phoneBox));
         panel.Children.Add(MakeRow("Email", emailBox));
         panel.Children.Add(MakeRow("Address", addressBox));
-        if (!_isNew)
-        {
-            panel.Children.Add(MakeRow("Loyalty Points", pointsBox));
-            panel.Children.Add(MakeRow("Store Credit (৳)", creditBox));
-        }
 
         var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
         var cancelBtn = new Button
@@ -160,11 +153,6 @@ public class CustomerEditDialog : Window
             _c.Phone = phoneBox.Text;
             _c.Email = emailBox.Text;
             _c.Address = addressBox.Text;
-            if (!_isNew)
-            {
-                if (decimal.TryParse(pointsBox.Text, out var pts)) _c.LoyaltyPoints = pts;
-                if (decimal.TryParse(creditBox.Text, out var cr)) _c.StoreCredit = cr;
-            }
             try
             {
                 await _svc.CreateOrUpdateCustomerAsync(_c);

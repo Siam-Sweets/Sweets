@@ -63,12 +63,4 @@ public class CustomerService : ICustomerService
             .ToListAsync();
     }
 
-    public async Task AddStoreCreditAsync(int customerId, decimal amount, string? note = null)
-    {
-        var customer = await _db.Customers.FindAsync(customerId)
-            ?? throw new InvalidOperationException("Customer not found");
-        customer.StoreCredit += amount;
-        customer.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-    }
 }

@@ -50,6 +50,13 @@ public partial class PosView : UserControl, IRefreshable
 
     private async void SearchBox_KeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape)
+        {
+            SearchBox.Clear();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Enter && DataContext is PosViewModel vm)
         {
             _searchTimer.Stop();
@@ -66,16 +73,6 @@ public partial class PosView : UserControl, IRefreshable
         if (!IsLoaded) return;
         _searchTimer.Stop();
         _searchTimer.Start();
-    }
-
-    private async void Search_Click(object sender, RoutedEventArgs e)
-    {
-        _searchTimer.Stop();
-        if (DataContext is PosViewModel vm)
-        {
-            try { await vm.FilterProductsAsync(); }
-            catch (Exception ex) { ShowError(ex, "Search failed"); }
-        }
     }
 
     private async void Category_Click(object sender, RoutedEventArgs e)
@@ -122,6 +119,31 @@ public partial class PosView : UserControl, IRefreshable
     private async void Checkout_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is PosViewModel vm) await vm.CheckoutAsync();
+        SearchBox.Focus();
+    }
+
+    private async void QuickCash_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is PosViewModel vm) await vm.QuickCashCheckoutAsync();
+        SearchBox.Focus();
+    }
+
+    private async void PosView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (DataContext is not PosViewModel vm || vm.CartLines.Count == 0) return;
+
+        if (e.Key == Key.F10)
+        {
+            await vm.CheckoutAsync();
+            SearchBox.Focus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F12)
+        {
+            await vm.QuickCashCheckoutAsync();
+            SearchBox.Focus();
+            e.Handled = true;
+        }
     }
 
     private async void Suspend_Click(object sender, RoutedEventArgs e)
@@ -157,13 +179,25 @@ public class PosViewModel : ViewModelBase
     private readonly SemaphoreSlim _productLoadGate = new(1, 1);
     private int _productLoadVersion;
     private int? _suspendedSaleId;
+    private bool _checkoutInProgress;
 
     public ObservableCollection<Product> Products { get; } = new();
     public ObservableCollection<Category> Categories { get; } = new();
     public ObservableCollection<SaleDraftLine> CartLines { get; } = new();
 
     private string _searchText = "";
-    public string SearchText { get => _searchText; set { Set(ref _searchText, value); OnPropertyChanged(nameof(SearchPlaceholderVisible)); } }
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (!Set(ref _searchText, value)) return;
+            // Invalidate an in-flight query immediately. Without this, the old
+            // result could repaint the catalog during the debounce interval.
+            Interlocked.Increment(ref _productLoadVersion);
+            OnPropertyChanged(nameof(SearchPlaceholderVisible));
+        }
+    }
     public bool SearchPlaceholderVisible => string.IsNullOrEmpty(SearchText);
 
     private int? _selectedCategoryId;
@@ -216,7 +250,7 @@ public class PosViewModel : ViewModelBase
 
     private async Task LoadProductsAsync()
     {
-        var version = ++_productLoadVersion;
+        var version = Interlocked.Increment(ref _productLoadVersion);
         var searchText = SearchText;
         var categoryId = _selectedCategoryId == 0 ? null : _selectedCategoryId;
 
@@ -225,7 +259,8 @@ public class PosViewModel : ViewModelBase
         {
             if (version != _productLoadVersion) return;
             var products = await _inventory.SearchProductsAsync(searchText, categoryId);
-            if (version != _productLoadVersion) return;
+            if (version != _productLoadVersion ||
+                !string.Equals(searchText, SearchText, StringComparison.Ordinal)) return;
 
             Products.Clear();
             foreach (var p in products) Products.Add(p);
@@ -359,8 +394,7 @@ public class PosViewModel : ViewModelBase
 
     public async Task CheckoutAsync()
     {
-        if (CartLines.Count == 0) return;
-        if (App.CurrentUser == null) return;
+        if (_checkoutInProgress || CartLines.Count == 0 || App.CurrentUser == null) return;
 
         var draft = BuildDraft();
         var paymentDialog = new PaymentDialog();
@@ -381,6 +415,27 @@ public class PosViewModel : ViewModelBase
             })
             .ToList();
 
+        await CompleteCheckoutAsync(draft);
+    }
+
+    public async Task QuickCashCheckoutAsync()
+    {
+        if (_checkoutInProgress || CartLines.Count == 0 || App.CurrentUser == null) return;
+
+        var draft = BuildDraft();
+        draft.AmountTendered = draft.Total;
+        draft.Payments = new List<SalePayment>
+        {
+            new() { Method = PaymentMethod.Cash, Amount = draft.Total }
+        };
+
+        await CompleteCheckoutAsync(draft);
+    }
+
+    private async Task CompleteCheckoutAsync(SaleDraft draft)
+    {
+        _checkoutInProgress = true;
+
         try
         {
             var sale = await _sales.CheckoutAsync(draft);
@@ -389,16 +444,22 @@ public class PosViewModel : ViewModelBase
             var store = App.StoreSettings;
             if (store.PrintReceiptAutomatically)
                 _ = await _hardware.PrintReceiptAsync(sale);
-            if (store.OpenDrawerOnCashSale && paymentDialog.Payments.Any(p => p.Method == PaymentMethod.Cash))
+            if (store.OpenDrawerOnCashSale && draft.Payments.Any(p => p.Method == PaymentMethod.Cash))
                 _ = await _hardware.OpenCashDrawerAsync();
 
             ClearCart();
-            MessageBox.Show($"Sale completed. Receipt: {sale.ReceiptNumber}\nChange: ৳ {sale.Change:0.00}",
+            MessageBox.Show($"Sale completed. Receipt: {sale.ReceiptNumber}\n" +
+                            $"Received: {App.StoreSettings.CurrencySymbol} {sale.AmountPaid:0.00}\n" +
+                            $"Change: {App.StoreSettings.CurrencySymbol} {sale.Change:0.00}",
                 "Sale Completed", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Checkout failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _checkoutInProgress = false;
         }
     }
 

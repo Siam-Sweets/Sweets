@@ -2,7 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:PosApp.Wpf.Converters"
-             Background="{DynamicResource BackgroundBrush}">
+             Background="{DynamicResource BackgroundBrush}"
+             PreviewKeyDown="PosView_PreviewKeyDown">
     <UserControl.Resources>
         <conv:MoneyConverter x:Key="Money"/>
     </UserControl.Resources>
@@ -25,7 +26,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0" x:Name="SearchBox"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
@@ -37,9 +37,7 @@
                            VerticalAlignment="Center" Margin="14,0,0,0"
                            IsHitTestVisible="False"
                            Visibility="{Binding SearchPlaceholderVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                <Button Grid.Column="1" Content="🔍" Style="{StaticResource OutlineButton}" Margin="8,0,0,0"
-                        Width="44" Click="Search_Click"/>
-                <Button Grid.Column="2" Content="{DynamicResource POS_Weigh}" Style="{StaticResource OutlineButton}"
+                <Button Grid.Column="1" Content="{DynamicResource POS_Weigh}" Style="{StaticResource OutlineButton}"
                         Margin="8,0,0,0" Padding="16,8"
                         Click="Weigh_Click"
                         Visibility="{Binding IsScaleConnected, Converter={StaticResource BoolToVisibilityConverter}}"/>
@@ -64,11 +62,14 @@
 
             <!-- Product grid -->
             <Border Grid.Row="2" Style="{StaticResource Card}" Padding="8">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding Products}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              CanContentScroll="False">
+                    <ItemsControl ItemsSource="{Binding Products}" VerticalAlignment="Top">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <UniformGrid Columns="4" HorizontalAlignment="Stretch"/>
+                                <WrapPanel Orientation="Horizontal"
+                                           ItemWidth="166" ItemHeight="160"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
@@ -82,8 +83,9 @@
                                                    TextTrimming="CharacterEllipsis" Margin="0,0,0,2"/>
                                         <TextBlock Text="{Binding Price, Converter={StaticResource Money}, ConverterParameter=৳}"
                                                    FontSize="14" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
-                                        <TextBlock Text="{Binding StockQuantity, StringFormat='Stock: {0}'}"
-                                                   FontSize="10" Foreground="{DynamicResource TextMutedBrush}"/>
+                                        <TextBlock FontSize="10" Foreground="{DynamicResource TextMutedBrush}">
+                                            <Run Text="{DynamicResource POS_Stock}"/><Run Text=": "/><Run Text="{Binding StockQuantity, Mode=OneWay}"/>
+                                        </TextBlock>
                                     </StackPanel>
                                 </Button>
                             </DataTemplate>
@@ -228,11 +230,16 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Button Grid.Column="0" Content="{DynamicResource POS_Suspend}" Style="{StaticResource OutlineButton}"
                             Margin="0,0,4,0" Padding="0,12" Click="Suspend_Click"/>
-                    <Button Grid.Column="1" Content="{DynamicResource POS_Checkout}" Style="{StaticResource SuccessButton}"
-                            Margin="4,0,0,0" Padding="0,12" FontSize="15" Click="Checkout_Click"/>
+                    <Button Grid.Column="1" Content="{DynamicResource POS_QuickCash}" Style="{StaticResource OutlineButton}"
+                            Margin="4" Padding="4,12" FontSize="12" Click="QuickCash_Click"
+                            ToolTip="{DynamicResource POS_QuickCashHint}"/>
+                    <Button Grid.Column="2" Content="{DynamicResource POS_Payment}" Style="{StaticResource SuccessButton}"
+                            Margin="4,0,0,0" Padding="4,12" FontSize="13" Click="Checkout_Click"
+                            ToolTip="{DynamicResource POS_PaymentHint}"/>
                 </Grid>
             </Grid>
         </Border>
