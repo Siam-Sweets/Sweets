@@ -28,10 +28,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -155,7 +155,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $setup)) { throw "Setup installer was not created: $setup" }
 
       - name: Upload exe artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-exe
           path: ./stage/${{ env.APP_NAME }}.exe
@@ -163,7 +163,7 @@ jobs:
           retention-days: 90
 
       - name: Upload zip artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-portable
           path: ./${{ env.APP_NAME }}-portable.zip
@@ -171,7 +171,7 @@ jobs:
           retention-days: 90
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-installer
           path: ./installer-output/${{ env.APP_NAME }}-${{ steps.ver.outputs.version }}-Setup.exe
@@ -202,7 +202,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Determine version and tag
         id: ver
@@ -234,19 +234,19 @@ jobs:
           echo "Tag: $tag, Version: $v, Release: $is_release"
 
       - name: Download exe artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ env.APP_NAME }}-exe
           path: ./release
 
       - name: Download zip artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ env.APP_NAME }}-portable
           path: ./release
 
       - name: Download installer artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ env.APP_NAME }}-installer
           path: ./release
@@ -260,62 +260,134 @@ jobs:
           mv PosApp-portable.zip PosApp-${{ steps.ver.outputs.version }}.zip 2>/dev/null || true
           ls -la
 
-      - name: Create rolling dev release (push to main)
-        if: steps.ver.outputs.is_release == 'false'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: PosApp Dev Build (run #${{ github.run_number }})
-          body: |
-            # PosApp Dev Build
-
-            **Version:** ${{ steps.ver.outputs.version }}
-            **Built from commit:** ${{ github.sha }}
-
-            ## Download
-            - **PosApp-${{ steps.ver.outputs.version }}-Setup.exe** — recommended guided installer with license, install location, Start Menu, and optional Desktop shortcut
-            - **PosApp-${{ steps.ver.outputs.version }}.exe** — single-file Windows x64 executable (~80 MB, no .NET install needed)
-            - **PosApp-${{ steps.ver.outputs.version }}.zip** — portable zip with exe + README + INSTALL.txt
-
-            ## Install
-            1. Download `PosApp-${{ steps.ver.outputs.version }}-Setup.exe`
-            2. If Windows SmartScreen shows "Windows protected your PC", click **More info → Run anyway**
-            3. Follow the setup wizard and choose whether to create a Desktop shortcut
-            4. Complete the first-run store and administrator setup inside PosApp
-
-            ## What's inside
-            - POS / Checkout with barcode scanner support
-            - Products & Inventory management
-            - Customer contact records and purchase history
-            - Sales history with refunds/voids
-            - Users & Roles (Cashier / Manager / Admin)
-            - Reports & Dashboard
-            - Bilingual EN + বাংলা UI
-            - ESC/POS thermal printer, cash drawer, weighing scale drivers
-            - Local SQLite database (no cloud, no internet)
-
-            _This is an automated dev build. For stable releases, push a tag like `v1.2.4`._
-          draft: false
-          prerelease: true
-          files: |
-            ./release/PosApp-${{ steps.ver.outputs.version }}.exe
-            ./release/PosApp-${{ steps.ver.outputs.version }}.zip
-            ./release/PosApp-${{ steps.ver.outputs.version }}-Setup.exe
+      - name: Publish release with retry
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+          IS_RELEASE: ${{ steps.ver.outputs.is_release }}
+        run: |
+          set -euo pipefail
 
-      - name: Create versioned release (tag push or manual dispatch)
-        if: steps.ver.outputs.is_release == 'true'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: PosApp ${{ steps.ver.outputs.version }}
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ steps.ver.outputs.is_prerelease == 'true' }}
-          files: |
-            ./release/PosApp-${{ steps.ver.outputs.version }}.exe
-            ./release/PosApp-${{ steps.ver.outputs.version }}.zip
-            ./release/PosApp-${{ steps.ver.outputs.version }}-Setup.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files=(
+            "./release/PosApp-${VERSION}.exe"
+            "./release/PosApp-${VERSION}.zip"
+            "./release/PosApp-${VERSION}-Setup.exe"
+          )
+
+          for file in "${files[@]}"; do
+            if [[ ! -f "$file" ]]; then
+              echo "Required release artifact is missing: $file" >&2
+              exit 1
+            fi
+          done
+
+          # Retry transient GitHub API and upload failures. The total backoff is
+          # bounded to 60 seconds and every operation is safe to run again.
+          retry() {
+            local max_attempts=5
+            local attempt=1
+            local delay=4
+
+            until "$@"; do
+              if (( attempt >= max_attempts )); then
+                echo "Command failed after ${attempt} attempts: $*" >&2
+                return 1
+              fi
+
+              echo "Attempt ${attempt} failed; retrying in ${delay}s: $*" >&2
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+
+          write_dev_notes() {
+            DEV_NOTES="./release/dev-release-notes.md"
+            cat > "$DEV_NOTES" <<EOF
+          # PosApp Dev Build
+
+          **Version:** ${VERSION}
+          **Built from commit:** ${GITHUB_SHA}
+
+          ## Download
+          - **PosApp-${VERSION}-Setup.exe** — recommended guided installer with license, install location, Start Menu, and optional Desktop shortcut
+          - **PosApp-${VERSION}.exe** — single-file Windows x64 executable (no .NET install needed)
+          - **PosApp-${VERSION}.zip** — portable zip with exe, README, and INSTALL.txt
+
+          ## Install
+          1. Download PosApp-${VERSION}-Setup.exe
+          2. If Windows SmartScreen shows "Windows protected your PC", click **More info → Run anyway**
+          3. Follow the setup wizard and choose whether to create a Desktop shortcut
+          4. Complete the first-run store and administrator setup inside PosApp
+
+          ## What's inside
+          - Aronium-style offline POS and checkout with barcode scanner support
+          - Products, purchases, inventory, register sessions, and physical counts
+          - Customer contact records and purchase history
+          - Sales history with refunds, voids, held sales, and split payments
+          - Users and roles (Cashier / Manager / Admin)
+          - Reports and dashboard
+          - Bilingual EN + বাংলা UI with Light and Dark themes
+          - ESC/POS thermal printer, cash drawer, and weighing scale drivers
+          - Safe local updates with verified pre-update database backups
+          - Local SQLite database (no cloud, no runtime internet)
+
+          _This is an automated development build. For a stable release, push a tag such as vX.Y.Z._
+          EOF
+          }
+
+          publish_dev_release() {
+            local title="PosApp Dev Build (run #${GITHUB_RUN_NUMBER})"
+
+            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+              gh release edit "$RELEASE_TAG" \
+                --title "$title" \
+                --notes-file "$DEV_NOTES" \
+                --draft=false \
+                --prerelease
+              gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+            else
+              gh release create "$RELEASE_TAG" "${files[@]}" \
+                --title "$title" \
+                --notes-file "$DEV_NOTES" \
+                --prerelease \
+                --latest=false \
+                --target "$GITHUB_SHA"
+            fi
+          }
+
+          publish_versioned_release() {
+            local title="PosApp ${VERSION}"
+
+            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+              gh release edit "$RELEASE_TAG" \
+                --title "$title" \
+                --draft=false \
+                --prerelease=false
+              gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+            else
+              gh release create "$RELEASE_TAG" "${files[@]}" \
+                --title "$title" \
+                --generate-notes \
+                --target "$GITHUB_SHA"
+            fi
+          }
+
+          gh --version
+
+          if [[ "$IS_RELEASE" == "false" ]]; then
+            write_dev_notes
+
+            # Keep the rolling dev release attached to the commit that produced
+            # these artifacts instead of leaving dev-build on an older commit.
+            git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
+            retry git push origin "refs/tags/${RELEASE_TAG}" --force
+            retry publish_dev_release
+          else
+            retry publish_versioned_release
+          fi
+
+          retry gh release view "$RELEASE_TAG" --json tagName,name,url,isDraft,isPrerelease

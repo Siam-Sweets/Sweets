@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.4 — Resilient GitHub release publishing
+
+- Replaced the third-party Node-based GitHub Release action with the GitHub CLI already provided by GitHub-hosted runners.
+- Upgraded the official checkout, .NET setup, artifact upload, and artifact download actions to their current Node 24-compatible major versions.
+- Added bounded retries for transient GitHub API, tag-push, and asset-upload failures such as the GitHub "Unicorn" service response.
+- Made rolling `dev-build` publishing idempotent: the tag advances to the build commit, release metadata is updated, and matching installer, EXE, and ZIP assets are safely replaced on reruns.
+- Kept versioned tag and manual releases rerunnable while preserving generated release notes for new stable releases.
+
 ## 1.3.3 — WPF safe-update build correction
 
 - Fixed Release compilation of the Update &amp; Recovery page by explicitly importing `System.IO` for `Path` and `Directory` in the WPF XAML temporary project.
