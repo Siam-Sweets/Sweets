@@ -21,6 +21,12 @@ env:
   PROJECT_PATH: src/PosApp.Wpf/PosApp.Wpf.csproj
   APP_NAME: PosApp
 
+# A newer main-branch build supersedes an older rolling dev build. Cancelling
+# the older run also prevents two jobs from replacing dev-build assets at once.
+concurrency:
+  group: posapp-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 jobs:
   build:
     name: Build Windows EXE
@@ -339,41 +345,195 @@ jobs:
           EOF
           }
 
-          publish_dev_release() {
-            local title="PosApp Dev Build (run #${GITHUB_RUN_NUMBER})"
+          # `gh release view <tag>` can report not found after a rolling tag is
+          # force-moved even though the release record still exists. Resolve the
+          # release from the REST collection and operate on its immutable ID.
+          find_release_id() {
+            local rows
+            local id
+            local tag
 
-            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-              gh release edit "$RELEASE_TAG" \
-                --title "$title" \
-                --notes-file "$DEV_NOTES" \
-                --draft=false \
-                --prerelease
-              gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
-            else
-              gh release create "$RELEASE_TAG" "${files[@]}" \
-                --title "$title" \
-                --notes-file "$DEV_NOTES" \
-                --prerelease \
-                --latest=false \
-                --target "$GITHUB_SHA"
-            fi
+            rows="$(
+              gh api --paginate \
+                "repos/${GH_REPO}/releases?per_page=100" \
+                --jq '.[] | [.id, .tag_name] | @tsv'
+            )" || return 2
+
+            while IFS=$'\t' read -r id tag; do
+              if [[ "$tag" == "$RELEASE_TAG" ]]; then
+                printf '%s\n' "$id"
+                return 0
+              fi
+            done <<< "$rows"
+
+            return 1
           }
 
-          publish_versioned_release() {
-            local title="PosApp ${VERSION}"
+          find_asset_id() {
+            local release_id="$1"
+            local wanted_name="$2"
+            local rows
+            local id
+            local name
 
-            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-              gh release edit "$RELEASE_TAG" \
-                --title "$title" \
-                --draft=false \
-                --prerelease=false
-              gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
-            else
-              gh release create "$RELEASE_TAG" "${files[@]}" \
-                --title "$title" \
-                --generate-notes \
-                --target "$GITHUB_SHA"
+            rows="$(
+              gh api --paginate \
+                "repos/${GH_REPO}/releases/${release_id}/assets?per_page=100" \
+                --jq '.[] | [.id, .name] | @tsv'
+            )" || return 2
+
+            while IFS=$'\t' read -r id name; do
+              if [[ "$name" == "$wanted_name" ]]; then
+                printf '%s\n' "$id"
+                return 0
+              fi
+            done <<< "$rows"
+
+            return 1
+          }
+
+          replace_release_asset() {
+            local release_id="$1"
+            local file="$2"
+            local file_name="${file##*/}"
+            local asset_id
+            local find_status
+
+            if [[ ! "$file_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
+              echo "Unsafe release asset filename: $file_name" >&2
+              return 1
             fi
+
+            if asset_id="$(find_asset_id "$release_id" "$file_name")"; then
+              gh api --method DELETE \
+                "repos/${GH_REPO}/releases/assets/${asset_id}" >/dev/null
+            else
+              find_status=$?
+              if (( find_status != 1 )); then
+                return "$find_status"
+              fi
+            fi
+
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --header "Content-Type: application/octet-stream" \
+              --data-binary "@${file}" \
+              --output /dev/null \
+              "https://uploads.github.com/repos/${GH_REPO}/releases/${release_id}/assets?name=${file_name}"
+          }
+
+          publish_release() {
+            local release_id
+            local find_status
+            local title
+            local notes
+
+            if [[ "$IS_RELEASE" == "false" ]]; then
+              title="PosApp Dev Build (run #${GITHUB_RUN_NUMBER})"
+              notes="$(< "$DEV_NOTES")"
+            else
+              title="PosApp ${VERSION}"
+            fi
+
+            if release_id="$(find_release_id)"; then
+              if [[ "$IS_RELEASE" == "false" ]]; then
+                gh api --method PATCH \
+                  "repos/${GH_REPO}/releases/${release_id}" \
+                  --raw-field "tag_name=${RELEASE_TAG}" \
+                  --raw-field "target_commitish=${GITHUB_SHA}" \
+                  --raw-field "name=${title}" \
+                  --raw-field "body=${notes}" \
+                  --field draft=false \
+                  --field prerelease=true >/dev/null
+              else
+                gh api --method PATCH \
+                  "repos/${GH_REPO}/releases/${release_id}" \
+                  --raw-field "tag_name=${RELEASE_TAG}" \
+                  --raw-field "target_commitish=${GITHUB_SHA}" \
+                  --raw-field "name=${title}" \
+                  --field draft=false \
+                  --field prerelease=false >/dev/null
+              fi
+            else
+              find_status=$?
+              if (( find_status != 1 )); then
+                return "$find_status"
+              fi
+
+              if [[ "$IS_RELEASE" == "false" ]]; then
+                release_id="$(
+                  gh api --method POST \
+                    "repos/${GH_REPO}/releases" \
+                    --raw-field "tag_name=${RELEASE_TAG}" \
+                    --raw-field "target_commitish=${GITHUB_SHA}" \
+                    --raw-field "name=${title}" \
+                    --raw-field "body=${notes}" \
+                    --field draft=false \
+                    --field prerelease=true \
+                    --jq '.id'
+                )"
+              else
+                release_id="$(
+                  gh api --method POST \
+                    "repos/${GH_REPO}/releases" \
+                    --raw-field "tag_name=${RELEASE_TAG}" \
+                    --raw-field "target_commitish=${GITHUB_SHA}" \
+                    --raw-field "name=${title}" \
+                    --field draft=false \
+                    --field prerelease=false \
+                    --field generate_release_notes=true \
+                    --jq '.id'
+                )"
+              fi
+            fi
+
+            if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
+              echo "GitHub returned an invalid release ID: $release_id" >&2
+              return 1
+            fi
+
+            for file in "${files[@]}"; do
+              replace_release_asset "$release_id" "$file"
+            done
+
+            PUBLISHED_RELEASE_ID="$release_id"
+          }
+
+          verify_published_release() {
+            local release_id="$PUBLISHED_RELEASE_ID"
+            local actual_tag
+            local assets
+            local file
+            local file_name
+
+            actual_tag="$(
+              gh api "repos/${GH_REPO}/releases/${release_id}" --jq '.tag_name'
+            )" || return 1
+
+            if [[ "$actual_tag" != "$RELEASE_TAG" ]]; then
+              echo "Published release tag mismatch: $actual_tag" >&2
+              return 1
+            fi
+
+            assets="$(
+              gh api --paginate \
+                "repos/${GH_REPO}/releases/${release_id}/assets?per_page=100" \
+                --jq '.[].name'
+            )" || return 1
+
+            for file in "${files[@]}"; do
+              file_name="${file##*/}"
+              if ! grep --fixed-strings --line-regexp --quiet "$file_name" <<< "$assets"; then
+                echo "Release asset verification failed: $file_name" >&2
+                return 1
+              fi
+            done
+
+            gh api "repos/${GH_REPO}/releases/${release_id}" \
+              --jq '{tag_name: .tag_name, name: .name, html_url: .html_url, draft: .draft, prerelease: .prerelease}'
           }
 
           gh --version
@@ -385,9 +545,7 @@ jobs:
             # these artifacts instead of leaving dev-build on an older commit.
             git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
             retry git push origin "refs/tags/${RELEASE_TAG}" --force
-            retry publish_dev_release
-          else
-            retry publish_versioned_release
           fi
 
-          retry gh release view "$RELEASE_TAG" --json tagName,name,url,isDraft,isPrerelease
+          retry publish_release
+          retry verify_published_release

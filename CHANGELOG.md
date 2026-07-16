@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.5 — Rolling release record lookup correction
+
+- Fixed the repeated "a release with the same tag name already exists" failure when `gh release view dev-build` cannot resolve an existing rolling release after its tag moves.
+- Resolves releases from the paginated REST collection, updates them by numeric release ID, and verifies the published tag and all three assets.
+- Replaces matching release assets through their REST asset IDs and the GitHub upload endpoint, making partial upload failures safe to retry.
+- Cancels an older in-progress main-branch build when a newer commit arrives, preventing concurrent rolling-release asset replacement and stale tag rollback.
+- Retains generated notes for new stable releases and preserves existing notes on stable-release reruns.
+
 ## 1.3.4 — Resilient GitHub release publishing
 
 - Replaced the third-party Node-based GitHub Release action with the GitHub CLI already provided by GitHub-hosted runners.
