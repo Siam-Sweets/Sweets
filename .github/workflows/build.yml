@@ -1,0 +1,259 @@
+name: Build PosApp
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v1.0.5) - leave empty for dev build'
+        required: false
+        default: ''
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  CONFIGURATION: Release
+  PROJECT_PATH: src/PosApp.Wpf/PosApp.Wpf.csproj
+  APP_NAME: PosApp
+
+jobs:
+  build:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT_PATH }} --configuration ${{ env.CONFIGURATION }} --no-restore
+
+      - name: Publish single-file self-contained exe
+        run: |
+          dotnet publish ${{ env.PROJECT_PATH }} `
+            --configuration ${{ env.CONFIGURATION }} `
+            --runtime win-x64 `
+            --self-contained true `
+            --p:PublishSingleFile=true `
+            --p:IncludeNativeLibrariesForSelfExtract=true `
+            --p:EnableCompressionInSingleFile=true `
+            --p:DebugType=embedded `
+            --p:PublishReadyToRun=false `
+            --output ./publish
+
+      - name: Verify exe exists and report size
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem ./publish -Filter "${{ env.APP_NAME }}.exe" | Select-Object -First 1
+          if (-not $exe) { throw "${{ env.APP_NAME }}.exe not found in ./publish" }
+          $sizeMB = [math]::Round($exe.Length / 1MB, 2)
+          Write-Host "✅ Built: $($exe.Name) - $sizeMB MB"
+          "size_mb=$sizeMB" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        id: exe_info
+
+      - name: Stage artifacts
+        shell: pwsh
+        run: |
+          $stage = "./stage"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "./publish/${{ env.APP_NAME }}.exe" -Destination "$stage/${{ env.APP_NAME }}.exe"
+          Copy-Item "./README.md" -Destination "$stage/README.md" -ErrorAction SilentlyContinue
+          # Write a small INSTALL.txt so users know what to do with SmartScreen
+          @"
+          PosApp - Quick Install
+          ======================
+
+          1. Double-click PosApp.exe to launch.
+          2. If Windows shows "Windows protected your PC":
+             - Click "More info"
+             - Click "Run anyway"
+             (This is normal for any unsigned exe - it's not a virus.)
+          3. First run will create the database in:
+             %LOCALAPPDATA%\PosApp\posapp.db
+          4. Login with admin / 1234 (or cashier / 1111).
+
+          To remove: just delete PosApp.exe and the %LOCALAPPDATA%\PosApp folder.
+          "@ | Out-File -FilePath "$stage/INSTALL.txt" -Encoding utf8
+
+      - name: Zip portable package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "./stage/*" -DestinationPath "./${{ env.APP_NAME }}-portable.zip" -Force
+
+      - name: Determine version
+        id: ver
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -match 'refs/tags/v?(.+)$') {
+            $v = $matches[1]
+            $isRelease = 'true'
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and '${{ github.event.inputs.version }}' -ne '') {
+            $v = '${{ github.event.inputs.version }}'.TrimStart('v')
+            $isRelease = 'true'
+          } else {
+            # Dev build: use run number
+            $v = "0.0.0-dev.$($env:GITHUB_RUN_NUMBER)"
+            $isRelease = 'false'
+          }
+          Write-Host "Version: $v (release=$isRelease)"
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-exe
+          path: ./stage/${{ env.APP_NAME }}.exe
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-portable
+          path: ./${{ env.APP_NAME }}-portable.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "## Build Summary"  | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "✅ PosApp.exe built successfully ($([math]::Round((Get-Item './publish/${{ env.APP_NAME }}.exe').Length / 1MB, 2)) MB)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "### Download the exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "Scroll down to the **Artifacts** section at the bottom of this page." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    # Run on: tag push, manual dispatch with version, OR every push to main (rolling dev release)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version and tag
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            v="${GITHUB_REF#refs/tags/}"
+            v="${v#v}"
+            tag="v${v}"
+            is_release="true"
+            is_prerelease="false"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
+            v="${{ inputs.version }}"
+            v="${v#v}"
+            tag="v${v}"
+            is_release="true"
+            is_prerelease="false"
+          else
+            # Rolling dev build on push to main
+            v="0.0.0-dev.${{ github.run_number }}"
+            tag="dev-build"
+            is_release="false"
+            is_prerelease="true"
+          fi
+          echo "version=$v" >> $GITHUB_OUTPUT
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+          echo "is_release=$is_release" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$is_prerelease" >> $GITHUB_OUTPUT
+          echo "Tag: $tag, Version: $v, Release: $is_release"
+
+      - name: Download exe artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-exe
+          path: ./release
+
+      - name: Download zip artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-portable
+          path: ./release
+
+      - name: Rename for release
+        shell: bash
+        run: |
+          cd ./release
+          ls -la
+          mv PosApp.exe PosApp-${{ steps.ver.outputs.version }}.exe 2>/dev/null || true
+          mv PosApp-portable.zip PosApp-${{ steps.ver.outputs.version }}.zip 2>/dev/null || true
+          ls -la
+
+      - name: Create rolling dev release (push to main)
+        if: steps.ver.outputs.is_release == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: PosApp Dev Build (run #${{ github.run_number }})
+          body: |
+            # PosApp Dev Build
+
+            **Version:** ${{ steps.ver.outputs.version }}
+            **Built from commit:** ${{ github.sha }}
+
+            ## Download
+            - **PosApp-${{ steps.ver.outputs.version }}.exe** — single-file Windows x64 executable (~80 MB, no .NET install needed)
+            - **PosApp-${{ steps.ver.outputs.version }}.zip** — portable zip with exe + README + INSTALL.txt
+
+            ## Install
+            1. Download `PosApp-${{ steps.ver.outputs.version }}.exe`
+            2. If Windows SmartScreen shows "Windows protected your PC", click **More info → Run anyway**
+            3. Double-click to run — no installation needed
+            4. Login: `admin` / `1234` or `cashier` / `1111`
+
+            ## What's inside
+            - POS / Checkout with barcode scanner support
+            - Products & Inventory management
+            - Customers with loyalty points
+            - Sales history with refunds/voids
+            - Users & Roles (Cashier / Manager / Admin)
+            - Reports & Dashboard
+            - Bilingual EN + বাংলা UI
+            - ESC/POS thermal printer, cash drawer, weighing scale drivers
+            - Local SQLite database (no cloud, no internet)
+
+            _This is an automated dev build. For stable releases, push a tag like `v1.0.0`._
+          draft: false
+          prerelease: true
+          files: |
+            ./release/PosApp-${{ steps.ver.outputs.version }}.exe
+            ./release/PosApp-${{ steps.ver.outputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create versioned release (tag push or manual dispatch)
+        if: steps.ver.outputs.is_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: PosApp ${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ steps.ver.outputs.is_prerelease == 'true' }}
+          files: |
+            ./release/PosApp-${{ steps.ver.outputs.version }}.exe
+            ./release/PosApp-${{ steps.ver.outputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
