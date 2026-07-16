@@ -11,6 +11,7 @@ public partial class PaymentDialog : Window
     private SaleDraft? _draft;
     public PaymentMethod SelectedMethod { get; private set; } = PaymentMethod.Cash;
     public List<SalePayment> Payments { get; } = new();
+    public decimal TenderedAmount => _tendered;
     private decimal _tendered = 0m;
 
     public PaymentDialog()
@@ -130,7 +131,10 @@ public partial class PaymentDialog : Window
         Payments.Add(new SalePayment
         {
             Method = SelectedMethod,
-            Amount = Math.Max(_tendered, due),
+            // The payment applied to the sale is the amount due. Cash tendered
+            // above that amount is recorded separately so it becomes change,
+            // not additional sales revenue.
+            Amount = due,
             Reference = SelectedMethod == PaymentMethod.Card ? "card" : null
         });
 

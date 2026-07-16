@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using PosApp.Core.Entities;
 
 namespace PosApp.Core.Models;
@@ -12,6 +14,8 @@ public class SaleDraft
     public int UserId { get; set; }
     public List<SaleDraftLine> Lines { get; set; } = new();
     public List<Discount> CartDiscounts { get; set; } = new();
+    public List<SalePayment> Payments { get; set; } = new();
+    public decimal AmountTendered { get; set; }
     public string? Note { get; set; }
     public int? SuspendedSaleId { get; set; }
 
@@ -26,17 +30,35 @@ public class SaleDraft
     public decimal Total => Subtotal - DiscountTotal + TaxTotal;
 }
 
-public class SaleDraftLine
+public class SaleDraftLine : INotifyPropertyChanged
 {
+    private decimal _quantity;
+
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string? Sku { get; set; }
-    public decimal Quantity { get; set; }
+    public decimal Quantity
+    {
+        get => _quantity;
+        set
+        {
+            if (_quantity == value) return;
+            _quantity = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LineTotal));
+        }
+    }
     public decimal UnitPrice { get; set; }
     public decimal TaxRate { get; set; }
     public decimal DiscountAmount { get; set; }
     public string? DiscountReason { get; set; }
     public bool IsWeighted { get; set; }
+    public decimal LineTotal => (UnitPrice * Quantity) - DiscountAmount;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 public class StoreSettings

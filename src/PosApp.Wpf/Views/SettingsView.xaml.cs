@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
-using PosApp.Localization;
 
 namespace PosApp.Wpf.Views;
 
@@ -12,75 +11,100 @@ public partial class SettingsView : UserControl, IRefreshable
     private readonly ISettingsService _settings;
     private readonly IHardwareService _hardware;
     private StoreSettings _current = new();
+    private bool _isLoading;
 
     public SettingsView(ISettingsService settings, IHardwareService hardware)
     {
         InitializeComponent();
         _settings = settings;
         _hardware = hardware;
-        Loaded += async (_, _) => await LoadAsync();
     }
 
-    public async void Refresh() => await LoadAsync();
+    public async void Refresh()
+    {
+        IsEnabled = false;
+        try { await LoadAsync(); }
+        finally { IsEnabled = true; }
+    }
 
     private async Task LoadAsync()
     {
-        _current = await _settings.GetStoreSettingsAsync();
-        StoreNameBox.Text = _current.StoreName;
-        PhoneBox.Text = _current.Phone;
-        EmailBox.Text = _current.Email;
-        TaxIdBox.Text = _current.TaxId;
-        AddressBox.Text = _current.Address;
-        CurrencyBox.Text = _current.CurrencySymbol;
-        FooterBox.Text = _current.FooterNote;
-        DrawerPortBox.Text = _current.CashDrawerPort;
-        ScalePortBox.Text = _current.ScalePort;
-        AutoPrintCheckbox.IsChecked = _current.PrintReceiptAutomatically;
-        OpenDrawerCheckbox.IsChecked = _current.OpenDrawerOnCashSale;
-
-        PrinterCombo.Items.Clear();
-        PrinterCombo.Items.Add("(default)");
-        foreach (string name in PrinterSettings.InstalledPrinters)
+        _isLoading = true;
+        try
         {
-            PrinterCombo.Items.Add(name);
-            if (name == _current.ReceiptPrinterName) PrinterCombo.SelectedItem = name;
-        }
-        if (PrinterCombo.SelectedIndex < 0) PrinterCombo.SelectedIndex = 0;
+            _current = await _settings.GetStoreSettingsAsync();
+            StoreNameBox.Text = _current.StoreName;
+            PhoneBox.Text = _current.Phone;
+            EmailBox.Text = _current.Email;
+            TaxIdBox.Text = _current.TaxId;
+            AddressBox.Text = _current.Address;
+            CurrencyBox.Text = _current.CurrencySymbol;
+            FooterBox.Text = _current.FooterNote;
+            DrawerPortBox.Text = _current.CashDrawerPort;
+            ScalePortBox.Text = _current.ScalePort;
+            AutoPrintCheckbox.IsChecked = _current.PrintReceiptAutomatically;
+            OpenDrawerCheckbox.IsChecked = _current.OpenDrawerOnCashSale;
 
-        LangEn.IsChecked = _current.Language == "en";
-        LangBn.IsChecked = _current.Language == "bn";
-        ThemeLight.IsChecked = _current.Theme == "Light";
-        ThemeDark.IsChecked = _current.Theme == "Dark";
+            PrinterCombo.Items.Clear();
+            PrinterCombo.Items.Add("(default)");
+            try
+            {
+                foreach (string name in PrinterSettings.InstalledPrinters)
+                {
+                    PrinterCombo.Items.Add(name);
+                    if (name == _current.ReceiptPrinterName) PrinterCombo.SelectedItem = name;
+                }
+            }
+            catch
+            {
+                // Windows printing can be unavailable when the spooler is stopped.
+                // Settings must remain usable even in that state.
+            }
+            if (PrinterCombo.SelectedIndex < 0) PrinterCombo.SelectedIndex = 0;
+
+            LangEn.IsChecked = _current.Language != "bn";
+            LangBn.IsChecked = _current.Language == "bn";
+            ThemeLight.IsChecked = !string.Equals(_current.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
+            ThemeDark.IsChecked = string.Equals(_current.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load settings", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
     private void Lang_Checked(object sender, RoutedEventArgs e)
     {
+        if (_isLoading) return;
         // Live preview of language switch
         var code = LangBn.IsChecked == true ? "bn" : "en";
-        ApplyLanguage(code);
+        App.ApplyLanguage(code);
     }
 
-    private static void ApplyLanguage(string code)
+    private void Theme_Checked(object sender, RoutedEventArgs e)
     {
-        var dict = new System.Windows.ResourceDictionary();
-        var path = code == "bn"
-            ? "pack://application:,,,/PosApp.Localization;component/Strings.bn.xaml"
-            : "pack://application:,,,/PosApp.Localization;component/Strings.en.xaml";
-        dict.Source = new Uri(path);
-        var mergedDicts = System.Windows.Application.Current.Resources.MergedDictionaries;
-        // Remove existing localization dict
-        for (int i = mergedDicts.Count - 1; i >= 0; i--)
-        {
-            if (mergedDicts[i].Source?.OriginalString.Contains("Strings.") == true)
-            {
-                mergedDicts.RemoveAt(i);
-            }
-        }
-        mergedDicts.Insert(0, dict);
-        LocalizationManager.Instance.SetLanguage(code);
+        if (_isLoading) return;
+        App.ApplyTheme(ThemeDark.IsChecked == true ? "Dark" : "Light");
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await SaveCurrentSettingsAsync();
+            MessageBox.Show("Settings saved.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to save settings", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void UpdateCurrentFromForm()
     {
         _current.StoreName = StoreNameBox.Text;
         _current.Phone = PhoneBox.Text;
@@ -96,29 +120,50 @@ public partial class SettingsView : UserControl, IRefreshable
         _current.ReceiptPrinterName = PrinterCombo.SelectedItem as string == "(default)" ? "" : PrinterCombo.SelectedItem as string ?? "";
         _current.Language = LangBn.IsChecked == true ? "bn" : "en";
         _current.Theme = ThemeDark.IsChecked == true ? "Dark" : "Light";
+    }
 
+    private async Task SaveCurrentSettingsAsync()
+    {
+        UpdateCurrentFromForm();
         await _settings.SetStoreSettingsAsync(_current);
         App.StoreSettings = _current;
-        MessageBox.Show("Settings saved.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+        App.ApplyLanguage(_current.Language);
+        App.ApplyTheme(_current.Theme);
     }
 
     private async void TestPrint_Click(object sender, RoutedEventArgs e)
     {
-        var ok = await _hardware.PrintReceiptAsync(BuildTestSale());
-        MessageBox.Show(ok ? "Print sent." : "Print failed. Check printer name in Settings.",
-            "Test Print", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        try
+        {
+            // Test the values currently visible in the form, not stale saved values.
+            await SaveCurrentSettingsAsync();
+            var ok = await _hardware.PrintReceiptAsync(BuildTestSale());
+            MessageBox.Show(ok ? "Print sent." : "Print failed. Check the selected printer and Windows print service.",
+                "Test Print", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Test Print", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private async void TestDrawer_Click(object sender, RoutedEventArgs e)
     {
-        var ok = await _hardware.OpenCashDrawerAsync();
-        MessageBox.Show(ok ? "Drawer pulse sent." : "Drawer not available. Check COM port.",
-            "Test Drawer", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        try
+        {
+            await SaveCurrentSettingsAsync();
+            var ok = await _hardware.OpenCashDrawerAsync();
+            MessageBox.Show(ok ? "Drawer pulse sent." : "Drawer not available. Check the COM port and connection.",
+                "Test Drawer", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Test Drawer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private PosApp.Core.Entities.Sale BuildTestSale()
     {
-        var store = _current;
         return new PosApp.Core.Entities.Sale
         {
             ReceiptNumber = "TEST-" + DateTime.Now.Ticks,

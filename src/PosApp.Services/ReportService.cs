@@ -90,10 +90,24 @@ public class ReportService : IReportService
 
     public async Task<IReadOnlyList<TopProductRow>> GetTopProductsAsync(DateTime from, DateTime to, int top = 10)
     {
-        var rows = await _db.SaleItems.AsNoTracking()
-            .Include(i => i.Product)
+        // SQLite cannot aggregate or order EF decimal mappings on the server.
+        // Keep filtering/projection in SQL and perform decimal math in memory.
+        var items = await _db.SaleItems.AsNoTracking()
             .Where(i => i.Sale.SaleDate >= from && i.Sale.SaleDate <= to
                         && i.Sale.Status == SaleStatus.Completed && !i.IsRefunded)
+            .Select(i => new
+            {
+                i.ProductId,
+                i.ProductName,
+                i.Sku,
+                i.Quantity,
+                i.UnitPrice,
+                i.DiscountAmount,
+                CostPrice = i.Product != null ? i.Product.CostPrice : 0m
+            })
+            .ToListAsync();
+
+        var rows = items
             .GroupBy(i => new { i.ProductId, i.ProductName, i.Sku })
             .Select(g => new TopProductRow
             {
@@ -101,12 +115,12 @@ public class ReportService : IReportService
                 ProductName = g.Key.ProductName,
                 Sku = g.Key.Sku,
                 QuantitySold = (int)g.Sum(i => i.Quantity),
-                Revenue = g.Sum(i => i.LineTotal),
-                Profit = g.Sum(i => (i.UnitPrice - (i.Product != null ? i.Product.CostPrice : 0m)) * i.Quantity)
+                Revenue = g.Sum(i => (i.UnitPrice * i.Quantity) - i.DiscountAmount),
+                Profit = g.Sum(i => (i.UnitPrice - i.CostPrice) * i.Quantity - i.DiscountAmount)
             })
             .OrderByDescending(r => r.Revenue)
             .Take(top)
-            .ToListAsync();
+            .ToList();
         return rows;
     }
 
@@ -114,43 +128,69 @@ public class ReportService : IReportService
     {
         var from = date.Date;
         var to = from.AddDays(1);
-        var rows = await _db.Sales.AsNoTracking()
+        var sales = await _db.Sales.AsNoTracking()
             .Where(s => s.SaleDate >= from && s.SaleDate < to && s.Status == SaleStatus.Completed)
+            .Select(s => new
+            {
+                s.SaleDate,
+                s.Subtotal,
+                s.DiscountTotal,
+                s.TaxTotal,
+                s.Rounding
+            })
+            .ToListAsync();
+
+        var rows = sales
             .GroupBy(s => s.SaleDate.Hour)
             .Select(g => new SalesByHourRow
             {
                 Hour = g.Key,
                 TransactionCount = g.Count(),
-                Revenue = g.Sum(s => s.Total)
+                Revenue = g.Sum(s => s.Subtotal - s.DiscountTotal + s.TaxTotal + s.Rounding)
             })
             .OrderBy(r => r.Hour)
-            .ToListAsync();
+            .ToList();
         return rows;
     }
 
     public async Task<IReadOnlyList<SalesByCategoryRow>> GetSalesByCategoryAsync(DateTime from, DateTime to)
     {
-        var rows = await _db.SaleItems.AsNoTracking()
-            .Include(i => i.Product).ThenInclude(p => p!.Category)
+        var items = await _db.SaleItems.AsNoTracking()
             .Where(i => i.Sale.SaleDate >= from && i.Sale.SaleDate <= to
                         && i.Sale.Status == SaleStatus.Completed && !i.IsRefunded)
-            .GroupBy(i => i.Product != null && i.Product.Category != null ? i.Product.Category.Name : "Uncategorized")
+            .Select(i => new
+            {
+                CategoryName = i.Product != null && i.Product.Category != null
+                    ? i.Product.Category.Name
+                    : "Uncategorized",
+                i.Quantity,
+                i.UnitPrice,
+                i.DiscountAmount
+            })
+            .ToListAsync();
+
+        var rows = items
+            .GroupBy(i => i.CategoryName)
             .Select(g => new SalesByCategoryRow
             {
                 CategoryName = g.Key,
                 QuantitySold = (int)g.Sum(i => i.Quantity),
-                Revenue = g.Sum(i => i.LineTotal)
+                Revenue = g.Sum(i => (i.UnitPrice * i.Quantity) - i.DiscountAmount)
             })
             .OrderByDescending(r => r.Revenue)
-            .ToListAsync();
+            .ToList();
         return rows;
     }
 
     public async Task<IReadOnlyList<PaymentBreakdownRow>> GetPaymentBreakdownAsync(DateTime from, DateTime to)
     {
-        var rows = await _db.SalePayments.AsNoTracking()
+        var payments = await _db.SalePayments.AsNoTracking()
             .Where(p => p.Sale.SaleDate >= from && p.Sale.SaleDate <= to
                         && p.Sale.Status == SaleStatus.Completed)
+            .Select(p => new { p.Method, p.Amount })
+            .ToListAsync();
+
+        var rows = payments
             .GroupBy(p => p.Method)
             .Select(g => new PaymentBreakdownRow
             {
@@ -159,7 +199,7 @@ public class ReportService : IReportService
                 Total = g.Sum(p => p.Amount)
             })
             .OrderByDescending(r => r.Total)
-            .ToListAsync();
+            .ToList();
         return rows;
     }
 }

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -135,14 +136,15 @@ public partial class App : Application
             var settingsService = Services.GetRequiredService<ISettingsService>();
             StoreSettings = await settingsService.GetStoreSettingsAsync();
             Log($"Settings loaded. Store: {StoreSettings.StoreName}");
+            ApplyTheme(StoreSettings.Theme);
 
             // Apply language from settings
-            var loc = LocalizationManager.Instance;
-            loc.SetLanguage(StoreSettings.Language ?? "en");
+            ApplyLanguage(StoreSettings.Language);
 
             // Show login window
             Log("Showing login window...");
             var login = Services.GetRequiredService<LoginView>();
+            MainWindow = login;
             login.Show();
             Log("Login window shown. Startup complete.");
         }
@@ -176,13 +178,13 @@ public partial class App : Application
         services.AddTransient<IReportService, ReportService>();
         services.AddTransient<ISettingsService, SettingsService>();
 
-        // Hardware - safe defaults (no-op) so app never crashes if devices are missing
+        // Hardware drivers fail safely when a configured device is unavailable.
         services.AddSingleton<IReceiptPrinter>(sp =>
         {
             var settings = sp.GetRequiredService<ISettingsService>();
             return new WindowsPrinter(settings);
         });
-        services.AddSingleton<ICashDrawer, NullCashDrawer>();
+        services.AddSingleton<ICashDrawer, SerialCashDrawer>();
         services.AddSingleton<IBarcodeScanner, NullBarcodeScanner>();
         services.AddSingleton<IWeighingScale, NullWeighingScale>();
         services.AddSingleton<IHardwareService, HardwareService>();
@@ -198,6 +200,55 @@ public partial class App : Application
         services.AddTransient<ReportsView>();
         services.AddTransient<UsersView>();
         services.AddTransient<SettingsView>();
-        services.AddTransient<PaymentDialog>();
+    }
+
+    public static void ApplyTheme(string? theme)
+    {
+        var dark = string.Equals(theme, "Dark", StringComparison.OrdinalIgnoreCase);
+
+        SetThemeBrush("BackgroundBrush", dark ? "#0F172A" : "#F1F5F9");
+        SetThemeBrush("CardBrush", dark ? "#1E293B" : "#FFFFFF");
+        SetThemeBrush("InputBrush", dark ? "#111827" : "#FFFFFF");
+        SetThemeBrush("TextDarkBrush", dark ? "#F8FAFC" : "#0F172A");
+        SetThemeBrush("TextMutedBrush", dark ? "#94A3B8" : "#64748B");
+        SetThemeBrush("BorderBrush", dark ? "#334155" : "#E2E8F0");
+        SetThemeBrush("SurfaceMutedBrush", dark ? "#293548" : "#F1F5F9");
+        SetThemeBrush("SurfaceHoverBrush", dark ? "#334155" : "#F8FAFC");
+        SetThemeBrush("AlternateRowBrush", dark ? "#243247" : "#F8FAFC");
+        SetThemeBrush("SelectionBrush", dark ? "#1D4ED8" : "#DBEAFE");
+        SetThemeBrush("SidebarBrush", dark ? "#020617" : "#1E293B");
+        SetThemeBrush("SidebarActiveBrush", dark ? "#000000" : "#0F172A");
+    }
+
+    public static void ApplyLanguage(string? language)
+    {
+        var code = string.Equals(language, "bn", StringComparison.OrdinalIgnoreCase) ? "bn" : "en";
+        var dictionary = new ResourceDictionary
+        {
+            Source = new Uri(code == "bn"
+                ? "pack://application:,,,/PosApp.Localization;component/Strings.bn.xaml"
+                : "pack://application:,,,/PosApp.Localization;component/Strings.en.xaml")
+        };
+
+        var mergedDictionaries = Current.Resources.MergedDictionaries;
+        for (var i = mergedDictionaries.Count - 1; i >= 0; i--)
+        {
+            if (mergedDictionaries[i].Source?.OriginalString.Contains("Strings.") == true)
+                mergedDictionaries.RemoveAt(i);
+        }
+        mergedDictionaries.Insert(0, dictionary);
+        LocalizationManager.Instance.SetLanguage(code);
+    }
+
+    private static void SetThemeBrush(string key, string hex)
+    {
+        var color = (Color)ColorConverter.ConvertFromString(hex)!;
+        if (Current.TryFindResource(key) is SolidColorBrush brush && !brush.IsFrozen)
+        {
+            brush.Color = color;
+            return;
+        }
+
+        Current.Resources[key] = new SolidColorBrush(color);
     }
 }

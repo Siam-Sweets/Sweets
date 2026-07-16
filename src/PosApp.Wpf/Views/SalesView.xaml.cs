@@ -14,7 +14,9 @@ public partial class SalesView : UserControl, IRefreshable
     private readonly ISaleService _sales;
     private readonly IHardwareService _hardware;
     private readonly Data.AppDbContext _db;
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
     private List<Sale> _all = new();
+    private int _loadVersion;
 
     public SalesView(ISaleService sales, IHardwareService hardware, Data.AppDbContext db)
     {
@@ -24,16 +26,18 @@ public partial class SalesView : UserControl, IRefreshable
         _db = db;
         FromDate.SelectedDate = DateTime.Today.AddDays(-7);
         ToDate.SelectedDate = DateTime.Today.AddDays(1);
-        Loaded += async (_, _) => await LoadAsync();
     }
 
     public async void Refresh()
     {
-        await LoadAsync();
+        IsEnabled = false;
+        try { await LoadAsync(); }
+        finally { IsEnabled = true; }
     }
 
     private async Task LoadAsync()
     {
+        var version = ++_loadVersion;
         var from = FromDate.SelectedDate ?? DateTime.Today.AddDays(-7);
         var to = ToDate.SelectedDate ?? DateTime.Today.AddDays(1);
 
@@ -41,13 +45,28 @@ public partial class SalesView : UserControl, IRefreshable
         if (StatusFilter.SelectedItem is ComboBoxItem ci && ci.Tag is string s && Enum.TryParse<SaleStatus>(s, out var st))
             statusFilter = st;
 
-        _all = (await _sales.GetSalesAsync(from, to, statusFilter)).ToList();
-        SalesGrid.ItemsSource = _all;
+        await _loadGate.WaitAsync();
+        try
+        {
+            if (version != _loadVersion) return;
+            var sales = (await _sales.GetSalesAsync(from, to, statusFilter)).ToList();
+            if (version != _loadVersion) return;
 
-        TxnCountText.Text = _all.Count.ToString();
-        GrossText.Text = $"৳ {_all.Sum(x => x.Subtotal):0.00}";
-        DiscountText.Text = $"৳ {_all.Sum(x => x.DiscountTotal):0.00}";
-        TaxText.Text = $"৳ {_all.Sum(x => x.TaxTotal):0.00}";
+            _all = sales;
+            SalesGrid.ItemsSource = _all;
+            TxnCountText.Text = _all.Count.ToString();
+            GrossText.Text = $"৳ {_all.Sum(x => x.Subtotal):0.00}";
+            DiscountText.Text = $"৳ {_all.Sum(x => x.DiscountTotal):0.00}";
+            TaxText.Text = $"৳ {_all.Sum(x => x.TaxTotal):0.00}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load sales", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _loadGate.Release();
+        }
     }
 
     private void Filter_Click(object sender, RoutedEventArgs e) => Refresh();
@@ -88,7 +107,8 @@ public partial class SalesView : UserControl, IRefreshable
             if (full != null)
             {
                 var ok = await _hardware.PrintReceiptAsync(full);
-                if (!ok) MessageBox.Show("Printer not available. Sale saved.", "Print", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(ok ? "Receipt sent to the printer." : "Printer not available. Sale remains saved.",
+                    "Print", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
             }
         }
     }

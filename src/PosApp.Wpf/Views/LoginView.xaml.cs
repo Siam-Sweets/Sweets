@@ -17,22 +17,22 @@ public partial class LoginView : Window
         InitializeComponent();
         _vm = new LoginViewModel(auth, this, mainWindow);
         DataContext = _vm;
-        UsernameBox.TextChanged += (_, _) => _vm.Username = UsernameBox.Text;
     }
 
-    private void PinBox_KeyDown(object sender, KeyEventArgs e)
+    private async void PinBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
         {
             _vm.Pin = PinBox.Password;
-            _vm.LoginCommand.Execute(null);
+            await _vm.LoginAsync();
+            e.Handled = true;
         }
     }
 
-    private void LoginButton_Click(object sender, RoutedEventArgs e)
+    private async void LoginButton_Click(object sender, RoutedEventArgs e)
     {
         _vm.Pin = PinBox.Password;
-        _vm.LoginCommand.Execute(null);
+        await _vm.LoginAsync();
     }
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Application.Current.Shutdown();
@@ -46,40 +46,51 @@ public class LoginViewModel : ViewModelBase
     private string _username = "";
     private string _pin = "";
     private string? _error;
+    private bool _isLoggingIn;
 
     public LoginViewModel(IAuthService auth, LoginView view, MainWindow mainWindow)
     {
         _auth = auth;
         _view = view;
         _mainWindow = mainWindow;
-        LoginCommand = new RelayCommand(async () => await LoginAsync());
     }
 
     public string Username { get => _username; set => Set(ref _username, value); }
     public string Pin { get => _pin; set => Set(ref _pin, value); }
     public string? Error { get => _error; set { Set(ref _error, value); OnPropertyChanged(nameof(HasError)); } }
     public bool HasError => !string.IsNullOrEmpty(Error);
-    public ICommand LoginCommand { get; }
-
-    private async Task LoginAsync()
+    public async Task LoginAsync()
     {
+        if (_isLoggingIn) return;
         if (string.IsNullOrWhiteSpace(Username))
         {
             Error = "Username is required";
             return;
         }
         Error = null;
-
-        var user = await _auth.LoginAsync(Username, Pin);
-        if (user == null)
+        _isLoggingIn = true;
+        try
         {
-            Error = "Invalid username or PIN";
-            return;
-        }
+            var user = await _auth.LoginAsync(Username.Trim(), Pin);
+            if (user == null)
+            {
+                Error = "Invalid username or PIN";
+                return;
+            }
 
-        App.CurrentUser = user;
-        _mainWindow.SetCurrentUser(user);
-        _mainWindow.Show();
-        _view.Close();
+            App.CurrentUser = user;
+            _mainWindow.SetCurrentUser(user);
+            Application.Current.MainWindow = _mainWindow;
+            _mainWindow.Show();
+            _view.Close();
+        }
+        catch (Exception ex)
+        {
+            Error = $"Login failed: {ex.Message}";
+        }
+        finally
+        {
+            _isLoggingIn = false;
+        }
     }
 }

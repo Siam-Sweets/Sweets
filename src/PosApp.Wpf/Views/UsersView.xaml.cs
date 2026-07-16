@@ -16,10 +16,24 @@ public partial class UsersView : UserControl, IRefreshable
         InitializeComponent();
         _db = db;
         _auth = auth;
-        Loaded += async (_, _) => await LoadAsync();
     }
 
-    public async void Refresh() => await LoadAsync();
+    public async void Refresh()
+    {
+        IsEnabled = false;
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load users", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
+    }
 
     private async Task LoadAsync()
     {
@@ -76,9 +90,27 @@ public partial class UsersView : UserControl, IRefreshable
             var confirm = MessageBox.Show($"Delete user '{u.Username}'?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm != MessageBoxResult.Yes) return;
-            _db.Users.Remove(u);
-            await _db.SaveChangesAsync();
-            Refresh();
+            try
+            {
+                var hasSales = await _db.Sales.AnyAsync(sale => sale.UserId == u.Id);
+                if (hasSales)
+                {
+                    // Keep historical receipts valid while removing login access.
+                    u.IsActive = false;
+                    u.UpdatedAt = DateTime.UtcNow;
+                    _db.Users.Update(u);
+                }
+                else
+                {
+                    _db.Users.Remove(u);
+                }
+                await _db.SaveChangesAsync();
+                Refresh();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Unable to delete user", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 }
@@ -173,9 +205,16 @@ public class UserEditDialog : Window
                 _user.UpdatedAt = DateTime.UtcNow;
                 _db.Users.Update(_user);
             }
-            await _db.SaveChangesAsync();
-            DialogResult = true;
-            Close();
+            try
+            {
+                await _db.SaveChangesAsync();
+                DialogResult = true;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Unable to save user", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         };
         btnRow.Children.Add(saveBtn);
         panel.Children.Add(btnRow);

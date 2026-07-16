@@ -21,15 +21,15 @@ public class AuthService : IAuthService
         return user;
     }
 
-    public Task<bool> ChangePasswordAsync(int userId, string newPassword)
+    public async Task<bool> ChangePasswordAsync(int userId, string newPassword)
     {
         var (hash, salt) = DbSeeder.HashPin(newPassword);
-        var user = _db.Users.Find(userId);
-        if (user == null) return Task.FromResult(false);
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return false;
         user.PasswordHash = hash;
         user.PasswordSalt = salt;
         user.UpdatedAt = DateTime.UtcNow;
-        return _db.SaveChangesAsync().ContinueWith(t => t.Result > 0);
+        return await _db.SaveChangesAsync() > 0;
     }
 
     public string HashPassword(string password, out string salt)

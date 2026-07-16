@@ -10,17 +10,29 @@ public partial class ProductsView : UserControl, IRefreshable
 {
     private readonly IInventoryService _inventory;
     private ObservableCollection<Product> _all = new();
+    private int _selectedCategoryId;
 
     public ProductsView(IInventoryService inventory)
     {
         InitializeComponent();
         _inventory = inventory;
-        Loaded += async (_, _) => await LoadAsync();
     }
 
     public async void Refresh()
     {
-        await LoadAsync();
+        IsEnabled = false;
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load products", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 
     private async Task LoadAsync()
@@ -37,41 +49,64 @@ public partial class ProductsView : UserControl, IRefreshable
             CategoryFilter.Items.Add(new ComboBoxItem { Content = c.Name, Tag = c.Id });
         }
         CategoryFilter.SelectedIndex = 0;
+        ApplyFilters();
     }
 
     private void Search_TextChanged(object sender, TextChangedEventArgs e)
     {
-        var term = SearchBox.Text?.Trim().ToLower() ?? "";
-        var filtered = _all.Where(p =>
-            string.IsNullOrEmpty(term) ||
-            (p.Name?.ToLower().Contains(term) ?? false) ||
-            (p.Sku?.ToLower().Contains(term) ?? false)).ToList();
-        ProductsGrid.ItemsSource = filtered;
+        ApplyFilters();
     }
 
     private void CategoryFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (CategoryFilter.SelectedItem is not ComboBoxItem item) return;
-        var catId = (int)(item.Tag ?? 0);
-        var filtered = catId == 0 ? _all.ToList() : _all.Where(p => p.CategoryId == catId).ToList();
+        _selectedCategoryId = (int)(item.Tag ?? 0);
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        if (ProductsGrid == null) return;
+        var term = SearchBox?.Text?.Trim() ?? "";
+        var filtered = _all.Where(p =>
+            (_selectedCategoryId == 0 || p.CategoryId == _selectedCategoryId) &&
+            (string.IsNullOrEmpty(term) ||
+             p.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+             (p.Sku?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+             (p.Barcode?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+             (p.Category?.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)))
+            .ToList();
         ProductsGrid.ItemsSource = filtered;
     }
 
-    private void Add_Click(object sender, RoutedEventArgs e)
+    private async void Add_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new ProductEditDialog(_inventory) { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true)
+        try
         {
-            Refresh();
+            var categories = await _inventory.ListCategoriesAsync();
+            var dlg = new ProductEditDialog(_inventory, categories) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true) Refresh();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to open product editor", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    private void Edit_Click(object sender, RoutedEventArgs e)
+    private async void Edit_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is Product p)
         {
-            var dlg = new ProductEditDialog(_inventory, p) { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true) Refresh();
+            try
+            {
+                var categories = await _inventory.ListCategoriesAsync();
+                var dlg = new ProductEditDialog(_inventory, categories, p) { Owner = Window.GetWindow(this) };
+                if (dlg.ShowDialog() == true) Refresh();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Unable to open product editor", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
@@ -82,9 +117,17 @@ public partial class ProductsView : UserControl, IRefreshable
             var confirm = MessageBox.Show($"Delete product '{p.Name}'?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm != MessageBoxResult.Yes) return;
-            p.IsActive = false;
-            await _inventory.CreateOrUpdateProductAsync(p);
-            Refresh();
+            try
+            {
+                p.IsActive = false;
+                await _inventory.CreateOrUpdateProductAsync(p);
+                Refresh();
+            }
+            catch (Exception ex)
+            {
+                p.IsActive = true;
+                MessageBox.Show(ex.Message, "Unable to delete product", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 }
@@ -95,11 +138,13 @@ public class ProductEditDialog : Window
     private readonly Product _product;
     private readonly bool _isNew;
 
-    public ProductEditDialog(IInventoryService svc, Product? existing = null)
+    public ProductEditDialog(IInventoryService svc, IReadOnlyList<Category> categories, Product? existing = null)
     {
         _svc = svc;
         _isNew = existing == null;
-        _product = existing ?? new Product { IsActive = true, Unit = UnitOfMeasure.Piece };
+        _product = existing == null
+            ? new Product { IsActive = true, Unit = UnitOfMeasure.Piece }
+            : CopyProduct(existing);
 
         Title = _isNew ? "Add Product" : "Edit Product";
         Width = 520; Height = 620;
@@ -124,12 +169,14 @@ public class ProductEditDialog : Window
 
         // Category picker
         var catCombo = new ComboBox { Margin = new Thickness(0, 4, 0, 12) };
-        var cats = svc.ListCategoriesAsync().GetAwaiter().GetResult();
-        foreach (var c in cats) catCombo.Items.Add(new ComboBoxItem { Content = c.Name, Tag = c });
+        foreach (var c in categories) catCombo.Items.Add(new ComboBoxItem { Content = c.Name, Tag = c });
         catCombo.SelectionChanged += (_, _) =>
         {
             if (catCombo.SelectedItem is ComboBoxItem ci && ci.Tag is Category c)
+            {
                 _product.CategoryId = c.Id;
+                _product.Category = null;
+            }
         };
         if (_product.CategoryId > 0)
         {
@@ -208,9 +255,21 @@ public class ProductEditDialog : Window
                 MessageBox.Show("Name is required", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            await _svc.CreateOrUpdateProductAsync(_product);
-            DialogResult = true;
-            Close();
+            if (_product.CategoryId <= 0)
+            {
+                MessageBox.Show("Select a category", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            try
+            {
+                await _svc.CreateOrUpdateProductAsync(_product);
+                DialogResult = true;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Unable to save product", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         };
         btnRow.Children.Add(saveBtn);
         panel.Children.Add(btnRow);
@@ -218,6 +277,28 @@ public class ProductEditDialog : Window
         var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Content = scroll;
     }
+
+    private static Product CopyProduct(Product source) => new()
+    {
+        Id = source.Id,
+        Name = source.Name,
+        Description = source.Description,
+        Sku = source.Sku,
+        Barcode = source.Barcode,
+        CategoryId = source.CategoryId,
+        Price = source.Price,
+        CostPrice = source.CostPrice,
+        TaxRate = source.TaxRate,
+        Unit = source.Unit,
+        StockQuantity = source.StockQuantity,
+        LowStockThreshold = source.LowStockThreshold,
+        ImagePath = source.ImagePath,
+        IsWeighted = source.IsWeighted,
+        IsActive = source.IsActive,
+        AllowDiscount = source.AllowDiscount,
+        CreatedAt = source.CreatedAt,
+        UpdatedAt = source.UpdatedAt
+    };
 
     private static System.Windows.Controls.Border MakeRow(string label, Func<FrameworkElement> makeControl)
     {

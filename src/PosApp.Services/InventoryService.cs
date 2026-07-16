@@ -33,7 +33,7 @@ public class InventoryService : IInventoryService
         return await _db.Products.AsNoTracking()
             .Include(p => p.Category)
             .FirstOrDefaultAsync(p =>
-                p.Sku == term || p.Barcode == term);
+                p.IsActive && (p.Sku == term || p.Barcode == term));
     }
 
     public async Task<Product> CreateOrUpdateProductAsync(Product product)
@@ -46,7 +46,9 @@ public class InventoryService : IInventoryService
             {
                 _db.StockTransactions.Add(new StockTransaction
                 {
-                    ProductId = product.Id,
+                    // The database generates the product key. Using the navigation
+                    // property lets EF propagate that key to the stock transaction.
+                    Product = product,
                     Type = StockTransactionType.InitialStock,
                     Quantity = product.StockQuantity.Value,
                     BalanceAfter = product.StockQuantity.Value,
@@ -101,11 +103,18 @@ public class InventoryService : IInventoryService
 
     public async Task<IReadOnlyList<Product>> GetLowStockProductsAsync()
     {
-        return await _db.Products.AsNoTracking()
-            .Where(p => p.IsActive && p.StockQuantity.HasValue && p.LowStockThreshold.HasValue
+        // EF Core's SQLite provider cannot ORDER BY decimal values. Load the
+        // active inventory first, then compare and order decimals in memory.
+        var products = await _db.Products.AsNoTracking()
+            .Where(p => p.IsActive)
+            .ToListAsync();
+
+        return products
+            .Where(p => p.StockQuantity.HasValue && p.LowStockThreshold.HasValue
                         && p.StockQuantity.Value <= p.LowStockThreshold.Value)
             .OrderBy(p => p.StockQuantity)
-            .ToListAsync();
+            .ThenBy(p => p.Name)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<Category>> ListCategoriesAsync()

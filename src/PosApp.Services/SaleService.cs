@@ -32,25 +32,45 @@ public class SaleService : ISaleService
 
     public async Task<Sale> SuspendAsync(SaleDraft draft)
     {
-        var receiptNo = await GenerateReceiptNumberAsync();
-        var sale = new Sale
+        Sale? sale = null;
+        if (draft.SuspendedSaleId.HasValue)
         {
-            ReceiptNumber = receiptNo,
-            CustomerId = draft.CustomerId,
-            UserId = draft.UserId,
-            Status = SaleStatus.Suspended,
-            SaleDate = DateTime.UtcNow,
-            Subtotal = draft.Subtotal,
-            DiscountTotal = draft.DiscountTotal,
-            TaxTotal = draft.TaxTotal,
-            Note = draft.Note
-        };
+            sale = await _db.Sales
+                .Include(s => s.Items)
+                .FirstOrDefaultAsync(s => s.Id == draft.SuspendedSaleId.Value
+                                          && s.Status == SaleStatus.Suspended);
+        }
+
+        if (sale == null)
+        {
+            sale = new Sale
+            {
+                ReceiptNumber = await GenerateReceiptNumberAsync(),
+                Status = SaleStatus.Suspended
+            };
+            _db.Sales.Add(sale);
+        }
+        else
+        {
+            // Re-suspending a recalled sale updates the original draft instead
+            // of creating duplicate suspended records.
+            _db.SaleItems.RemoveRange(sale.Items.ToList());
+            sale.Items.Clear();
+            sale.UpdatedAt = DateTime.UtcNow;
+        }
+
+        sale.CustomerId = draft.CustomerId;
+        sale.UserId = draft.UserId;
+        sale.SaleDate = DateTime.UtcNow;
+        sale.Subtotal = draft.Subtotal;
+        sale.DiscountTotal = draft.DiscountTotal;
+        sale.TaxTotal = draft.TaxTotal;
+        sale.Note = draft.Note;
 
         foreach (var line in draft.Lines)
         {
             sale.Items.Add(BuildSaleItem(line, sale));
         }
-        _db.Sales.Add(sale);
         await _db.SaveChangesAsync();
         return sale;
     }
@@ -68,6 +88,7 @@ public class SaleService : ISaleService
     {
         return await _db.Sales.AsNoTracking()
             .Include(s => s.Items)
+            .Include(s => s.Customer)
             .Where(s => s.Status == SaleStatus.Suspended)
             .OrderByDescending(s => s.SaleDate)
             .ToListAsync();
@@ -77,81 +98,125 @@ public class SaleService : ISaleService
     {
         if (draft.Lines.Count == 0)
             throw new InvalidOperationException("Cannot checkout an empty cart");
+        if (draft.Payments.Count == 0)
+            throw new InvalidOperationException("A payment is required to complete the sale");
 
-        var receiptNo = draft.SuspendedSaleId.HasValue
-            ? (await _db.Sales.FindAsync(draft.SuspendedSaleId.Value))?.ReceiptNumber ?? await GenerateReceiptNumberAsync()
-            : await GenerateReceiptNumberAsync();
+        var appliedPayment = draft.Payments.Sum(p => p.Amount);
+        if (appliedPayment < draft.Total)
+            throw new InvalidOperationException("The payment does not cover the sale total");
 
-        if (draft.SuspendedSaleId.HasValue)
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        try
         {
-            // Delete the suspended shadow record; we replace it with the completed sale.
-            var suspended = await _db.Sales
-                .Include(s => s.Items)
-                .FirstOrDefaultAsync(s => s.Id == draft.SuspendedSaleId.Value);
-            if (suspended != null)
+            var receiptNo = draft.SuspendedSaleId.HasValue
+                ? (await _db.Sales.FindAsync(draft.SuspendedSaleId.Value))?.ReceiptNumber ?? await GenerateReceiptNumberAsync()
+                : await GenerateReceiptNumberAsync();
+
+            if (draft.SuspendedSaleId.HasValue)
             {
-                _db.SaleItems.RemoveRange(suspended.Items);
-                _db.Sales.Remove(suspended);
-            }
-        }
-
-        var sale = new Sale
-        {
-            ReceiptNumber = receiptNo,
-            CustomerId = draft.CustomerId,
-            UserId = draft.UserId,
-            Status = SaleStatus.Completed,
-            SaleDate = DateTime.UtcNow,
-            Subtotal = draft.Subtotal,
-            DiscountTotal = draft.DiscountTotal,
-            TaxTotal = draft.TaxTotal,
-            AmountPaid = draft.Lines.Sum(l => l.UnitPrice * l.Quantity) // overwritten by caller with payments
-        };
-
-        foreach (var line in draft.Lines)
-        {
-            var item = BuildSaleItem(line, sale);
-            sale.Items.Add(item);
-
-            // Decrement stock
-            if (line.Quantity > 0)
-            {
-                var product = await _db.Products.FindAsync(line.ProductId);
-                if (product != null && product.StockQuantity.HasValue)
+                // Delete the suspended shadow record; we replace it with the completed sale.
+                var suspended = await _db.Sales
+                    .Include(s => s.Items)
+                    .FirstOrDefaultAsync(s => s.Id == draft.SuspendedSaleId.Value);
+                if (suspended != null)
                 {
-                    var balance = product.StockQuantity.Value - line.Quantity;
-                    if (balance < 0)
-                        throw new InvalidOperationException($"Insufficient stock for {line.ProductName}");
-                    product.StockQuantity = balance;
-                    product.UpdatedAt = DateTime.UtcNow;
-                    _db.StockTransactions.Add(new StockTransaction
-                    {
-                        ProductId = product.Id,
-                        Type = StockTransactionType.Sale,
-                        Quantity = -line.Quantity,
-                        BalanceAfter = balance,
-                        SaleId = sale.Id,
-                        SaleItemId = item.Id,
-                        Note = $"Sale {receiptNo}"
-                    });
+                    _db.SaleItems.RemoveRange(suspended.Items);
+                    _db.Sales.Remove(suspended);
                 }
             }
-        }
 
-        // Loyalty points accrual
-        if (draft.CustomerId.HasValue)
-        {
-            var customer = await _db.Customers.FindAsync(draft.CustomerId.Value);
-            if (customer != null && customer.LoyaltyRate > 0)
+            var sale = new Sale
             {
-                customer.LoyaltyPoints += draft.Subtotal * customer.LoyaltyRate / 100m;
-                customer.UpdatedAt = DateTime.UtcNow;
-            }
-        }
+                ReceiptNumber = receiptNo,
+                CustomerId = draft.CustomerId,
+                UserId = draft.UserId,
+                Status = SaleStatus.Completed,
+                SaleDate = DateTime.UtcNow,
+                Subtotal = draft.Subtotal,
+                DiscountTotal = draft.DiscountTotal,
+                TaxTotal = draft.TaxTotal,
+                AmountPaid = draft.AmountTendered > 0m ? draft.AmountTendered : appliedPayment,
+                Change = Math.Max(0m, (draft.AmountTendered > 0m ? draft.AmountTendered : appliedPayment) - draft.Total),
+                Note = draft.Note
+            };
 
-        _db.Sales.Add(sale);
-        await _db.SaveChangesAsync();
-        return sale;
+            foreach (var payment in draft.Payments)
+            {
+                sale.Payments.Add(new SalePayment
+                {
+                    Sale = sale,
+                    Method = payment.Method,
+                    Amount = payment.Amount,
+                    Reference = payment.Reference
+                });
+            }
+
+            var stockLinks = new List<(StockTransaction Transaction, SaleItem Item)>();
+
+            foreach (var line in draft.Lines)
+            {
+                var item = BuildSaleItem(line, sale);
+                sale.Items.Add(item);
+
+                // Decrement stock
+                if (line.Quantity > 0)
+                {
+                    var product = await _db.Products.FindAsync(line.ProductId);
+                    if (product != null && product.StockQuantity.HasValue)
+                    {
+                        var balance = product.StockQuantity.Value - line.Quantity;
+                        if (balance < 0)
+                            throw new InvalidOperationException($"Insufficient stock for {line.ProductName}");
+                        product.StockQuantity = balance;
+                        product.UpdatedAt = DateTime.UtcNow;
+                        var stockTransaction = new StockTransaction
+                        {
+                            ProductId = product.Id,
+                            Type = StockTransactionType.Sale,
+                            Quantity = -line.Quantity,
+                            BalanceAfter = balance,
+                            Note = $"Sale {receiptNo}"
+                        };
+                        _db.StockTransactions.Add(stockTransaction);
+                        stockLinks.Add((stockTransaction, item));
+                    }
+                }
+            }
+
+            // Loyalty points accrual
+            if (draft.CustomerId.HasValue)
+            {
+                var customer = await _db.Customers.FindAsync(draft.CustomerId.Value);
+                if (customer != null && customer.LoyaltyRate > 0)
+                {
+                    customer.LoyaltyPoints += draft.Subtotal * customer.LoyaltyRate / 100m;
+                    customer.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            _db.Sales.Add(sale);
+            await _db.SaveChangesAsync();
+
+            // Sale/line IDs are database-generated and these ledger references
+            // are not modeled as EF navigation properties. Link them after the
+            // first save, inside the same database transaction.
+            foreach (var link in stockLinks)
+            {
+                link.Transaction.SaleId = sale.Id;
+                link.Transaction.SaleItemId = link.Item.Id;
+            }
+            if (stockLinks.Count > 0)
+                await _db.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+            return sale;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            _db.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     private static SaleItem BuildSaleItem(SaleDraftLine line, Sale sale)

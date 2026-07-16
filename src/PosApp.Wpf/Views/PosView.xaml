@@ -29,6 +29,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0" x:Name="SearchBox"
                          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         TextChanged="SearchBox_TextChanged"
                          KeyDown="SearchBox_KeyDown"
                          Padding="12,10" FontSize="15"/>
                 <TextBlock Grid.Column="0" Text="{DynamicResource POS_Search}"
@@ -74,7 +75,7 @@
                             <DataTemplate>
                                 <Button Style="{StaticResource ProductTile}" Click="Product_Click" Tag="{Binding}">
                                     <StackPanel Margin="8">
-                                        <Border Background="#F1F5F9" CornerRadius="6" Height="56" Margin="0,0,0,8">
+                                        <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="6" Height="56" Margin="0,0,0,8">
                                             <TextBlock Text="📦" FontSize="28" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Medium"
@@ -93,7 +94,7 @@
         </Grid>
 
         <!-- Right: cart + totals -->
-        <Border Grid.Column="1" Background="White" Margin="0,16,16,16" CornerRadius="8" Padding="16">
+        <Border Grid.Column="1" Background="{StaticResource CardBrush}" Margin="0,16,16,16" CornerRadius="8" Padding="16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -119,7 +120,7 @@
                 </Grid>
 
                 <!-- Customer selector -->
-                <Border Grid.Row="1" Background="#F1F5F9" CornerRadius="6" Padding="10" Margin="0,0,0,12"
+                <Border Grid.Row="1" Background="{StaticResource SurfaceMutedBrush}" CornerRadius="6" Padding="10" Margin="0,0,0,12"
                         MouseLeftButtonDown="Customer_Click">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -208,7 +209,7 @@
                         <TextBlock Grid.Column="0" Text="{DynamicResource POS_Tax}" Foreground="{StaticResource TextMutedBrush}"/>
                         <TextBlock Grid.Column="1" Text="{Binding TaxTotal, StringFormat='৳ {0:0.00}'}"/>
                     </Grid>
-                    <Border Background="#F1F5F9" CornerRadius="6" Padding="12" Margin="0,8,0,0">
+                    <Border Background="{StaticResource SurfaceMutedBrush}" CornerRadius="6" Padding="12" Margin="0,8,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>

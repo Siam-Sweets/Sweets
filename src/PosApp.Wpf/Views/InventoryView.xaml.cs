@@ -16,12 +16,23 @@ public partial class InventoryView : UserControl, IRefreshable
         InitializeComponent();
         _inventory = inventory;
         _db = db;
-        Loaded += async (_, _) => await LoadAsync();
     }
 
-    public void Refresh()
+    public async void Refresh()
     {
-        _ = LoadAsync();
+        IsEnabled = false;
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load inventory", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 
     private async Task LoadAsync()

@@ -74,19 +74,23 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,8,12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,12">
                             <TextBlock Text="{DynamicResource Set_Printer}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
                             <ComboBox x:Name="PrinterCombo" Padding="10,8"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="8,0,0,12">
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,12">
                             <TextBlock Text="{DynamicResource Set_DrawerPort}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
                             <TextBox x:Name="DrawerPortBox" Padding="10,8"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="0" Margin="0,0,8,12">
+                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,12">
                             <TextBlock Text="{DynamicResource Set_ScalePort}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
                             <TextBox x:Name="ScalePortBox" Padding="10,8"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="8,0,0,12" VerticalAlignment="Bottom">
+                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,12" VerticalAlignment="Center">
                             <CheckBox x:Name="AutoPrintCheckbox" Content="{DynamicResource Set_AutoPrint}" Margin="0,0,0,8"/>
                             <CheckBox x:Name="OpenDrawerCheckbox" Content="{DynamicResource Set_OpenDrawer}"/>
                         </StackPanel>
@@ -123,8 +127,8 @@
                         <StackPanel Grid.Column="1" Margin="8,0,0,0">
                             <TextBlock Text="{DynamicResource Set_Theme}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
                             <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="ThemeLight" Content="{DynamicResource Set_Light}" Margin="0,0,16,0"/>
-                                <RadioButton x:Name="ThemeDark" Content="{DynamicResource Set_Dark}"/>
+                                <RadioButton x:Name="ThemeLight" Content="{DynamicResource Set_Light}" Margin="0,0,16,0" Checked="Theme_Checked"/>
+                                <RadioButton x:Name="ThemeDark" Content="{DynamicResource Set_Dark}" Checked="Theme_Checked"/>
                             </StackPanel>
                         </StackPanel>
                     </Grid>

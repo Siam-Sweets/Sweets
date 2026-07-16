@@ -7,7 +7,9 @@ namespace PosApp.Wpf.Views;
 public partial class ReportsView : UserControl, IRefreshable
 {
     private readonly IReportService _reports;
+    private readonly SemaphoreSlim _loadGate = new(1, 1);
     private string _activePeriod = "today";
+    private int _loadVersion;
 
     public ReportsView(IReportService reports)
     {
@@ -15,33 +17,47 @@ public partial class ReportsView : UserControl, IRefreshable
         _reports = reports;
         FromDate.SelectedDate = DateTime.Today.AddDays(-30);
         ToDate.SelectedDate = DateTime.Today.AddDays(1);
-        Loaded += async (_, _) => await LoadAsync();
     }
 
     public async void Refresh()
     {
-        await LoadAsync();
+        IsEnabled = false;
+        try { await LoadAsync(); }
+        finally { IsEnabled = true; }
     }
 
     private async Task LoadAsync()
     {
+        var version = ++_loadVersion;
         var (from, to) = GetRange();
-        var range = await _reports.GetRangeReportAsync(from, to);
-        KpiGross.Text = $"৳ {range.GrossSales:0.00}";
-        KpiProfit.Text = $"৳ {range.GrossProfit:0.00}";
-        KpiTax.Text = $"৳ {range.TaxTotal:0.00}";
-        KpiTxn.Text = range.TransactionCount.ToString();
+        await _loadGate.WaitAsync();
+        try
+        {
+            if (version != _loadVersion) return;
 
-        DailyTrendGrid.ItemsSource = range.Daily;
+            var range = await _reports.GetRangeReportAsync(from, to);
+            var top = await _reports.GetTopProductsAsync(from, to, 20);
+            var cats = await _reports.GetSalesByCategoryAsync(from, to);
+            var pay = await _reports.GetPaymentBreakdownAsync(from, to);
+            if (version != _loadVersion) return;
 
-        var top = await _reports.GetTopProductsAsync(from, to, 20);
-        TopProductsGrid.ItemsSource = top.ToList();
-
-        var cats = await _reports.GetSalesByCategoryAsync(from, to);
-        CategoryGrid.ItemsSource = cats.ToList();
-
-        var pay = await _reports.GetPaymentBreakdownAsync(from, to);
-        PaymentGrid.ItemsSource = pay.ToList();
+            KpiGross.Text = $"৳ {range.GrossSales:0.00}";
+            KpiProfit.Text = $"৳ {range.GrossProfit:0.00}";
+            KpiTax.Text = $"৳ {range.TaxTotal:0.00}";
+            KpiTxn.Text = range.TransactionCount.ToString();
+            DailyTrendGrid.ItemsSource = range.Daily;
+            TopProductsGrid.ItemsSource = top.ToList();
+            CategoryGrid.ItemsSource = cats.ToList();
+            PaymentGrid.ItemsSource = pay.ToList();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load reports", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _loadGate.Release();
+        }
     }
 
     private (DateTime from, DateTime to) GetRange()

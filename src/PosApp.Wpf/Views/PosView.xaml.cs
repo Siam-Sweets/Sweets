@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Microsoft.Extensions.DependencyInjection;
+using System.Windows.Threading;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
@@ -12,40 +12,79 @@ namespace PosApp.Wpf.Views;
 
 public partial class PosView : UserControl, IRefreshable
 {
+    private readonly DispatcherTimer _searchTimer;
+
     public PosView(IInventoryService inventory, ISaleService sales,
-        ICustomerService customers, IHardwareService hardware,
-        PaymentDialog paymentDialog)
+        ICustomerService customers, IHardwareService hardware)
     {
         InitializeComponent();
-        var vm = new PosViewModel(inventory, sales, customers, hardware, paymentDialog);
-        DataContext = vm;
-        Loaded += async (_, _) => await vm.LoadAsync();
-    }
-
-    public void Refresh()
-    {
-        if (DataContext is PosViewModel vm) vm.Refresh();
-    }
-
-    private void SearchBox_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && DataContext is PosViewModel vm)
+        _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        var vm = new PosViewModel(inventory, sales, customers, hardware);
+        _searchTimer.Tick += async (_, _) =>
         {
-            vm.SearchBySkuOrText();
+            _searchTimer.Stop();
+            try { await vm.FilterProductsAsync(); }
+            catch (Exception ex) { ShowError(ex, "Search failed"); }
+        };
+
+        DataContext = vm;
+    }
+
+    public async void Refresh()
+    {
+        if (DataContext is not PosViewModel vm) return;
+        IsEnabled = false;
+        try
+        {
+            await vm.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load POS", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
         }
     }
 
-    private void Search_Click(object sender, RoutedEventArgs e)
+    private async void SearchBox_KeyDown(object sender, KeyEventArgs e)
     {
-        if (DataContext is PosViewModel vm) vm.SearchBySkuOrText();
+        if (e.Key == Key.Enter && DataContext is PosViewModel vm)
+        {
+            _searchTimer.Stop();
+            try { await vm.SearchBySkuOrTextAsync(); }
+            catch (Exception ex) { ShowError(ex, "Search failed"); }
+            e.Handled = true;
+        }
     }
 
-    private void Category_Click(object sender, RoutedEventArgs e)
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (DataContext is not PosViewModel vm) return;
+        vm.SearchText = SearchBox.Text;
+        if (!IsLoaded) return;
+        _searchTimer.Stop();
+        _searchTimer.Start();
+    }
+
+    private async void Search_Click(object sender, RoutedEventArgs e)
+    {
+        _searchTimer.Stop();
+        if (DataContext is PosViewModel vm)
+        {
+            try { await vm.FilterProductsAsync(); }
+            catch (Exception ex) { ShowError(ex, "Search failed"); }
+        }
+    }
+
+    private async void Category_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && DataContext is PosViewModel vm)
         {
             var catId = (int)btn.Tag;
-            vm.FilterByCategory(catId);
+            try { await vm.FilterByCategoryAsync(catId); }
+            catch (Exception ex) { ShowError(ex, "Category filter failed"); }
         }
     }
 
@@ -85,9 +124,9 @@ public partial class PosView : UserControl, IRefreshable
         if (DataContext is PosViewModel vm) await vm.CheckoutAsync();
     }
 
-    private void Suspend_Click(object sender, RoutedEventArgs e)
+    private async void Suspend_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is PosViewModel vm) vm.Suspend();
+        if (DataContext is PosViewModel vm) await vm.SuspendAsync();
     }
 
     private async void Recall_Click(object sender, RoutedEventArgs e)
@@ -104,6 +143,9 @@ public partial class PosView : UserControl, IRefreshable
     {
         if (DataContext is PosViewModel vm) await vm.WeighLastAsync();
     }
+
+    private static void ShowError(Exception ex, string title)
+        => MessageBox.Show(ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Error);
 }
 
 public class PosViewModel : ViewModelBase
@@ -112,7 +154,9 @@ public class PosViewModel : ViewModelBase
     private readonly ISaleService _sales;
     private readonly ICustomerService _customers;
     private readonly IHardwareService _hardware;
-    private readonly PaymentDialog _paymentDialog;
+    private readonly SemaphoreSlim _productLoadGate = new(1, 1);
+    private int _productLoadVersion;
+    private int? _suspendedSaleId;
 
     public ObservableCollection<Product> Products { get; } = new();
     public ObservableCollection<Category> Categories { get; } = new();
@@ -137,14 +181,12 @@ public class PosViewModel : ViewModelBase
     public decimal Total => Subtotal - DiscountTotal + TaxTotal;
 
     public PosViewModel(IInventoryService inventory, ISaleService sales,
-        ICustomerService customers, IHardwareService hardware,
-        PaymentDialog paymentDialog)
+        ICustomerService customers, IHardwareService hardware)
     {
         _inventory = inventory;
         _sales = sales;
         _customers = customers;
         _hardware = hardware;
-        _paymentDialog = paymentDialog;
     }
 
     public async Task LoadAsync()
@@ -154,39 +196,70 @@ public class PosViewModel : ViewModelBase
         IsScaleConnected = await _hardware.IsScaleConnected();
     }
 
-    public void Refresh()
-    {
-        _ = LoadProductsAsync();
-    }
+    public Task RefreshAsync() => LoadAsync();
 
     private async Task LoadCategoriesAsync()
     {
-        var cats = await _inventory.ListCategoriesAsync();
-        Categories.Clear();
-        Categories.Add(new Category { Id = 0, Name = (string)System.Windows.Application.Current.TryFindResource("POS_All") as string ?? "All" });
-        foreach (var c in cats) Categories.Add(c);
+        await _productLoadGate.WaitAsync();
+        try
+        {
+            var cats = await _inventory.ListCategoriesAsync();
+            Categories.Clear();
+            Categories.Add(new Category { Id = 0, Name = (string)System.Windows.Application.Current.TryFindResource("POS_All") as string ?? "All" });
+            foreach (var c in cats) Categories.Add(c);
+        }
+        finally
+        {
+            _productLoadGate.Release();
+        }
     }
 
     private async Task LoadProductsAsync()
     {
-        var products = await _inventory.SearchProductsAsync(SearchText, _selectedCategoryId == 0 ? null : _selectedCategoryId);
-        Products.Clear();
-        foreach (var p in products) Products.Add(p);
+        var version = ++_productLoadVersion;
+        var searchText = SearchText;
+        var categoryId = _selectedCategoryId == 0 ? null : _selectedCategoryId;
+
+        await _productLoadGate.WaitAsync();
+        try
+        {
+            if (version != _productLoadVersion) return;
+            var products = await _inventory.SearchProductsAsync(searchText, categoryId);
+            if (version != _productLoadVersion) return;
+
+            Products.Clear();
+            foreach (var p in products) Products.Add(p);
+        }
+        finally
+        {
+            _productLoadGate.Release();
+        }
     }
 
-    public void FilterByCategory(int categoryId)
+    public async Task FilterByCategoryAsync(int categoryId)
     {
         _selectedCategoryId = categoryId;
-        _ = LoadProductsAsync();
+        await LoadProductsAsync();
     }
 
-    public async void SearchBySkuOrText()
+    public Task FilterProductsAsync() => LoadProductsAsync();
+
+    public async Task SearchBySkuOrTextAsync()
     {
         var term = SearchText?.Trim() ?? "";
         if (string.IsNullOrEmpty(term)) { await LoadProductsAsync(); return; }
 
         // Try exact SKU/barcode match first - this is the scanner case.
-        var p = await _inventory.GetProductBySkuAsync(term);
+        Product? p;
+        await _productLoadGate.WaitAsync();
+        try
+        {
+            p = await _inventory.GetProductBySkuAsync(term);
+        }
+        finally
+        {
+            _productLoadGate.Release();
+        }
         if (p != null)
         {
             await AddToCartAsync(p);
@@ -246,6 +319,7 @@ public class PosViewModel : ViewModelBase
     {
         CartLines.Clear();
         _selectedCustomer = null;
+        _suspendedSaleId = null;
         OnPropertyChanged(nameof(CustomerDisplay));
         RecalcTotals();
     }
@@ -289,41 +363,33 @@ public class PosViewModel : ViewModelBase
         if (App.CurrentUser == null) return;
 
         var draft = BuildDraft();
-        _paymentDialog.Configure(draft);
-        _paymentDialog.Owner = Application.Current.MainWindow;
-        if (_paymentDialog.ShowDialog() != true) return;
+        var paymentDialog = new PaymentDialog();
+        paymentDialog.Configure(draft);
+        var owner = Application.Current.Windows
+            .OfType<MainWindow>()
+            .FirstOrDefault(window => window.IsVisible);
+        if (owner != null) paymentDialog.Owner = owner;
+        if (paymentDialog.ShowDialog() != true) return;
+
+        draft.AmountTendered = paymentDialog.TenderedAmount;
+        draft.Payments = paymentDialog.Payments
+            .Select(payment => new SalePayment
+            {
+                Method = payment.Method,
+                Amount = payment.Amount,
+                Reference = payment.Reference
+            })
+            .ToList();
 
         try
         {
             var sale = await _sales.CheckoutAsync(draft);
-            // Attach payments captured by the dialog
-            foreach (var p in _paymentDialog.Payments)
-            {
-                p.SaleId = sale.Id;
-            }
-
-            // Persist payments via direct DB context (sale service lives in different scope)
-            using var scope = App.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<Data.AppDbContext>();
-            foreach (var p in _paymentDialog.Payments)
-            {
-                db.SalePayments.Add(new SalePayment
-                {
-                    SaleId = sale.Id,
-                    Method = p.Method,
-                    Amount = p.Amount,
-                    Reference = p.Reference
-                });
-            }
-            sale.AmountPaid = _paymentDialog.Payments.Sum(p => p.Amount);
-            sale.Change = Math.Max(0, sale.AmountPaid - sale.Total);
-            await db.SaveChangesAsync();
 
             // Hardware: print receipt + open drawer
             var store = App.StoreSettings;
             if (store.PrintReceiptAutomatically)
                 _ = await _hardware.PrintReceiptAsync(sale);
-            if (store.OpenDrawerOnCashSale && _paymentDialog.Payments.Any(p => p.Method == PaymentMethod.Cash))
+            if (store.OpenDrawerOnCashSale && paymentDialog.Payments.Any(p => p.Method == PaymentMethod.Cash))
                 _ = await _hardware.OpenCashDrawerAsync();
 
             ClearCart();
@@ -336,7 +402,7 @@ public class PosViewModel : ViewModelBase
         }
     }
 
-    public async void Suspend()
+    public async Task SuspendAsync()
     {
         if (CartLines.Count == 0 || App.CurrentUser == null) return;
         var draft = BuildDraft();
@@ -379,6 +445,7 @@ public class PosViewModel : ViewModelBase
                     DiscountReason = item.DiscountReason
                 });
             }
+            _suspendedSaleId = dlg.SelectedSale.Id;
             _selectedCustomer = dlg.SelectedSale.Customer;
             OnPropertyChanged(nameof(CustomerDisplay));
             RecalcTotals();
@@ -392,7 +459,7 @@ public class PosViewModel : ViewModelBase
             UserId = App.CurrentUser!.Id,
             CustomerId = _selectedCustomer?.Id,
             Lines = CartLines.ToList(),
-            SuspendedSaleId = null
+            SuspendedSaleId = _suspendedSaleId
         };
     }
 }
@@ -403,6 +470,9 @@ public class CustomerPickerDialog : Window
     private readonly ICustomerService _svc;
     private readonly ObservableCollection<Customer> _list = new();
     private readonly TextBox _search;
+    private readonly DispatcherTimer _searchTimer;
+    private readonly SemaphoreSlim _reloadGate = new(1, 1);
+    private int _reloadVersion;
 
     public CustomerPickerDialog(ICustomerService svc)
     {
@@ -417,11 +487,27 @@ public class CustomerPickerDialog : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
+        _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _searchTimer.Tick += async (_, _) =>
+        {
+            _searchTimer.Stop();
+            await Reload();
+        };
+
         _search = new TextBox { Margin = new Thickness(0, 0, 0, 8), Padding = new Thickness(10, 8, 10, 8) };
-        _search.TextChanged += async (_, _) => await Reload();
+        _search.TextChanged += (_, _) =>
+        {
+            _searchTimer.Stop();
+            _searchTimer.Start();
+        };
         grid.Children.Add(_search); Grid.SetRow(_search, 0);
 
-        var list = new ListBox { ItemsSource = _list, Background = System.Windows.Media.Brushes.White };
+        var list = new ListBox
+        {
+            ItemsSource = _list,
+            Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("CardBrush"),
+            Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextDarkBrush")
+        };
         list.DisplayMemberPath = "Name";
         grid.Children.Add(list); Grid.SetRow(list, 1);
         list.SelectionChanged += (_, _) =>
@@ -446,10 +532,25 @@ public class CustomerPickerDialog : Window
 
     private async Task Reload()
     {
+        var version = ++_reloadVersion;
         var term = _search.Text?.Trim();
-        var items = await _svc.SearchCustomersAsync(term);
-        _list.Clear();
-        foreach (var c in items) _list.Add(c);
+        await _reloadGate.WaitAsync();
+        try
+        {
+            if (version != _reloadVersion) return;
+            var items = await _svc.SearchCustomersAsync(term);
+            if (version != _reloadVersion) return;
+            _list.Clear();
+            foreach (var c in items) _list.Add(c);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Customer search failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _reloadGate.Release();
+        }
     }
 }
 
@@ -471,7 +572,12 @@ public class SuspendedSalesDialog : Window
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        var list = new ListBox { ItemsSource = _list, Background = System.Windows.Media.Brushes.White };
+        var list = new ListBox
+        {
+            ItemsSource = _list,
+            Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("CardBrush"),
+            Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextDarkBrush")
+        };
         list.DisplayMemberPath = "ReceiptNumber";
         grid.Children.Add(list); Grid.SetRow(list, 0);
         list.SelectionChanged += (_, _) =>

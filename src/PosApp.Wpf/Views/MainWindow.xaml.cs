@@ -78,7 +78,8 @@ public partial class MainWindow : Window
             _ => null
         };
         if (view == null) return;
-        ContentArea.Content = view;
+        var contentChanged = !ReferenceEquals(ContentArea.Content, view);
+        if (contentChanged) ContentArea.Content = view;
 
         // Update active button
         Button? newActive = tag switch
@@ -102,7 +103,7 @@ public partial class MainWindow : Window
         }
 
         // Refresh data on navigation
-        if (view is IRefreshable r) r.Refresh();
+        if (contentChanged && view.IsEnabled && view is IRefreshable r) r.Refresh();
     }
 
     private void Logout_Click(object sender, RoutedEventArgs e)
@@ -111,8 +112,9 @@ public partial class MainWindow : Window
         var login = App.Services.GetService(typeof(LoginView)) as LoginView;
         if (login != null)
         {
+            Application.Current.MainWindow = login;
             login.Show();
-            this.Hide();
+            Close();
         }
     }
 }

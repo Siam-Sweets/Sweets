@@ -14,12 +14,23 @@ public partial class CustomersView : UserControl, IRefreshable
     {
         InitializeComponent();
         _customers = customers;
-        Loaded += async (_, _) => await LoadAsync();
     }
 
     public async void Refresh()
     {
-        await LoadAsync();
+        IsEnabled = false;
+        try
+        {
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to load customers", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 
     private async Task LoadAsync()
@@ -30,12 +41,13 @@ public partial class CustomersView : UserControl, IRefreshable
 
     private void Search_TextChanged(object sender, TextChangedEventArgs e)
     {
-        var term = SearchBox.Text?.Trim().ToLower() ?? "";
+        if (CustomersGrid == null) return;
+        var term = SearchBox.Text?.Trim() ?? "";
         var filtered = _all.Where(c =>
             string.IsNullOrEmpty(term) ||
-            (c.Name?.ToLower().Contains(term) ?? false) ||
-            (c.Phone?.ToLower().Contains(term) ?? false) ||
-            (c.Email?.ToLower().Contains(term) ?? false)).ToList();
+            c.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+            (c.Phone?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (c.Email?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
         CustomersGrid.ItemsSource = filtered;
     }
 
@@ -153,9 +165,16 @@ public class CustomerEditDialog : Window
                 if (decimal.TryParse(pointsBox.Text, out var pts)) _c.LoyaltyPoints = pts;
                 if (decimal.TryParse(creditBox.Text, out var cr)) _c.StoreCredit = cr;
             }
-            await _svc.CreateOrUpdateCustomerAsync(_c);
-            DialogResult = true;
-            Close();
+            try
+            {
+                await _svc.CreateOrUpdateCustomerAsync(_c);
+                DialogResult = true;
+                Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Unable to save customer", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         };
         btnRow.Children.Add(saveBtn);
         panel.Children.Add(btnRow);
