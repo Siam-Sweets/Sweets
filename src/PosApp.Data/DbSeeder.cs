@@ -12,7 +12,11 @@ public static class DbSeeder
 {
     public static async Task SeedAsync(AppDbContext db)
     {
-        await db.Database.MigrateAsync();
+        // Use EnsureCreatedAsync for the local single-DB scenario.
+        // It creates all tables from the current model in one shot
+        // without needing EF Core migration files (which we don't ship).
+        // On subsequent runs it's a no-op if the DB schema is already current.
+        await db.Database.EnsureCreatedAsync();
 
         if (!await db.Users.AnyAsync())
         {
