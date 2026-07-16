@@ -98,6 +98,14 @@ public interface ISettingsService
     Task SetStoreSettingsAsync(StoreSettings settings);
 }
 
+public interface IDiscountService
+{
+    Task<IReadOnlyList<Discount>> GetAllAsync();
+    Task<IReadOnlyList<Discount>> GetActiveAsync(DateTime? at = null);
+    Task<Discount> SaveAsync(Discount discount);
+    Task DeactivateAsync(int id);
+}
+
 public interface ISetupService
 {
     Task<bool> IsSetupCompleteAsync();

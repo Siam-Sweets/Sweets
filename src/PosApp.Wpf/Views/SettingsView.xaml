@@ -2,182 +2,223 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{DynamicResource BackgroundBrush}">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <Grid Margin="{StaticResource PagePadding}">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+    <UserControl.Resources>
+        <Style x:Key="SettingsTab" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="16,11"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBorder" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" CornerRadius="4">
+                            <ContentPresenter ContentSource="Header"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource PrimaryBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource SurfaceMutedBrush}"/></Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions><Condition Property="IsSelected" Value="True"/><Condition Property="IsMouseOver" Value="True"/></MultiTrigger.Conditions>
+                                <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource PrimaryDarkBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,16">
+    <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Border Grid.Row="0" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="24,18">
+            <StackPanel>
                 <TextBlock Text="{DynamicResource Set_Title}" Style="{StaticResource Heading1}"/>
-                <TextBlock Text="{DynamicResource Set_Subtitle}" Style="{StaticResource Muted}"/>
+                <TextBlock Text="{DynamicResource Set_NewSubtitle}" Style="{StaticResource Muted}" Margin="0,3,0,0"/>
             </StackPanel>
+        </Border>
 
-            <!-- Store info -->
-            <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,16">
-                <StackPanel>
-                    <TextBlock Text="{DynamicResource Set_Store}" Style="{StaticResource Heading3}" Margin="0,0,0,16"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
+        <TabControl x:Name="SettingsTabs" Grid.Row="1" TabStripPlacement="Left" Background="Transparent" BorderThickness="0" Padding="0">
+            <TabControl.Resources><Style TargetType="TabItem" BasedOn="{StaticResource SettingsTab}"/></TabControl.Resources>
 
-                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,12">
-                            <TextBlock Text="{DynamicResource Set_StoreName}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="StoreNameBox" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,12">
-                            <TextBlock Text="{DynamicResource Set_Phone}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="PhoneBox" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,12">
-                            <TextBlock Text="{DynamicResource Set_Email}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="EmailBox" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,12">
-                            <TextBlock Text="{DynamicResource Set_TaxId}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="TaxIdBox" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,0,12">
-                            <TextBlock Text="{DynamicResource Set_Address}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="AddressBox" Padding="10,8" AcceptsReturn="True" Height="60" TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,8,12">
-                            <TextBlock Text="{DynamicResource Set_Currency}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="CurrencyBox" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="3" Grid.Column="1" Margin="8,0,0,12">
-                            <TextBlock Text="{DynamicResource Set_Footer}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="FooterBox" Padding="10,8"/>
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Border>
+            <TabItem Header="{DynamicResource Set_General}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_ApplicationStyle}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                        <TextBlock Text="{DynamicResource Set_Language}" Style="{StaticResource Muted}" Margin="0,0,0,7"/>
+                                        <StackPanel Orientation="Horizontal"><RadioButton x:Name="LangEn" Content="{DynamicResource Set_English}" Margin="0,0,18,0" Checked="Lang_Checked"/><RadioButton x:Name="LangBn" Content="{DynamicResource Set_Bengali}" Checked="Lang_Checked"/></StackPanel>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                        <TextBlock Text="{DynamicResource Set_Theme}" Style="{StaticResource Muted}" Margin="0,0,0,7"/>
+                                        <StackPanel Orientation="Horizontal"><RadioButton x:Name="ThemeLight" Content="{DynamicResource Set_Light}" Margin="0,0,18,0" Checked="Theme_Checked"/><RadioButton x:Name="ThemeDark" Content="{DynamicResource Set_Dark}" Checked="Theme_Checked"/></StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,12,0"><TextBlock Text="{DynamicResource Set_UiScale}" Style="{StaticResource Muted}"/><ComboBox x:Name="UiScaleCombo" Margin="0,5,0,0" Padding="10,7"><ComboBoxItem Content="90%"/><ComboBoxItem Content="100%"/><ComboBoxItem Content="110%"/><ComboBoxItem Content="125%"/></ComboBox></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0"><TextBlock Text="{DynamicResource Set_MessageDuration}" Style="{StaticResource Muted}"/><TextBox x:Name="MessageDurationBox" Margin="0,5,0,0" Padding="10,7"/></StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
 
-            <!-- Hardware -->
-            <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,16">
-                <StackPanel>
-                    <TextBlock Text="{DynamicResource Set_Hardware}" Style="{StaticResource Heading3}" Margin="0,0,0,16"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,12">
-                            <TextBlock Text="{DynamicResource Set_Printer}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <ComboBox x:Name="PrinterCombo" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,0,12">
-                            <TextBlock Text="{DynamicResource Set_DrawerPort}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="DrawerPortBox" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,12">
-                            <TextBlock Text="{DynamicResource Set_ScalePort}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="ScalePortBox" Padding="10,8"/>
-                        </StackPanel>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,12" VerticalAlignment="Center">
-                            <CheckBox x:Name="AutoPrintCheckbox" Content="{DynamicResource Set_AutoPrint}" Margin="0,0,0,8"/>
-                            <CheckBox x:Name="OpenDrawerCheckbox" Content="{DynamicResource Set_OpenDrawer}"/>
-                        </StackPanel>
-                    </Grid>
-                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                        <Button Content="{DynamicResource Set_TestPrint}" Style="{StaticResource OutlineButton}"
-                                Click="TestPrint_Click" Padding="16,8" Margin="0,0,8,0"/>
-                        <Button Content="{DynamicResource Set_TestDrawer}" Style="{StaticResource OutlineButton}"
-                                Click="TestDrawer_Click" Padding="16,8"/>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_Store}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <StackPanel Margin="0,0,8,12"><TextBlock Text="{DynamicResource Set_StoreName}" Style="{StaticResource Muted}"/><TextBox x:Name="StoreNameBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,12"><TextBlock Text="{DynamicResource Set_Phone}" Style="{StaticResource Muted}"/><TextBox x:Name="PhoneBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="1" Margin="0,0,8,12"><TextBlock Text="{DynamicResource Set_Email}" Style="{StaticResource Muted}"/><TextBox x:Name="EmailBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,0,12"><TextBlock Text="{DynamicResource Set_TaxId}" Style="{StaticResource Muted}"/><TextBox x:Name="TaxIdBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2"><TextBlock Text="{DynamicResource Set_Address}" Style="{StaticResource Muted}"/><TextBox x:Name="AddressBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,12,0,0"><TextBlock Text="{DynamicResource Set_Currency}" Style="{StaticResource Muted}"/><TextBox x:Name="CurrencyBox" Width="180" HorizontalAlignment="Left" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="4" Margin="0,12,8,0"><TextBlock Text="{DynamicResource Set_Country}" Style="{StaticResource Muted}"/><TextBox x:Name="CountryBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="4" Grid.Column="1" Margin="8,12,0,0"><TextBlock Text="{DynamicResource Set_CurrencyCode}" Style="{StaticResource Muted}"/><TextBox x:Name="CurrencyCodeBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </StackPanel>
-            </Border>
+                </ScrollViewer>
+            </TabItem>
 
-            <!-- Data safety -->
-            <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,0,0,16">
-                <StackPanel>
-                    <TextBlock Text="{DynamicResource Set_DataSafety}" Style="{StaticResource Heading3}" Margin="0,0,0,6"/>
-                    <TextBlock Text="{DynamicResource Set_BackupDescription}"
-                               Style="{StaticResource Muted}" Margin="0,0,0,16"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                            <CheckBox x:Name="AutoBackupCheckbox" Content="{DynamicResource Set_AutoBackup}"
-                                      Margin="0,0,0,10"/>
-                            <StackPanel Orientation="Horizontal" Margin="20,0,0,10">
-                                <CheckBox x:Name="BackupStartupCheckbox" Content="{DynamicResource Set_OnStartup}" Margin="0,0,20,0"/>
-                                <CheckBox x:Name="BackupExitCheckbox" Content="{DynamicResource Set_OnExit}"/>
+            <TabItem Header="{DynamicResource Set_OrderPayment}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_OrderWorkflow}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,10,14"><TextBlock Text="{DynamicResource Set_DefaultService}" Style="{StaticResource Muted}"/><ComboBox x:Name="DefaultServiceCombo" Padding="10,7" Margin="0,5,0,0"><ComboBoxItem Content="Retail"/><ComboBoxItem Content="Takeaway"/><ComboBoxItem Content="Delivery"/><ComboBoxItem Content="Dine-in"/></ComboBox></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,14"><TextBlock Text="{DynamicResource Set_DefaultTax}" Style="{StaticResource Muted}"/><TextBox x:Name="DefaultTaxBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                </Grid>
+                                <CheckBox x:Name="RequireOpenRegisterCheckbox" Content="{DynamicResource Set_RequireRegister}" Margin="0,6"/>
+                                <CheckBox x:Name="ConfirmVoidCheckbox" Content="{DynamicResource Set_ConfirmVoid}" Margin="0,6"/>
+                                <CheckBox x:Name="ShowCashInCheckbox" Content="{DynamicResource Set_ShowCashStart}" Margin="0,6"/>
+                                <CheckBox x:Name="BusinessDayCheckbox" Content="{DynamicResource Set_SelectBusinessDay}" Margin="0,6"/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
-                                <TextBlock Text="{DynamicResource Set_KeepLatest}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox x:Name="BackupRetentionBox" Width="70" Padding="8,6"/>
-                                <TextBlock Text="{DynamicResource Set_AutomaticBackups}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_PaymentMethods}" Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Set_PaymentMethodsHelp}" Style="{StaticResource Muted}" Margin="0,5,0,14" TextWrapping="Wrap"/>
+                                <UniformGrid Columns="4">
+                                    <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="4" Padding="12" Margin="0,0,5,0"><TextBlock Text="{DynamicResource Pay_Cash}" HorizontalAlignment="Center" FontWeight="SemiBold"/></Border>
+                                    <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="4" Padding="12" Margin="5,0"><TextBlock Text="{DynamicResource Pay_Card}" HorizontalAlignment="Center" FontWeight="SemiBold"/></Border>
+                                    <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="4" Padding="12" Margin="5,0"><TextBlock Text="{DynamicResource Pay_Mobile}" HorizontalAlignment="Center" FontWeight="SemiBold"/></Border>
+                                    <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="4" Padding="12" Margin="5,0,0,0"><TextBlock Text="{DynamicResource Pay_Bank}" HorizontalAlignment="Center" FontWeight="SemiBold"/></Border>
+                                </UniformGrid>
                             </StackPanel>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                            <TextBlock Text="{DynamicResource Set_BackupFolder}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <TextBlock x:Name="BackupFolderText" TextWrapping="Wrap" Margin="0,0,0,12"/>
-                            <StackPanel Orientation="Horizontal">
-                                <Button Content="{DynamicResource Set_BackupNow}" Style="{StaticResource PrimaryButton}"
-                                        Click="BackupNow_Click" Padding="14,8" Margin="0,0,8,0"/>
-                                <Button Content="{DynamicResource Set_Restore}" Style="{StaticResource OutlineButton}"
-                                        Click="Restore_Click" Padding="14,8" Margin="0,0,8,0"/>
-                                <Button Content="{DynamicResource Set_OpenFolder}" Style="{StaticResource OutlineButton}"
-                                        Click="OpenBackupFolder_Click" Padding="14,8"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
-                </StackPanel>
-            </Border>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-            <!-- Language + theme -->
-            <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,0,0,16">
-                <StackPanel>
-                    <TextBlock Style="{StaticResource Heading3}" Margin="0,0,0,16">
-                        <Run Text="{DynamicResource Set_Language}"/>
-                        <Run Text=" &amp; "/>
-                        <Run Text="{DynamicResource Set_Theme}"/>
-                    </TextBlock>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                            <TextBlock Text="{DynamicResource Set_Language}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="LangEn" Content="{DynamicResource Set_English}" Margin="0,0,16,0" Checked="Lang_Checked"/>
-                                <RadioButton x:Name="LangBn" Content="{DynamicResource Set_Bengali}" Checked="Lang_Checked"/>
+            <TabItem Header="{DynamicResource Nav_Products}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_ProductSearchLayout}" Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Set_ProductSearchHelp}" Style="{StaticResource Muted}" Margin="0,4,0,16" TextWrapping="Wrap"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,10,12"><TextBlock Text="{DynamicResource Set_Rows}" Style="{StaticResource Muted}"/><TextBox x:Name="GridRowsBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="{DynamicResource Set_Columns}" Style="{StaticResource Muted}"/><TextBox x:Name="GridColumnsBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                </Grid>
+                                <CheckBox x:Name="VirtualKeyboardCheckbox" Content="{DynamicResource Set_VirtualKeyboard}"/>
                             </StackPanel>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                            <TextBlock Text="{DynamicResource Set_Theme}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="ThemeLight" Content="{DynamicResource Set_Light}" Margin="0,0,16,0" Checked="Theme_Checked"/>
-                                <RadioButton x:Name="ThemeDark" Content="{DynamicResource Set_Dark}" Checked="Theme_Checked"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
 
-                    <Button Content="{DynamicResource Set_Save}" Style="{StaticResource PrimaryButton}"
-                            Click="Save_Click" Padding="24,12" HorizontalAlignment="Right" Margin="0,16,0,0"/>
-                </StackPanel>
-            </Border>
-        </Grid>
-    </ScrollViewer>
+            <TabItem Header="{DynamicResource Set_Documents}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_Receipt}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="180"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,10,0"><TextBlock Text="{DynamicResource Set_Footer}" Style="{StaticResource Muted}"/><TextBox x:Name="FooterBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0"><TextBlock Text="{DynamicResource Set_ReceiptWidth}" Style="{StaticResource Muted}"/><TextBox x:Name="ReceiptWidthBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                </Grid>
+                                <CheckBox x:Name="AutoPrintCheckbox" Content="{DynamicResource Set_AutoPrint}" Margin="0,16,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource Set_WeighingScale}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_WeighingScale}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/><TextBlock Text="{DynamicResource Set_ScalePort}" Style="{StaticResource Muted}"/><TextBox x:Name="ScalePortBox" Padding="10,8" Margin="0,5,0,14"/><Button Content="{DynamicResource Set_TestScale}" Style="{StaticResource OutlineButton}" Padding="18,9" HorizontalAlignment="Left" Click="TestScale_Click"/></StackPanel></Border></StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource Set_CustomerDisplay}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_CustomerDisplay}" Style="{StaticResource Heading2}"/><TextBlock Text="{DynamicResource Set_CustomerDisplayHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource Set_EmailSection}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_EmailSection}" Style="{StaticResource Heading2}"/><TextBlock Text="{DynamicResource Set_OfflineEmail}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource Set_Print}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_Hardware}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,10,12"><TextBlock Text="{DynamicResource Set_Printer}" Style="{StaticResource Muted}"/><ComboBox x:Name="PrinterCombo" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="{DynamicResource Set_DrawerPort}" Style="{StaticResource Muted}"/><TextBox x:Name="DrawerPortBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                </Grid>
+                                <CheckBox x:Name="OpenDrawerCheckbox" Content="{DynamicResource Set_OpenDrawer}" Margin="0,4,0,14"/>
+                                <StackPanel Orientation="Horizontal"><Button Content="{DynamicResource Set_TestPrint}" Style="{StaticResource OutlineButton}" Click="TestPrint_Click" Padding="18,9" Margin="0,0,8,0"/><Button Content="{DynamicResource Set_TestDrawer}" Style="{StaticResource OutlineButton}" Click="TestDrawer_Click" Padding="18,9"/></StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource Set_Database}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_DataSafety}" Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Set_BackupDescription}" Style="{StaticResource Muted}" Margin="0,5,0,16" TextWrapping="Wrap"/>
+                                <CheckBox x:Name="AutoBackupCheckbox" Content="{DynamicResource Set_AutoBackup}" Margin="0,0,0,10"/>
+                                <StackPanel Orientation="Horizontal" Margin="20,0,0,10"><CheckBox x:Name="BackupStartupCheckbox" Content="{DynamicResource Set_OnStartup}" Margin="0,0,20,0"/><CheckBox x:Name="BackupExitCheckbox" Content="{DynamicResource Set_OnExit}"/></StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="20,0,0,14"><TextBlock Text="{DynamicResource Set_KeepLatest}" VerticalAlignment="Center" Margin="0,0,8,0"/><TextBox x:Name="BackupRetentionBox" Width="70" Padding="8,6"/><TextBlock Text="{DynamicResource Set_AutomaticBackups}" VerticalAlignment="Center" Margin="8,0,0,0"/></StackPanel>
+                                <TextBlock Text="{DynamicResource Set_BackupFolder}" Style="{StaticResource Muted}"/><TextBlock x:Name="BackupFolderText" TextWrapping="Wrap" Margin="0,4,0,14"/>
+                                <WrapPanel><Button Content="{DynamicResource Set_BackupNow}" Style="{StaticResource PrimaryButton}" Click="BackupNow_Click" Padding="15,9" Margin="0,0,8,8"/><Button Content="{DynamicResource Set_Restore}" Style="{StaticResource OutlineButton}" Click="Restore_Click" Padding="15,9" Margin="0,0,8,8"/><Button Content="{DynamicResource Set_OpenFolder}" Style="{StaticResource OutlineButton}" Click="OpenBackupFolder_Click" Padding="15,9" Margin="0,0,8,8"/></WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource Set_About}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><Image Source="/PosApp;component/Assets/PosAppLogo.png" Width="72" Height="72" HorizontalAlignment="Left"/><TextBlock Text="PosApp" FontSize="26" FontWeight="Bold" Margin="0,12,0,0"/><TextBlock Text="Version 1.3.0" Style="{StaticResource Muted}" Margin="0,4,0,0"/><TextBlock Text="{DynamicResource Set_OfflineAbout}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,14,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <Border Grid.Row="2" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="20,12">
+            <Button Content="{DynamicResource Set_Save}" Style="{StaticResource SuccessButton}" Click="Save_Click" Padding="28,11" HorizontalAlignment="Right"/>
+        </Border>
+    </Grid>
 </UserControl>

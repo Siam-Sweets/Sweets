@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using PosApp.Core.Entities;
 using PosApp.Localization;
 
@@ -8,7 +10,9 @@ namespace PosApp.Wpf.Views;
 public partial class MainWindow : Window
 {
     private readonly PosView _pos;
+    private readonly DashboardView _dashboard;
     private readonly ProductsView _products;
+    private readonly PromotionsView _promotions;
     private readonly InventoryView _inventory;
     private readonly CustomersView _customers;
     private readonly SalesView _sales;
@@ -18,15 +22,18 @@ public partial class MainWindow : Window
     private readonly PurchasesView _purchases;
     private readonly RegisterView _register;
     private Button? _activeNav;
+    private bool _fullScreen;
 
-    public MainWindow(PosView pos, ProductsView products, InventoryView inventory,
-        CustomersView customers, SalesView sales, ReportsView reports,
-        UsersView users, SettingsView settings, PurchasesView purchases,
-        RegisterView register)
+    public MainWindow(PosView pos, DashboardView dashboard, ProductsView products, PromotionsView promotions,
+        InventoryView inventory, CustomersView customers, SalesView sales,
+        ReportsView reports, UsersView users, SettingsView settings,
+        PurchasesView purchases, RegisterView register)
     {
         InitializeComponent();
         _pos = pos;
+        _dashboard = dashboard;
         _products = products;
+        _promotions = promotions;
         _inventory = inventory;
         _customers = customers;
         _sales = sales;
@@ -41,42 +48,60 @@ public partial class MainWindow : Window
     {
         UserName.Text = user.FullName;
         UserRoleLabel.Text = user.Role.ToString();
-        UserInitials.Text = string.IsNullOrEmpty(user.FullName) ? "?" : user.FullName[..1].ToUpper();
+        UserInitials.Text = string.IsNullOrWhiteSpace(user.FullName) ? "?" : user.FullName[..1].ToUpperInvariant();
+        DrawerTitle.Text = $"POS – {user.FullName}";
+        DrawerDate.Text = DateTime.Now.ToString("D");
+        ApplyUiScale(App.StoreSettings.UiScalePercent);
 
-        // Role-based access: Cashier sees POS/Register/Sales; Manager adds catalog,
-        // inventory, purchases, customers and reports; Admin sees all.
-        NavProducts.Visibility = user.Role >= UserRole.Manager ? Visibility.Visible : Visibility.Collapsed;
-        NavInventory.Visibility = user.Role >= UserRole.Manager ? Visibility.Visible : Visibility.Collapsed;
-        NavPurchases.Visibility = user.Role >= UserRole.Manager ? Visibility.Visible : Visibility.Collapsed;
-        NavCustomers.Visibility = user.Role >= UserRole.Manager ? Visibility.Visible : Visibility.Collapsed;
-        NavReports.Visibility = user.Role >= UserRole.Manager ? Visibility.Visible : Visibility.Collapsed;
-        NavUsers.Visibility = user.Role >= UserRole.Admin ? Visibility.Visible : Visibility.Collapsed;
-        NavSettings.Visibility = user.Role >= UserRole.Admin ? Visibility.Visible : Visibility.Collapsed;
+        var manager = user.Role >= UserRole.Manager;
+        var admin = user.Role >= UserRole.Admin;
+        NavDashboard.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavProducts.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavPriceLists.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavInventory.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavPurchases.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavCustomers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavPromotions.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavUsers.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        NavPaymentTypes.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        NavCountries.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        NavTaxes.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        NavCompany.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        NavSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        DrawerManagement.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        DrawerReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        DrawerSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
 
-        NavigateTo("pos");
+        NavigateTo(App.StoreSettings.ShowCashInOnStartup || App.StoreSettings.SelectBusinessDayOnStartup
+            ? "register" : "pos");
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        // Re-apply language on every UI thread start.
         LocalizationManager.Instance.CultureChanged += (_, _) => { };
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is string tag)
-        {
-            NavigateTo(tag);
-        }
+        if (sender is Button { Tag: string tag }) NavigateTo(tag);
     }
 
     public void NavigateTo(string tag)
     {
-        UserControl? view = tag switch
+        string? settingsSection = null;
+        if (tag.StartsWith("settings:", StringComparison.OrdinalIgnoreCase))
         {
-            "pos" => _pos,
+            settingsSection = tag[(tag.IndexOf(':') + 1)..];
+            tag = "settings";
+        }
+        var view = tag switch
+        {
+            "pos" => (UserControl)_pos,
+            "dashboard" => _dashboard,
             "register" => _register,
             "products" => _products,
+            "promotions" => _promotions,
             "inventory" => _inventory,
             "purchases" => _purchases,
             "customers" => _customers,
@@ -87,15 +112,19 @@ public partial class MainWindow : Window
             _ => null
         };
         if (view == null) return;
+
         var contentChanged = !ReferenceEquals(ContentArea.Content, view);
         if (contentChanged) ContentArea.Content = view;
+        if (settingsSection != null) _settings.SelectSection(settingsSection);
+        SidebarColumn.Width = tag == "pos" ? new GridLength(0) : new GridLength(244);
+        CloseManagementDrawer();
 
-        // Update active button
-        Button? newActive = tag switch
+        var newActive = tag switch
         {
-            "pos" => NavPos,
+            "dashboard" => NavDashboard,
             "register" => NavRegister,
             "products" => NavProducts,
+            "promotions" => NavPromotions,
             "inventory" => NavInventory,
             "purchases" => NavPurchases,
             "customers" => NavCustomers,
@@ -105,32 +134,97 @@ public partial class MainWindow : Window
             "settings" => NavSettings,
             _ => null
         };
-
         if (_activeNav != null) _activeNav.Style = (Style)FindResource("NavButton");
         if (newActive != null)
         {
             newActive.Style = (Style)FindResource("NavButtonActive");
             _activeNav = newActive;
         }
+        else
+        {
+            _activeNav = null;
+        }
 
-        // Refresh data on navigation
-        if (contentChanged && view.IsEnabled && view is IRefreshable r) r.Refresh();
+        if (contentChanged && view.IsEnabled && view is IRefreshable refreshable)
+            refreshable.Refresh();
     }
 
-    private void Logout_Click(object sender, RoutedEventArgs e)
+    public void ToggleManagementDrawer()
+    {
+        DrawerDate.Text = DateTime.Now.ToString("D");
+        ManagementOverlay.Visibility = ManagementOverlay.Visibility == Visibility.Visible
+            ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public void CloseManagementDrawer() => ManagementOverlay.Visibility = Visibility.Collapsed;
+
+    public void ApplyUiScale(int percent)
+    {
+        var scale = Math.Clamp(percent, 90, 125) / 100d;
+        RootGrid.LayoutTransform = new ScaleTransform(scale, scale);
+    }
+
+    private void CloseManagementDrawer_Click(object sender, RoutedEventArgs e) => CloseManagementDrawer();
+    private void DrawerBackground_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => CloseManagementDrawer();
+
+    private void ManagementAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string tag }) NavigateTo(tag);
+    }
+
+    private async void OpenSales_Click(object sender, RoutedEventArgs e)
+    {
+        CloseManagementDrawer();
+        NavigateTo("pos");
+        if (_pos.DataContext is PosViewModel vm) await vm.ShowSuspendedAsync();
+    }
+
+    private void DrawerSettings_Click(object sender, RoutedEventArgs e) => NavigateTo("settings");
+
+    private void UserInfo_Click(object sender, RoutedEventArgs e)
+    {
+        var user = App.CurrentUser;
+        if (user == null) return;
+        MessageBox.Show($"{user.FullName}\nUsername: {user.Username}\nRole: {user.Role}\n\nThis terminal is working offline.",
+            "User Information", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void DrawerFullscreen_Click(object sender, RoutedEventArgs e)
+    {
+        _fullScreen = !_fullScreen;
+        if (_fullScreen)
+        {
+            WindowStyle = WindowStyle.None;
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            WindowState = WindowState.Maximized;
+        }
+        CloseManagementDrawer();
+    }
+
+    private void DrawerExit_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show("Exit PosApp?", "Exit", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            Close();
+    }
+
+    private void DrawerSignOut_Click(object sender, RoutedEventArgs e) => SignOut();
+    private void Logout_Click(object sender, RoutedEventArgs e) => SignOut();
+
+    public void SignOut()
     {
         App.CurrentUser = null;
         var login = App.Services.GetService(typeof(LoginView)) as LoginView;
-        if (login != null)
-        {
-            Application.Current.MainWindow = login;
-            login.Show();
-            Close();
-        }
+        if (login == null) return;
+        Application.Current.MainWindow = login;
+        login.Show();
+        Close();
     }
 }
 
-/// <summary>Marker interface for views that can refresh their data when navigated to.</summary>
 public interface IRefreshable
 {
     void Refresh();

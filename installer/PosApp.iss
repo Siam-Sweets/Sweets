@@ -1,5 +1,9 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.2.3"
+  #define MyAppVersion "1.3.0"
+#endif
+
+#ifndef MyAppNumericVersion
+  #define MyAppNumericVersion "1.3.0.0"
 #endif
 
 #ifndef MyAppSourceDir
@@ -45,7 +49,8 @@ RestartApplications=no
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} offline installer
 VersionInfoProductName={#MyAppName}
-VersionInfoProductVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppNumericVersion}
+VersionInfoProductVersion={#MyAppNumericVersion}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

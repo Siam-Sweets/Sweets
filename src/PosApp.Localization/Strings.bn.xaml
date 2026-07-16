@@ -204,6 +204,8 @@
     <sys:String x:Key="Set_Email">ইমেইল</sys:String>
     <sys:String x:Key="Set_TaxId">ট্যাক্স আইডি</sys:String>
     <sys:String x:Key="Set_Currency">মুদ্রা প্রতীক</sys:String>
+    <sys:String x:Key="Set_Country">দেশ</sys:String>
+    <sys:String x:Key="Set_CurrencyCode">মুদ্রা কোড</sys:String>
     <sys:String x:Key="Set_Footer">রসিদ ফুটার</sys:String>
     <sys:String x:Key="Set_Hardware">হার্ডওয়্যার</sys:String>
     <sys:String x:Key="Set_Printer">রসিদ প্রিন্টার</sys:String>
@@ -233,6 +235,118 @@
     <sys:String x:Key="Set_OpenFolder">ফোল্ডার খুলুন</sys:String>
     <sys:String x:Key="Set_Tax">ট্যাক্স হার</sys:String>
     <sys:String x:Key="Set_Discounts">ছাড়</sys:String>
+
+    <!-- রসিদ-কেন্দ্রিক পিওএস -->
+    <sys:String x:Key="POS_SearchReceipt">বারকোড স্ক্যান, কোড লিখুন বা পণ্য খুঁজুন…</sys:String>
+    <sys:String x:Key="POS_SearchButton">পণ্য খুঁজুন (F3)</sys:String>
+    <sys:String x:Key="POS_ProductName">পণ্যের নাম</sys:String>
+    <sys:String x:Key="POS_Quantity">পরিমাণ</sys:String>
+    <sys:String x:Key="POS_Price">মূল্য</sys:String>
+    <sys:String x:Key="POS_Amount">টাকার পরিমাণ</sys:String>
+    <sys:String x:Key="POS_NoItems">কোনো পণ্য নেই</sys:String>
+    <sys:String x:Key="POS_NoItemsHint">বারকোড স্ক্যান করুন বা F3 চেপে পণ্য খুঁজুন</sys:String>
+    <sys:String x:Key="POS_TaxDiscount">ট্যাক্স / ছাড়</sys:String>
+    <sys:String x:Key="POS_Receipt">বর্তমান রসিদ</sys:String>
+    <sys:String x:Key="POS_Menu">মেনু</sys:String>
+    <sys:String x:Key="POS_NewSale">নতুন বিক্রয়</sys:String>
+    <sys:String x:Key="POS_Check">চেক</sys:String>
+    <sys:String x:Key="POS_CashDrawer">ক্যাশ ড্রয়ার</sys:String>
+    <sys:String x:Key="POS_ServiceType">সেবার ধরন</sys:String>
+    <sys:String x:Key="POS_Comment">মন্তব্য</sys:String>
+    <sys:String x:Key="POS_Customer">গ্রাহক</sys:String>
+    <sys:String x:Key="POS_SaveSale">বিক্রয় রাখুন</sys:String>
+    <sys:String x:Key="POS_Lock">লক</sys:String>
+    <sys:String x:Key="POS_Transfer">খোলা বিক্রয়</sys:String>
+    <sys:String x:Key="POS_More">আরও</sys:String>
+    <sys:String x:Key="POS_VoidOrder">অর্ডার বাতিল</sys:String>
+    <sys:String x:Key="POS_FindProducts">পণ্য খুঁজুন</sys:String>
+    <sys:String x:Key="POS_FindProductsHint">নাম, এসকেইউ বা বারকোড লিখুন। ফলাফল নির্দিষ্ট আকারের টাচ-বান্ধব গ্রিডে থাকবে।</sys:String>
+
+    <!-- ব্যবস্থাপনা -->
+    <sys:String x:Key="Shell_BackToPOS">রসিদে ফিরুন</sys:String>
+    <sys:String x:Key="Shell_Management">ব্যবস্থাপনা</sys:String>
+    <sys:String x:Key="Shell_Dashboard">ড্যাশবোর্ড</sys:String>
+    <sys:String x:Key="Shell_Documents">ডকুমেন্ট ও বিক্রয়</sys:String>
+    <sys:String x:Key="Shell_Stock">স্টক</sys:String>
+    <sys:String x:Key="Shell_PriceLists">মূল্য তালিকা</sys:String>
+    <sys:String x:Key="Shell_Promotions">প্রমোশন ও ছাড়</sys:String>
+    <sys:String x:Key="Shell_PaymentTypes">পেমেন্টের ধরন</sys:String>
+    <sys:String x:Key="Shell_Countries">দেশ ও মুদ্রা</sys:String>
+    <sys:String x:Key="Shell_TaxRates">ট্যাক্স হার</sys:String>
+    <sys:String x:Key="Shell_MyCompany">আমার প্রতিষ্ঠান</sys:String>
+    <sys:String x:Key="Shell_CustomersSuppliers">গ্রাহক ও সরবরাহকারী</sys:String>
+    <sys:String x:Key="Shell_Reporting">রিপোর্টিং</sys:String>
+    <sys:String x:Key="Shell_UsersSecurity">ব্যবহারকারী ও নিরাপত্তা</sys:String>
+    <sys:String x:Key="Shell_OfflineTerminal">অফলাইন টার্মিনাল</sys:String>
+    <sys:String x:Key="Shell_ViewSales">বিক্রয়ের ইতিহাস</sys:String>
+    <sys:String x:Key="Shell_OpenSales">খোলা / সংরক্ষিত বিক্রয়</sys:String>
+    <sys:String x:Key="Shell_CashInOut">ক্যাশ ইন / আউট</sys:String>
+    <sys:String x:Key="Shell_EndOfDay">রিপোর্ট ও দিনের সমাপ্তি</sys:String>
+    <sys:String x:Key="Shell_User">ব্যবহারকারী</sys:String>
+    <sys:String x:Key="Shell_UserInfo">ব্যবহারকারীর তথ্য</sys:String>
+    <sys:String x:Key="Shell_SignOut">সাইন আউট</sys:String>
+    <sys:String x:Key="Shell_FullScreen">পূর্ণ পর্দা</sys:String>
+    <sys:String x:Key="Shell_ExitApp">প্রস্থান</sys:String>
+
+    <!-- ব্যবস্থাপনা ড্যাশবোর্ড -->
+    <sys:String x:Key="Dash_Title">ব্যবস্থাপনা ড্যাশবোর্ড</sys:String>
+    <sys:String x:Key="Dash_Refresh">রিফ্রেশ</sys:String>
+    <sys:String x:Key="Dash_TotalSales">মাসিক বিক্রয়</sys:String>
+    <sys:String x:Key="Dash_Today">আজ</sys:String>
+    <sys:String x:Key="Dash_DailySales">দৈনিক বিক্রয়</sys:String>
+    <sys:String x:Key="Dash_Method">পদ্ধতি</sys:String>
+    <sys:String x:Key="Dash_Revenue">আয়</sys:String>
+    <sys:String x:Key="Dash_Hour">ঘণ্টা</sys:String>
+
+    <!-- প্রমোশন -->
+    <sys:String x:Key="Promo_Title">প্রমোশন ও ছাড়</sys:String>
+    <sys:String x:Key="Promo_Subtitle">রেজিস্টারের জন্য অফলাইন ছাড়ের নিয়ম ও ঐচ্ছিক প্রোমো কোড তৈরি করুন</sys:String>
+    <sys:String x:Key="Promo_Add">প্রমোশন যোগ</sys:String>
+    <sys:String x:Key="Promo_Edit">সম্পাদনা</sys:String>
+    <sys:String x:Key="Promo_Deactivate">নিষ্ক্রিয়</sys:String>
+    <sys:String x:Key="Promo_Name">নাম</sys:String>
+    <sys:String x:Key="Promo_Code">কোড</sys:String>
+    <sys:String x:Key="Promo_Type">ধরন</sys:String>
+    <sys:String x:Key="Promo_Value">মান</sys:String>
+    <sys:String x:Key="Promo_ValidFrom">শুরু</sys:String>
+    <sys:String x:Key="Promo_ValidTo">শেষ</sys:String>
+    <sys:String x:Key="Promo_Uses">ব্যবহার</sys:String>
+    <sys:String x:Key="Promo_Active">সক্রিয়</sys:String>
+
+    <!-- বিভাগভিত্তিক সেটিংস -->
+    <sys:String x:Key="Set_NewSubtitle">অ্যাপ, অর্ডার, হার্ডওয়্যার, রসিদ, ডেটাবেস, ভাষা ও চেহারার সেটিংস</sys:String>
+    <sys:String x:Key="Set_General">সাধারণ</sys:String>
+    <sys:String x:Key="Set_OrderPayment">অর্ডার ও পেমেন্ট</sys:String>
+    <sys:String x:Key="Set_ApplicationStyle">অ্যাপের চেহারা</sys:String>
+    <sys:String x:Key="Set_UiScale">ইন্টারফেস স্কেল</sys:String>
+    <sys:String x:Key="Set_MessageDuration">বার্তার সময়কাল (সেকেন্ড)</sys:String>
+    <sys:String x:Key="Set_OrderWorkflow">অর্ডার কার্যপ্রবাহ</sys:String>
+    <sys:String x:Key="Set_PaymentMethods">পেমেন্ট পদ্ধতি</sys:String>
+    <sys:String x:Key="Set_PaymentMethodsHelp">এই স্থানীয় পেমেন্ট ধরনগুলো সম্পূর্ণ ও ভাগ করা পেমেন্টে ব্যবহার করা যায়। কোনো বাইরের গেটওয়ে ব্যবহৃত হয় না।</sys:String>
+    <sys:String x:Key="Set_DefaultService">ডিফল্ট সেবার ধরন</sys:String>
+    <sys:String x:Key="Set_DefaultTax">ডিফল্ট ট্যাক্স হার (%)</sys:String>
+    <sys:String x:Key="Set_RequireRegister">বিক্রয়ের আগে রেজিস্টার খোলা আবশ্যক</sys:String>
+    <sys:String x:Key="Set_ConfirmVoid">বর্তমান অর্ডার বাতিলের আগে নিশ্চিত করুন</sys:String>
+    <sys:String x:Key="Set_ShowCashStart">অ্যাপ চালুর সময় ক্যাশ-ইন জিজ্ঞাসা করুন</sys:String>
+    <sys:String x:Key="Set_SelectBusinessDay">অ্যাপ চালুর সময় ব্যবসার দিন নির্বাচন করুন</sys:String>
+    <sys:String x:Key="Set_ProductSearchLayout">পণ্য অনুসন্ধান বিন্যাস</sys:String>
+    <sys:String x:Key="Set_ProductSearchHelp">নির্দিষ্ট আকারের কার্ড ব্যবহারে ফিল্টারের সময় রেজিস্টারের বিন্যাস নষ্ট হবে না।</sys:String>
+    <sys:String x:Key="Set_Rows">সারি</sys:String>
+    <sys:String x:Key="Set_Columns">কলাম</sys:String>
+    <sys:String x:Key="Set_VirtualKeyboard">টাচ কিবোর্ড সহায়তা চালু করুন</sys:String>
+    <sys:String x:Key="Set_Documents">ডকুমেন্ট</sys:String>
+    <sys:String x:Key="Set_Receipt">রসিদ</sys:String>
+    <sys:String x:Key="Set_ReceiptWidth">কাগজের প্রস্থ (মিমি)</sys:String>
+    <sys:String x:Key="Set_WeighingScale">ওজন মাপার স্কেল</sys:String>
+    <sys:String x:Key="Set_TestScale">স্কেল পরীক্ষা</sys:String>
+    <sys:String x:Key="Set_CustomerDisplay">গ্রাহক ডিসপ্লে</sys:String>
+    <sys:String x:Key="Set_CustomerDisplayHelp">স্থানীয়ভাবে সংযুক্ত দ্বিতীয় স্ক্রিনের জন্য গ্রাহক ডিসপ্লে প্রস্তুত। কোনো ক্লাউড সংযোগ ব্যবহৃত হয় না।</sys:String>
+    <sys:String x:Key="Set_EmailSection">ইমেইল</sys:String>
+    <sys:String x:Key="Set_OfflineEmail">পসঅ্যাপ অফলাইন থাকায় ইমেইল পাঠানো বন্ধ। রসিদ স্থানীয়ভাবে প্রিন্ট বা রপ্তানি করা যাবে।</sys:String>
+    <sys:String x:Key="Set_Print">প্রিন্ট</sys:String>
+    <sys:String x:Key="Set_Database">ডেটাবেস</sys:String>
+    <sys:String x:Key="Set_About">পরিচিতি</sys:String>
+    <sys:String x:Key="Set_OfflineAbout">স্থানীয় পয়েন্ট অফ সেল। বিক্রয়, ইনভেন্টরি, ব্যবহারকারী, রিপোর্ট, কনফিগারেশন ও ব্যাকআপ এই কম্পিউটারেই থাকে।</sys:String>
 
     <!-- Common -->
     <sys:String x:Key="Common_Save">সংরক্ষণ</sys:String>

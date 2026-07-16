@@ -109,8 +109,21 @@ jobs:
             $v = "0.0.0-dev.$($env:GITHUB_RUN_NUMBER)"
             $isRelease = 'false'
           }
-          Write-Host "Version: $v (release=$isRelease)"
+
+          # Windows version resources require exactly four numeric components.
+          # Keep the readable SemVer/dev label for AppVersion and filenames,
+          # while converting examples such as 0.0.0-dev.9 to 0.0.0.9.
+          $numericParts = @([regex]::Matches($v, '\d+') | ForEach-Object { [int64]$_.Value })
+          if ($numericParts.Count -eq 0) { $numericParts = @(0, 0, 0, [int64]$env:GITHUB_RUN_NUMBER) }
+          while ($numericParts.Count -lt 4) { $numericParts += 0 }
+          $numericParts = @($numericParts | Select-Object -First 4 | ForEach-Object {
+            [Math]::Min([int64]65535, $_)
+          })
+          $numericVersion = $numericParts -join '.'
+
+          Write-Host "Version: $v; Windows version: $numericVersion (release=$isRelease)"
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "numeric_version=$numericVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Locate or install Inno Setup
@@ -132,6 +145,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $output | Out-Null
           & $env:ISCC_PATH `
             "/DMyAppVersion=${{ steps.ver.outputs.version }}" `
+            "/DMyAppNumericVersion=${{ steps.ver.outputs.numeric_version }}" `
             "/O$output" `
             ".\installer\PosApp.iss"
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE." }
@@ -278,7 +292,7 @@ jobs:
             - ESC/POS thermal printer, cash drawer, weighing scale drivers
             - Local SQLite database (no cloud, no internet)
 
-            _This is an automated dev build. For stable releases, push a tag like `v1.2.3`._
+            _This is an automated dev build. For stable releases, push a tag like `v1.2.4`._
           draft: false
           prerelease: true
           files: |

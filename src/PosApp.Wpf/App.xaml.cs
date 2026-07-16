@@ -221,6 +221,7 @@ public partial class App : Application
         services.AddTransient<ICustomerService, CustomerService>();
         services.AddTransient<IReportService, ReportService>();
         services.AddTransient<ISettingsService, SettingsService>();
+        services.AddTransient<IDiscountService, DiscountService>();
         services.AddTransient<ISetupService, SetupService>();
         services.AddTransient<IPurchaseService, PurchaseService>();
         services.AddTransient<IRegisterService, RegisterService>();
@@ -243,6 +244,8 @@ public partial class App : Application
         services.AddTransient<SetupView>();
         services.AddTransient<MainWindow>();
         services.AddTransient<PosView>();
+        services.AddTransient<DashboardView>();
+        services.AddTransient<PromotionsView>();
         services.AddTransient<ProductsView>();
         services.AddTransient<InventoryView>();
         services.AddTransient<CustomersView>();

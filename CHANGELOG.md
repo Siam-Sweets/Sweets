@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.0 — Receipt-first register and management workspace
+
+- Rebuilt the POS as a full-screen, receipt-first register with a compact command rail and stable product-search overlay.
+- Added complete keyboard flow for F2 discount, F3 search, F4 quantity, F7 open sales, F8 new sale, F9 save sale, F10 payment, F12 cash, and Delete.
+- Added exact card/check tenders, customer selection, service type, sale comments, weighing, cash drawer, refund navigation, lock/sign-out, and confirmed order voiding.
+- Added reusable offline promotions with optional codes, date ranges, use limits, management CRUD, and direct selection from the register discount dialog.
+- Added a management slide-over and role-aware back-office shell with a new live dashboard for monthly/daily sales, profit, transactions, top products, hourly sales, and payment breakdown.
+- Reworked Settings into General, Order & Payment, Products, Documents, Weighing Scale, Customer Display, Email boundary, Print, Database, and About sections.
+- Added register-required checkout and configurable default service type, void confirmation, startup register prompt, search-grid preferences, receipt width, and local UI preferences.
+- Expanded English/Bengali localization for the new register, management, dashboard, promotions, and settings workflow.
+- Preserved the local-only boundary: no runtime network client, telemetry, cloud sync, or remote dependency was added.
+
+## 1.2.4 — Development installer version fix
+
+- Fixed Inno Setup compilation for development builds whose display version contains a suffix such as `0.0.0-dev.9`.
+- Added a separate four-part numeric Windows resource version (`0.0.0.9` for that example) while preserving the readable development version in filenames and installer text.
+- Applied the same numeric-version conversion to the local Windows installer build script.
+
 ## 1.2.3 — CI build correction and nullable cleanup
 
 - Fixed WPF setup-wizard compilation by changing the PIN text-input event handler from static to instance-bound.

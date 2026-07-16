@@ -204,6 +204,8 @@
     <sys:String x:Key="Set_Email">Email</sys:String>
     <sys:String x:Key="Set_TaxId">Tax ID</sys:String>
     <sys:String x:Key="Set_Currency">Currency Symbol</sys:String>
+    <sys:String x:Key="Set_Country">Country</sys:String>
+    <sys:String x:Key="Set_CurrencyCode">Currency code</sys:String>
     <sys:String x:Key="Set_Footer">Receipt Footer</sys:String>
     <sys:String x:Key="Set_Hardware">Hardware</sys:String>
     <sys:String x:Key="Set_Printer">Receipt Printer</sys:String>
@@ -233,6 +235,118 @@
     <sys:String x:Key="Set_OpenFolder">Open Folder</sys:String>
     <sys:String x:Key="Set_Tax">Tax Rates</sys:String>
     <sys:String x:Key="Set_Discounts">Discounts</sys:String>
+
+    <!-- Receipt-first POS workflow -->
+    <sys:String x:Key="POS_SearchReceipt">Scan barcode, enter code, or search products…</sys:String>
+    <sys:String x:Key="POS_SearchButton">Find products (F3)</sys:String>
+    <sys:String x:Key="POS_ProductName">Product name</sys:String>
+    <sys:String x:Key="POS_Quantity">Quantity</sys:String>
+    <sys:String x:Key="POS_Price">Price</sys:String>
+    <sys:String x:Key="POS_Amount">Amount</sys:String>
+    <sys:String x:Key="POS_NoItems">No items</sys:String>
+    <sys:String x:Key="POS_NoItemsHint">Scan a barcode or press F3 to find a product</sys:String>
+    <sys:String x:Key="POS_TaxDiscount">Tax / Discount</sys:String>
+    <sys:String x:Key="POS_Receipt">Current receipt</sys:String>
+    <sys:String x:Key="POS_Menu">Menu</sys:String>
+    <sys:String x:Key="POS_NewSale">New sale</sys:String>
+    <sys:String x:Key="POS_Check">Check</sys:String>
+    <sys:String x:Key="POS_CashDrawer">Cash drawer</sys:String>
+    <sys:String x:Key="POS_ServiceType">Service type</sys:String>
+    <sys:String x:Key="POS_Comment">Comment</sys:String>
+    <sys:String x:Key="POS_Customer">Customer</sys:String>
+    <sys:String x:Key="POS_SaveSale">Save sale</sys:String>
+    <sys:String x:Key="POS_Lock">Lock</sys:String>
+    <sys:String x:Key="POS_Transfer">Open sales</sys:String>
+    <sys:String x:Key="POS_More">More</sys:String>
+    <sys:String x:Key="POS_VoidOrder">Void order</sys:String>
+    <sys:String x:Key="POS_FindProducts">Find products</sys:String>
+    <sys:String x:Key="POS_FindProductsHint">Type a name, SKU, or barcode. Results stay in a fixed, touch-friendly grid.</sys:String>
+
+    <!-- Management shell -->
+    <sys:String x:Key="Shell_BackToPOS">Back to receipt</sys:String>
+    <sys:String x:Key="Shell_Management">Management</sys:String>
+    <sys:String x:Key="Shell_Dashboard">Dashboard</sys:String>
+    <sys:String x:Key="Shell_Documents">Documents &amp; sales</sys:String>
+    <sys:String x:Key="Shell_Stock">Stock</sys:String>
+    <sys:String x:Key="Shell_PriceLists">Price lists</sys:String>
+    <sys:String x:Key="Shell_Promotions">Promotions &amp; discounts</sys:String>
+    <sys:String x:Key="Shell_PaymentTypes">Payment types</sys:String>
+    <sys:String x:Key="Shell_Countries">Country &amp; currency</sys:String>
+    <sys:String x:Key="Shell_TaxRates">Tax rates</sys:String>
+    <sys:String x:Key="Shell_MyCompany">My company</sys:String>
+    <sys:String x:Key="Shell_CustomersSuppliers">Customers &amp; suppliers</sys:String>
+    <sys:String x:Key="Shell_Reporting">Reporting</sys:String>
+    <sys:String x:Key="Shell_UsersSecurity">Users &amp; security</sys:String>
+    <sys:String x:Key="Shell_OfflineTerminal">Offline terminal</sys:String>
+    <sys:String x:Key="Shell_ViewSales">View sales history</sys:String>
+    <sys:String x:Key="Shell_OpenSales">View open / saved sales</sys:String>
+    <sys:String x:Key="Shell_CashInOut">Cash In / Out</sys:String>
+    <sys:String x:Key="Shell_EndOfDay">Reports &amp; end of day</sys:String>
+    <sys:String x:Key="Shell_User">USER</sys:String>
+    <sys:String x:Key="Shell_UserInfo">User information</sys:String>
+    <sys:String x:Key="Shell_SignOut">Sign out</sys:String>
+    <sys:String x:Key="Shell_FullScreen">Full screen</sys:String>
+    <sys:String x:Key="Shell_ExitApp">Exit</sys:String>
+
+    <!-- Management dashboard -->
+    <sys:String x:Key="Dash_Title">Management Dashboard</sys:String>
+    <sys:String x:Key="Dash_Refresh">Refresh</sys:String>
+    <sys:String x:Key="Dash_TotalSales">Monthly sales</sys:String>
+    <sys:String x:Key="Dash_Today">Today</sys:String>
+    <sys:String x:Key="Dash_DailySales">Daily sales</sys:String>
+    <sys:String x:Key="Dash_Method">Method</sys:String>
+    <sys:String x:Key="Dash_Revenue">Revenue</sys:String>
+    <sys:String x:Key="Dash_Hour">Hour</sys:String>
+
+    <!-- Promotions -->
+    <sys:String x:Key="Promo_Title">Promotions &amp; discounts</sys:String>
+    <sys:String x:Key="Promo_Subtitle">Create offline discount rules and optional promo codes for the register</sys:String>
+    <sys:String x:Key="Promo_Add">Add promotion</sys:String>
+    <sys:String x:Key="Promo_Edit">Edit</sys:String>
+    <sys:String x:Key="Promo_Deactivate">Deactivate</sys:String>
+    <sys:String x:Key="Promo_Name">Name</sys:String>
+    <sys:String x:Key="Promo_Code">Code</sys:String>
+    <sys:String x:Key="Promo_Type">Type</sys:String>
+    <sys:String x:Key="Promo_Value">Value</sys:String>
+    <sys:String x:Key="Promo_ValidFrom">Valid from</sys:String>
+    <sys:String x:Key="Promo_ValidTo">Valid to</sys:String>
+    <sys:String x:Key="Promo_Uses">Uses</sys:String>
+    <sys:String x:Key="Promo_Active">Active</sys:String>
+
+    <!-- Sectioned settings -->
+    <sys:String x:Key="Set_NewSubtitle">Application, order, hardware, receipt, database, language, and appearance settings</sys:String>
+    <sys:String x:Key="Set_General">General</sys:String>
+    <sys:String x:Key="Set_OrderPayment">Order &amp; payment</sys:String>
+    <sys:String x:Key="Set_ApplicationStyle">Application style</sys:String>
+    <sys:String x:Key="Set_UiScale">Interface scale</sys:String>
+    <sys:String x:Key="Set_MessageDuration">Message duration (seconds)</sys:String>
+    <sys:String x:Key="Set_OrderWorkflow">Order workflow</sys:String>
+    <sys:String x:Key="Set_PaymentMethods">Payment methods</sys:String>
+    <sys:String x:Key="Set_PaymentMethodsHelp">These local tender types are available for exact and split payments. No external gateway is contacted.</sys:String>
+    <sys:String x:Key="Set_DefaultService">Default service type</sys:String>
+    <sys:String x:Key="Set_DefaultTax">Default tax rate (%)</sys:String>
+    <sys:String x:Key="Set_RequireRegister">Require an open register before selling</sys:String>
+    <sys:String x:Key="Set_ConfirmVoid">Confirm before voiding the current order</sys:String>
+    <sys:String x:Key="Set_ShowCashStart">Prompt for cash-in when the application starts</sys:String>
+    <sys:String x:Key="Set_SelectBusinessDay">Select business day when the application starts</sys:String>
+    <sys:String x:Key="Set_ProductSearchLayout">Product search layout</sys:String>
+    <sys:String x:Key="Set_ProductSearchHelp">Search results use stable card sizes so filtering cannot distort the register layout.</sys:String>
+    <sys:String x:Key="Set_Rows">Rows</sys:String>
+    <sys:String x:Key="Set_Columns">Columns</sys:String>
+    <sys:String x:Key="Set_VirtualKeyboard">Enable touch keyboard support</sys:String>
+    <sys:String x:Key="Set_Documents">Documents</sys:String>
+    <sys:String x:Key="Set_Receipt">Receipt</sys:String>
+    <sys:String x:Key="Set_ReceiptWidth">Paper width (mm)</sys:String>
+    <sys:String x:Key="Set_WeighingScale">Weighing scale</sys:String>
+    <sys:String x:Key="Set_TestScale">Test scale</sys:String>
+    <sys:String x:Key="Set_CustomerDisplay">Customer display</sys:String>
+    <sys:String x:Key="Set_CustomerDisplayHelp">Customer-facing display support is prepared for a locally connected second screen. No cloud connection is used.</sys:String>
+    <sys:String x:Key="Set_EmailSection">Email</sys:String>
+    <sys:String x:Key="Set_OfflineEmail">Email delivery is disabled while PosApp is in offline-only mode. Receipts can still be printed or exported locally.</sys:String>
+    <sys:String x:Key="Set_Print">Print</sys:String>
+    <sys:String x:Key="Set_Database">Database</sys:String>
+    <sys:String x:Key="Set_About">About</sys:String>
+    <sys:String x:Key="Set_OfflineAbout">Local-first point of sale. Sales, inventory, users, reports, configuration, and backups remain on this computer.</sys:String>
 
     <!-- Common -->
     <sys:String x:Key="Common_Save">Save</sys:String>

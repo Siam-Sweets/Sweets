@@ -33,6 +33,7 @@ public class SaleDraft
 public class SaleDraftLine : INotifyPropertyChanged
 {
     private decimal _quantity;
+    private decimal _discountAmount;
 
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
@@ -50,7 +51,17 @@ public class SaleDraftLine : INotifyPropertyChanged
     }
     public decimal UnitPrice { get; set; }
     public decimal TaxRate { get; set; }
-    public decimal DiscountAmount { get; set; }
+    public decimal DiscountAmount
+    {
+        get => _discountAmount;
+        set
+        {
+            if (_discountAmount == value) return;
+            _discountAmount = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LineTotal));
+        }
+    }
     public string? DiscountReason { get; set; }
     public bool IsWeighted { get; set; }
     public decimal LineTotal => (UnitPrice * Quantity) - DiscountAmount;
@@ -70,6 +81,7 @@ public class StoreSettings
     public string TaxId { get; set; } = "";
     public string CurrencySymbol { get; set; } = "৳";
     public string CurrencyCode { get; set; } = "BDT";
+    public string Country { get; set; } = "Bangladesh";
     public int CurrencyDecimals { get; set; } = 2;
     public string FooterNote { get; set; } = "Thank you for your business!";
     public bool PrintReceiptAutomatically { get; set; } = true;
@@ -88,6 +100,16 @@ public class StoreSettings
     public bool BackupOnStartup { get; set; } = true;
     public bool BackupOnExit { get; set; } = true;
     public int BackupRetentionCount { get; set; } = 20;
+    public string DefaultServiceType { get; set; } = "Retail";
+    public bool RequireOpenRegisterForSales { get; set; } = false;
+    public bool ConfirmBeforeVoidingOrder { get; set; } = true;
+    public bool EnableVirtualKeyboard { get; set; } = false;
+    public int ProductGridRows { get; set; } = 5;
+    public int ProductGridColumns { get; set; } = 5;
+    public int UiScalePercent { get; set; } = 100;
+    public int MessageDurationSeconds { get; set; } = 5;
+    public bool ShowCashInOnStartup { get; set; } = false;
+    public bool SelectBusinessDayOnStartup { get; set; } = false;
 }
 
 /// <summary>Information collected by the local first-run setup wizard.</summary>

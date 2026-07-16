@@ -19,6 +19,14 @@ if ([string]::IsNullOrWhiteSpace($version)) {
     throw "Could not read the application version from $projectPath."
 }
 
+$numericParts = @([regex]::Matches($version, '\d+') | ForEach-Object { [int64]$_.Value })
+if ($numericParts.Count -eq 0) { $numericParts = @(0, 0, 0, 0) }
+while ($numericParts.Count -lt 4) { $numericParts += 0 }
+$numericParts = @($numericParts | Select-Object -First 4 | ForEach-Object {
+    [Math]::Min([int64]65535, $_)
+})
+$numericVersion = $numericParts -join '.'
+
 $isccCandidates = @(
     (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
     (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
@@ -47,7 +55,7 @@ if ($LASTEXITCODE -ne 0) {
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 
 Write-Host "Building the setup wizard..."
-& $iscc "/DMyAppVersion=$version" "/O$outputDirectory" $installerScript
+& $iscc "/DMyAppVersion=$version" "/DMyAppNumericVersion=$numericVersion" "/O$outputDirectory" $installerScript
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup failed with exit code $LASTEXITCODE."
 }

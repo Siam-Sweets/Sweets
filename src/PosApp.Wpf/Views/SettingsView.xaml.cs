@@ -32,6 +32,26 @@ public partial class SettingsView : UserControl, IRefreshable
         finally { IsEnabled = true; }
     }
 
+    public void SelectSection(string section)
+    {
+        SettingsTabs.SelectedIndex = section.ToLowerInvariant() switch
+        {
+            "company" => 0,
+            "order" => 1,
+            "payment" => 1,
+            "tax" => 1,
+            "products" => 2,
+            "documents" => 3,
+            "scale" => 4,
+            "display" => 5,
+            "email" => 6,
+            "print" => 7,
+            "database" => 8,
+            "about" => 9,
+            _ => 0
+        };
+    }
+
     private async Task LoadAsync()
     {
         _isLoading = true;
@@ -44,7 +64,10 @@ public partial class SettingsView : UserControl, IRefreshable
             TaxIdBox.Text = _current.TaxId;
             AddressBox.Text = _current.Address;
             CurrencyBox.Text = _current.CurrencySymbol;
+            CurrencyCodeBox.Text = _current.CurrencyCode;
+            CountryBox.Text = _current.Country;
             FooterBox.Text = _current.FooterNote;
+            ReceiptWidthBox.Text = Math.Clamp(_current.ReceiptWidth, 40, 120).ToString();
             DrawerPortBox.Text = _current.CashDrawerPort;
             ScalePortBox.Text = _current.ScalePort;
             AutoPrintCheckbox.IsChecked = _current.PrintReceiptAutomatically;
@@ -54,6 +77,23 @@ public partial class SettingsView : UserControl, IRefreshable
             BackupExitCheckbox.IsChecked = _current.BackupOnExit;
             BackupRetentionBox.Text = Math.Clamp(_current.BackupRetentionCount, 1, 200).ToString();
             BackupFolderText.Text = _backup.BackupFolder;
+            DefaultServiceCombo.SelectedIndex = _current.DefaultServiceType switch
+            {
+                "Takeaway" => 1,
+                "Delivery" => 2,
+                "Dine-in" => 3,
+                _ => 0
+            };
+            DefaultTaxBox.Text = _current.DefaultTaxRate.ToString("0.##");
+            RequireOpenRegisterCheckbox.IsChecked = _current.RequireOpenRegisterForSales;
+            ConfirmVoidCheckbox.IsChecked = _current.ConfirmBeforeVoidingOrder;
+            ShowCashInCheckbox.IsChecked = _current.ShowCashInOnStartup;
+            BusinessDayCheckbox.IsChecked = _current.SelectBusinessDayOnStartup;
+            GridRowsBox.Text = Math.Clamp(_current.ProductGridRows, 2, 10).ToString();
+            GridColumnsBox.Text = Math.Clamp(_current.ProductGridColumns, 2, 10).ToString();
+            VirtualKeyboardCheckbox.IsChecked = _current.EnableVirtualKeyboard;
+            MessageDurationBox.Text = Math.Clamp(_current.MessageDurationSeconds, 1, 60).ToString();
+            SelectComboByText(UiScaleCombo, $"{Math.Clamp(_current.UiScalePercent, 90, 125)}%", "100%");
 
             PrinterCombo.Items.Clear();
             PrinterCombo.Items.Add("(default)");
@@ -148,7 +188,12 @@ public partial class SettingsView : UserControl, IRefreshable
         _current.TaxId = TaxIdBox.Text;
         _current.Address = AddressBox.Text;
         _current.CurrencySymbol = CurrencyBox.Text;
+        _current.CurrencyCode = string.IsNullOrWhiteSpace(CurrencyCodeBox.Text) ? "BDT" : CurrencyCodeBox.Text.Trim().ToUpperInvariant();
+        _current.Country = CountryBox.Text.Trim();
         _current.FooterNote = FooterBox.Text;
+        if (!int.TryParse(ReceiptWidthBox.Text, out var receiptWidth) || receiptWidth < 40 || receiptWidth > 120)
+            throw new InvalidOperationException("Receipt width must be a whole number from 40 to 120 mm.");
+        _current.ReceiptWidth = receiptWidth;
         _current.CashDrawerPort = DrawerPortBox.Text;
         _current.ScalePort = ScalePortBox.Text;
         _current.PrintReceiptAutomatically = AutoPrintCheckbox.IsChecked ?? true;
@@ -159,6 +204,26 @@ public partial class SettingsView : UserControl, IRefreshable
         _current.AutomaticBackupEnabled = AutoBackupCheckbox.IsChecked == true;
         _current.BackupOnStartup = BackupStartupCheckbox.IsChecked == true;
         _current.BackupOnExit = BackupExitCheckbox.IsChecked == true;
+        _current.DefaultServiceType = (DefaultServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Retail";
+        if (!decimal.TryParse(DefaultTaxBox.Text, out var defaultTax) || defaultTax < 0m || defaultTax > 100m)
+            throw new InvalidOperationException("Default tax must be from 0 to 100.");
+        _current.DefaultTaxRate = defaultTax;
+        _current.RequireOpenRegisterForSales = RequireOpenRegisterCheckbox.IsChecked == true;
+        _current.ConfirmBeforeVoidingOrder = ConfirmVoidCheckbox.IsChecked != false;
+        _current.ShowCashInOnStartup = ShowCashInCheckbox.IsChecked == true;
+        _current.SelectBusinessDayOnStartup = BusinessDayCheckbox.IsChecked == true;
+        _current.EnableVirtualKeyboard = VirtualKeyboardCheckbox.IsChecked == true;
+        if (!int.TryParse(GridRowsBox.Text, out var productRows) || productRows < 2 || productRows > 10)
+            throw new InvalidOperationException("Product rows must be a whole number from 2 to 10.");
+        if (!int.TryParse(GridColumnsBox.Text, out var productColumns) || productColumns < 2 || productColumns > 10)
+            throw new InvalidOperationException("Product columns must be a whole number from 2 to 10.");
+        if (!int.TryParse(MessageDurationBox.Text, out var messageSeconds) || messageSeconds < 1 || messageSeconds > 60)
+            throw new InvalidOperationException("Message duration must be a whole number from 1 to 60 seconds.");
+        _current.ProductGridRows = productRows;
+        _current.ProductGridColumns = productColumns;
+        _current.MessageDurationSeconds = messageSeconds;
+        var scaleText = (UiScaleCombo.SelectedItem as ComboBoxItem)?.Content?.ToString()?.TrimEnd('%');
+        _current.UiScalePercent = int.TryParse(scaleText, out var scale) ? scale : 100;
         if (!int.TryParse(BackupRetentionBox.Text, out var retention) || retention < 1 || retention > 200)
             throw new InvalidOperationException("Backup retention must be a whole number from 1 to 200.");
         _current.BackupRetentionCount = retention;
@@ -174,6 +239,7 @@ public partial class SettingsView : UserControl, IRefreshable
             App.StoreSettings = _current;
             App.ApplyLanguage(_current.Language);
             App.ApplyTheme(_current.Theme);
+            (Application.Current.MainWindow as MainWindow)?.ApplyUiScale(_current.UiScalePercent);
         }
         finally
         {
@@ -209,6 +275,41 @@ public partial class SettingsView : UserControl, IRefreshable
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Test Drawer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void TestScale_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await SaveCurrentSettingsAsync();
+            var connected = await _hardware.IsScaleConnected();
+            MessageBox.Show(connected ? "Scale is connected." : "Scale is unavailable. Check the configured port and connection.",
+                "Test Scale", MessageBoxButton.OK, connected ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Test Scale", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static void SelectComboByText(ComboBox combo, string preferred, string fallback)
+    {
+        foreach (var item in combo.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Content?.ToString(), preferred, StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedItem = item;
+                return;
+            }
+        }
+        foreach (var item in combo.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Content?.ToString(), fallback, StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedItem = item;
+                return;
+            }
         }
     }
 

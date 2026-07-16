@@ -286,7 +286,7 @@ public class ProductEditDialog : Window
         _svc = svc;
         _isNew = existing == null;
         _product = existing == null
-            ? new Product { IsActive = true, Unit = UnitOfMeasure.Piece }
+            ? new Product { IsActive = true, Unit = UnitOfMeasure.Piece, TaxRate = App.StoreSettings.DefaultTaxRate }
             : CopyProduct(existing);
 
         Title = _isNew ? "Add Product" : "Edit Product";
