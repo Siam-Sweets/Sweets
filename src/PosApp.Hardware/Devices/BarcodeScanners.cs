@@ -14,7 +14,6 @@ namespace PosApp.Hardware.Devices;
 /// </summary>
 public class HidBarcodeScanner : IBarcodeScanner, IDisposable
 {
-    private readonly Action<string>? _externalOnScan;
     private Action<string>? _onScan;
     private readonly StringBuilder _buffer = new();
     private DateTime _lastKey = DateTime.MinValue;

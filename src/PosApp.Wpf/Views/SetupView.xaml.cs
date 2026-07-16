@@ -76,7 +76,7 @@ public partial class SetupView : Window
         App.ApplyTheme(ThemeDark.IsChecked == true ? "Dark" : "Light");
     }
 
-    private static void PinBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    private void PinBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
         => e.Handled = e.Text.Any(character => !char.IsDigit(character));
 
     private async void Finish_Click(object sender, RoutedEventArgs e)

@@ -22,16 +22,19 @@ public class SerialWeighingScale : IWeighingScale, IDisposable
     {
         return Task.Run(() =>
         {
-            if (_port == null || !_port.IsOpen)
+            var port = _port;
+            if (port == null || !port.IsOpen)
             {
                 try { Open(); }
                 catch { return null; }
+                port = _port;
             }
+            if (port == null || !port.IsOpen) return null;
             try
             {
-                _port.WriteLine("R");
+                port.WriteLine("R");
                 Thread.Sleep(150);
-                var raw = _port.ReadExisting();
+                var raw = port.ReadExisting();
                 return ParseWeight(raw);
             }
             catch { return null; }

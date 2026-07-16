@@ -143,7 +143,8 @@ public class CatalogTransferService : ICatalogTransferService
                     _db.Products.Add(product);
                     result.Created++;
 
-                    if (product.StockQuantity.GetValueOrDefault() != 0m)
+                    var openingStock = product.StockQuantity.GetValueOrDefault();
+                    if (openingStock != 0m)
                     {
                         var type = mode == ProductImportMode.Purchase
                             ? StockTransactionType.Purchase
@@ -154,8 +155,8 @@ public class CatalogTransferService : ICatalogTransferService
                         {
                             Product = product,
                             Type = type,
-                            Quantity = product.StockQuantity.Value,
-                            BalanceAfter = product.StockQuantity.Value,
+                            Quantity = openingStock,
+                            BalanceAfter = openingStock,
                             UnitCost = product.CostPrice,
                             Note = $"CSV import ({mode})",
                             UserId = userId

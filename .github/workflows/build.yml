@@ -278,7 +278,7 @@ jobs:
             - ESC/POS thermal printer, cash drawer, weighing scale drivers
             - Local SQLite database (no cloud, no internet)
 
-            _This is an automated dev build. For stable releases, push a tag like `v1.2.2`._
+            _This is an automated dev build. For stable releases, push a tag like `v1.2.3`._
           draft: false
           prerelease: true
           files: |

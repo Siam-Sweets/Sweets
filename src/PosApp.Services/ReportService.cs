@@ -93,8 +93,8 @@ public class ReportService : IReportService
         // SQLite cannot aggregate or order EF decimal mappings on the server.
         // Keep filtering/projection in SQL and perform decimal math in memory.
         var items = await _db.SaleItems.AsNoTracking()
-            .Where(i => i.Sale.SaleDate >= from && i.Sale.SaleDate <= to
-                        && i.Sale.Status == SaleStatus.Completed && !i.IsRefunded)
+            .Where(i => i.Sale!.SaleDate >= from && i.Sale!.SaleDate <= to
+                        && i.Sale!.Status == SaleStatus.Completed && !i.IsRefunded)
             .Select(i => new
             {
                 i.ProductId,
@@ -156,8 +156,8 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<SalesByCategoryRow>> GetSalesByCategoryAsync(DateTime from, DateTime to)
     {
         var items = await _db.SaleItems.AsNoTracking()
-            .Where(i => i.Sale.SaleDate >= from && i.Sale.SaleDate <= to
-                        && i.Sale.Status == SaleStatus.Completed && !i.IsRefunded)
+            .Where(i => i.Sale!.SaleDate >= from && i.Sale!.SaleDate <= to
+                        && i.Sale!.Status == SaleStatus.Completed && !i.IsRefunded)
             .Select(i => new
             {
                 CategoryName = i.Product != null && i.Product.Category != null
@@ -185,8 +185,8 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<PaymentBreakdownRow>> GetPaymentBreakdownAsync(DateTime from, DateTime to)
     {
         var payments = await _db.SalePayments.AsNoTracking()
-            .Where(p => p.Sale.SaleDate >= from && p.Sale.SaleDate <= to
-                        && p.Sale.Status == SaleStatus.Completed)
+            .Where(p => p.Sale!.SaleDate >= from && p.Sale!.SaleDate <= to
+                        && p.Sale!.Status == SaleStatus.Completed)
             .Select(p => new { p.Method, p.Amount })
             .ToListAsync();
 

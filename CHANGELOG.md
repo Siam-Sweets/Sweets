@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.3 — CI build correction and nullable cleanup
+
+- Fixed WPF setup-wizard compilation by changing the PIN text-input event handler from static to instance-bound.
+- Removed all six warnings reported by the Release build: safe opening-stock reuse, explicit required EF navigation handling, guarded serial-scale access, and an unused scanner field.
+- Kept the v1.2.2 logo and guided offline installer unchanged.
+
 ## 1.2.2 — Application logo and guided Windows installer
 
 - Added a scalable PosApp logo plus multi-resolution Windows icon artwork.
