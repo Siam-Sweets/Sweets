@@ -13,6 +13,31 @@
     <sys:String x:Key="Login_Button">Sign In</sys:String>
     <sys:String x:Key="Login_Invalid">Invalid username or PIN</sys:String>
     <sys:String x:Key="Login_Exit">Exit</sys:String>
+    <sys:String x:Key="Login_SetupHint">Sign in with the administrator account created during setup.</sys:String>
+
+    <!-- First-run setup -->
+    <sys:String x:Key="Setup_WindowTitle">PosApp Setup</sys:String>
+    <sys:String x:Key="Setup_Title">Set up PosApp</sys:String>
+    <sys:String x:Key="Setup_Subtitle">Configure this PC before the first sale</sys:String>
+    <sys:String x:Key="Setup_StoreSection">Store information</sys:String>
+    <sys:String x:Key="Setup_StoreHelp">These details appear throughout the app and on printed receipts.</sys:String>
+    <sys:String x:Key="Setup_StoreName">Store name</sys:String>
+    <sys:String x:Key="Setup_Phone">Phone</sys:String>
+    <sys:String x:Key="Setup_Address">Address</sys:String>
+    <sys:String x:Key="Setup_Currency">Currency symbol</sys:String>
+    <sys:String x:Key="Setup_ReceiptFooter">Receipt footer</sys:String>
+    <sys:String x:Key="Setup_AdminSection">Administrator account</sys:String>
+    <sys:String x:Key="Setup_AdminHelp">Create the administrator login used to manage products, users, reports, and settings.</sys:String>
+    <sys:String x:Key="Setup_AdminName">Administrator name</sys:String>
+    <sys:String x:Key="Setup_Username">Username</sys:String>
+    <sys:String x:Key="Setup_Pin">PIN (4-12 digits)</sys:String>
+    <sys:String x:Key="Setup_ConfirmPin">Confirm PIN</sys:String>
+    <sys:String x:Key="Setup_DataSafety">Data safety</sys:String>
+    <sys:String x:Key="Setup_EnableBackup">Enable automatic local backups</sys:String>
+    <sys:String x:Key="Setup_OfflineNote">Setup and all saved information remain on this computer.</sys:String>
+    <sys:String x:Key="Setup_Exit">Exit</sys:String>
+    <sys:String x:Key="Setup_Finish">Finish Setup</sys:String>
+    <sys:String x:Key="Setup_PinMismatch">The administrator PINs do not match.</sys:String>
 
     <!-- Nav -->
     <sys:String x:Key="Nav_POS">POS</sys:String>

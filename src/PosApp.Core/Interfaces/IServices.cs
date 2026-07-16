@@ -98,6 +98,13 @@ public interface ISettingsService
     Task SetStoreSettingsAsync(StoreSettings settings);
 }
 
+public interface ISetupService
+{
+    Task<bool> IsSetupCompleteAsync();
+    Task<InitialSetupRequest> GetSetupDefaultsAsync();
+    Task CompleteSetupAsync(InitialSetupRequest request);
+}
+
 public interface IHardwareService
 {
     Task<bool> PrintReceiptAsync(Sale sale);

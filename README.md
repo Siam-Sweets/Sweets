@@ -4,7 +4,7 @@ A feature-rich, **local-only** Point of Sale desktop application for Windows, bu
 
 ## Offline Boundary
 
-Version 1.2 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, and restores all read or write local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or by GitHub Actions when building a release.
+Version 1.2.2 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
 
 This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
 
@@ -38,6 +38,8 @@ This is an original POS implementation inspired by the publicly known feature se
 ```
 posapp/
 ├── .github/workflows/build.yml     # CI: build single-file exe on push/tag/manual
+├── installer/                      # Branded Inno Setup wizard, license, and artwork
+├── scripts/Build-Installer.ps1     # Publish app + compile installer locally
 ├── PosApp.sln
 ├── src/
 │   ├── PosApp.Core/                # Entities, enums, interfaces, DTOs
@@ -64,9 +66,14 @@ dotnet restore
 dotnet run --project src/PosApp.Wpf/PosApp.Wpf.csproj
 ```
 
-On first run, the app creates `%LOCALAPPDATA%\PosApp\posapp.db` and seeds:
-- Admin user: `admin` / PIN `1234`
-- Cashier user: `cashier` / PIN `1111`
+On first run, the app creates `%LOCALAPPDATA%\PosApp\posapp.db`.
+
+Before login is shown, a one-time setup wizard asks for the store identity, currency, receipt footer, appearance, backup preference, and administrator username/PIN. The completed state is stored only in the local SQLite database, so setup does not appear again on later starts.
+
+The database also seeds:
+
+- The administrator account whose name, username, and PIN are finalized by the setup wizard
+- Starter cashier user: `cashier` / PIN `1111` (change or deactivate it from **Users** before production use)
 - 6 default categories (Beverages, Snacks, Groceries, Household, Personal Care, Produce)
 - 15 sample products (mix of fixed-price and weighted)
 - Default tax rates and discounts
@@ -83,25 +90,44 @@ dotnet publish src/PosApp.Wpf/PosApp.Wpf.csproj `
   -o ./publish
 ```
 
-The output is a single `PosApp.exe` (~150 MB) that runs on any Windows 10/11 x64 machine — no .NET install required. Drop it on a USB stick, run it on the POS terminal.
+The output is a single `PosApp.exe` (~150 MB) that runs on any Windows 10/11 x64 machine — no .NET install required. Drop it on a USB stick and run it on the POS terminal when a portable copy is preferred.
+
+### Build the Guided Windows Installer
+
+Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
+```
+
+The output is `artifacts\installer\PosApp-1.2.2-Setup.exe`. The branded wizard provides:
+
+1. License review and acceptance.
+2. Installation-folder selection (default: `Program Files\PosApp`).
+3. Start Menu folder selection.
+4. A checked-by-default **Create a desktop shortcut** option.
+5. A ready-to-install summary and progress page.
+6. A completion page with an optional **Run PosApp** action.
+
+The installer contains the self-contained offline app and does not download components during installation. Uninstalling removes program files and shortcuts but intentionally leaves the local database under `%LOCALAPPDATA%\PosApp` so business data is not silently deleted.
 
 ## CI / GitHub Actions
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-1. **Push to `main`** — builds and uploads the exe as a CI artifact (retained 30 days).
-2. **Tag push `v*`** (e.g. `v1.0.0`) — builds and publishes a GitHub Release with `PosApp-<ver>.exe` and `PosApp-<ver>.zip` attached.
+1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
+2. **Tag push `v*`** (e.g. `v1.2.2`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.2.2
+git push origin v1.2.2
 ```
 
-The workflow will build the exe, zip it, and create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.0.0`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.2.2`.
 
 ## Configuration
 

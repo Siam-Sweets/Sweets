@@ -83,7 +83,8 @@ jobs:
              (This is normal for any unsigned exe - it's not a virus.)
           3. First run will create the database in:
              %LOCALAPPDATA%\PosApp\posapp.db
-          4. Login with admin / 1234 (or cashier / 1111).
+          4. Complete the one-time store and administrator setup, then sign in
+             with the administrator username and PIN you selected.
 
           To remove: just delete PosApp.exe and the %LOCALAPPDATA%\PosApp folder.
           "@ | Out-File -FilePath "$stage/INSTALL.txt" -Encoding utf8
@@ -112,6 +113,31 @@ jobs:
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Locate or install Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup --no-progress --yes
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            throw "Inno Setup 6 compiler was not found."
+          }
+          "ISCC_PATH=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build guided setup installer
+        shell: pwsh
+        run: |
+          $output = Join-Path $PWD "installer-output"
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          & $env:ISCC_PATH `
+            "/DMyAppVersion=${{ steps.ver.outputs.version }}" `
+            "/O$output" `
+            ".\installer\PosApp.iss"
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE." }
+          $setup = Join-Path $output "PosApp-${{ steps.ver.outputs.version }}-Setup.exe"
+          if (-not (Test-Path -LiteralPath $setup)) { throw "Setup installer was not created: $setup" }
+
       - name: Upload exe artifact
         uses: actions/upload-artifact@v4
         with:
@@ -128,14 +154,25 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-installer
+          path: ./installer-output/${{ env.APP_NAME }}-${{ steps.ver.outputs.version }}-Setup.exe
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Summary
         if: always()
         shell: pwsh
         run: |
           Write-Host "## Build Summary"  | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           Write-Host "✅ PosApp.exe built successfully ($([math]::Round((Get-Item './publish/${{ env.APP_NAME }}.exe').Length / 1MB, 2)) MB)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          if (Test-Path './installer-output/${{ env.APP_NAME }}-${{ steps.ver.outputs.version }}-Setup.exe') {
+            Write-Host "✅ Guided Windows installer built successfully" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
           Write-Host "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          Write-Host "### Download the exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Write-Host "### Download the installer or portable exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           Write-Host "Scroll down to the **Artifacts** section at the bottom of this page." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
   release:
@@ -192,6 +229,12 @@ jobs:
           name: ${{ env.APP_NAME }}-portable
           path: ./release
 
+      - name: Download installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-installer
+          path: ./release
+
       - name: Rename for release
         shell: bash
         run: |
@@ -214,19 +257,20 @@ jobs:
             **Built from commit:** ${{ github.sha }}
 
             ## Download
+            - **PosApp-${{ steps.ver.outputs.version }}-Setup.exe** — recommended guided installer with license, install location, Start Menu, and optional Desktop shortcut
             - **PosApp-${{ steps.ver.outputs.version }}.exe** — single-file Windows x64 executable (~80 MB, no .NET install needed)
             - **PosApp-${{ steps.ver.outputs.version }}.zip** — portable zip with exe + README + INSTALL.txt
 
             ## Install
-            1. Download `PosApp-${{ steps.ver.outputs.version }}.exe`
+            1. Download `PosApp-${{ steps.ver.outputs.version }}-Setup.exe`
             2. If Windows SmartScreen shows "Windows protected your PC", click **More info → Run anyway**
-            3. Double-click to run — no installation needed
-            4. Login: `admin` / `1234` or `cashier` / `1111`
+            3. Follow the setup wizard and choose whether to create a Desktop shortcut
+            4. Complete the first-run store and administrator setup inside PosApp
 
             ## What's inside
             - POS / Checkout with barcode scanner support
             - Products & Inventory management
-            - Customers with loyalty points
+            - Customer contact records and purchase history
             - Sales history with refunds/voids
             - Users & Roles (Cashier / Manager / Admin)
             - Reports & Dashboard
@@ -234,12 +278,13 @@ jobs:
             - ESC/POS thermal printer, cash drawer, weighing scale drivers
             - Local SQLite database (no cloud, no internet)
 
-            _This is an automated dev build. For stable releases, push a tag like `v1.0.0`._
+            _This is an automated dev build. For stable releases, push a tag like `v1.2.2`._
           draft: false
           prerelease: true
           files: |
             ./release/PosApp-${{ steps.ver.outputs.version }}.exe
             ./release/PosApp-${{ steps.ver.outputs.version }}.zip
+            ./release/PosApp-${{ steps.ver.outputs.version }}-Setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -255,5 +300,6 @@ jobs:
           files: |
             ./release/PosApp-${{ steps.ver.outputs.version }}.exe
             ./release/PosApp-${{ steps.ver.outputs.version }}.zip
+            ./release/PosApp-${{ steps.ver.outputs.version }}-Setup.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="164" height="314" viewBox="0 0 164 314">
+  <defs>
+    <linearGradient id="bg" x1="20" y1="16" x2="144" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="0.58" stop-color="#3182F6"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+  </defs>
+  <rect width="164" height="314" fill="#F8FAFC"/>
+  <rect x="22" y="34" width="120" height="120" rx="28" fill="url(#bg)"/>
+  <rect x="26" y="38" width="112" height="112" rx="24" fill="none" stroke="#FFFFFF" stroke-opacity="0.30"/>
+  <path fill="#FFFFFF" d="M53 60h40c24 0 40 13 40 34 0 21-16 34-41 34H77v21H53V60Zm24 20v28h15c11 0 17-5 17-14 0-9-6-14-17-14H77Z"/>
+  <text x="82" y="202" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#0F172A">PosApp</text>
+  <text x="82" y="225" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#475569">LOCAL POINT OF SALE</text>
+  <rect x="42" y="248" width="80" height="3" rx="1.5" fill="#38BDF8"/>
+</svg>

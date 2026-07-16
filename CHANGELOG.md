@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.2 — Application logo and guided Windows installer
+
+- Added a scalable PosApp logo plus multi-resolution Windows icon artwork.
+- Applied the logo to the executable, Windows taskbar/title bars, login screen, setup wizard, and main sidebar.
+- Added a branded Inno Setup installer with license acceptance, destination-folder selection, Start Menu selection, a ready-to-install summary, and a completion page.
+- Added a checked-by-default **Create a desktop shortcut** option to the install wizard.
+- Added an optional **Run PosApp** action on the final installer page.
+- Added a local PowerShell installer build script and CI packaging for the setup executable while preserving the portable EXE and ZIP.
+- Kept the installed application and all installer payloads offline; store data remains under the local Windows profile.
+
+## 1.2.1 — First-run setup and Light-mode sidebar fix
+
+- Added a one-time setup wizard that opens before login until configuration is completed.
+- Added local store name, phone, address, currency, receipt footer, language, theme, backup, and administrator credential setup.
+- Replaced the seeded administrator PIN with the PIN selected during setup and persisted the completion state in the local SQLite database.
+- Preserved existing store and administrator values as setup defaults when upgrading an older installation.
+- Fixed unreadable inactive and active sidebar labels in Light mode by binding every navigation label and icon to its parent button foreground.
+- Removed fixed demo credentials from the login screen because administrator credentials are now selected during setup.
+- Kept setup and all saved configuration entirely offline.
+
 ## 1.2.0 — Aronium-style checkout workflow
 
 - Added **F10 Payment** for the advanced payment window and **F12 Cash** for an immediate exact-cash sale.

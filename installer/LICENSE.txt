@@ -1,0 +1,60 @@
+POSAPP END USER LICENSE AGREEMENT
+
+Version 1.0 — July 2026
+
+Please read this agreement before installing or using PosApp.
+
+1. LICENSE GRANT
+
+Subject to these terms, the PosApp publisher grants you a non-exclusive,
+non-transferable license to install and use PosApp for personal or business
+point-of-sale operations on computers that you own or control.
+
+2. LOCAL DATA
+
+PosApp is designed to operate offline. Store, product, customer, transaction,
+user, and configuration data is stored on the computer where PosApp is used.
+You are responsible for access control, lawful collection and use of that data,
+and maintaining suitable backups.
+
+3. RESTRICTIONS
+
+You may not misrepresent PosApp as your own original product, remove copyright
+or ownership notices, use PosApp for unlawful activity, or distribute modified
+or unmodified installer packages unless the copyright owner has authorized that
+distribution.
+
+4. THIRD-PARTY COMPONENTS
+
+PosApp may include third-party libraries. Those components remain subject to
+their respective license terms.
+
+5. NO WARRANTY
+
+PosApp is provided "as is" without warranties of any kind, express or implied,
+including warranties of merchantability, fitness for a particular purpose,
+accuracy, availability, or non-infringement. You are responsible for testing
+the software, hardware integrations, tax configuration, receipts, backups, and
+business procedures before production use.
+
+6. LIMITATION OF LIABILITY
+
+To the maximum extent permitted by applicable law, the PosApp publisher will
+not be liable for indirect, incidental, special, consequential, or punitive
+damages, or for loss of revenue, data, inventory records, or business, arising
+from use of or inability to use PosApp.
+
+7. TERMINATION
+
+This license ends automatically if you materially breach these terms. On
+termination, you must stop using PosApp and uninstall copies for which you no
+longer hold a valid license. Your locally stored business data is not removed
+automatically by the uninstaller.
+
+8. COMPLETE AGREEMENT
+
+These terms are the complete agreement governing the installed PosApp software
+unless a separate written agreement with the copyright owner applies.
+
+By selecting "I accept the agreement" and continuing, you confirm that you
+have read and accepted these terms.

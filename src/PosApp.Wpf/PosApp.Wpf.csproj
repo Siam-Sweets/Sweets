@@ -9,13 +9,14 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\PosApp.ico</ApplicationIcon>
     <AssemblyName>PosApp</AssemblyName>
     <RootNamespace>PosApp.Wpf</RootNamespace>
-    <Version>1.2.0</Version>
+    <Version>1.2.2</Version>
     <Company>PosApp</Company>
     <Product>PosApp - Local POS</Product>
-    <AssemblyVersion>1.2.0.0</AssemblyVersion>
-    <FileVersion>1.2.0.0</FileVersion>
+    <AssemblyVersion>1.2.2.0</AssemblyVersion>
+    <FileVersion>1.2.2.0</FileVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
@@ -45,6 +46,11 @@
     <ProjectReference Include="..\PosApp.Services\PosApp.Services.csproj" />
     <ProjectReference Include="..\PosApp.Hardware\PosApp.Hardware.csproj" />
     <ProjectReference Include="..\PosApp.Localization\PosApp.Localization.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\PosApp.ico" />
+    <Resource Include="Assets\PosAppLogo.png" />
   </ItemGroup>
 
   <ItemGroup>

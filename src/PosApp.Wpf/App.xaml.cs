@@ -146,6 +146,29 @@ public partial class App : Application
             // Apply language from settings
             ApplyLanguage(StoreSettings.Language);
 
+            // A seeded local database is not the same as a configured store.
+            // Until the one-time flag is written, show setup before login.
+            var setupService = Services.GetRequiredService<ISetupService>();
+            if (!await setupService.IsSetupCompleteAsync())
+            {
+                Log("First-run setup is required.");
+                ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                var setup = Services.GetRequiredService<SetupView>();
+                MainWindow = setup;
+                var setupCompleted = setup.ShowDialog() == true;
+                if (!setupCompleted)
+                {
+                    Log("Setup was closed before completion.");
+                    Shutdown();
+                    return;
+                }
+
+                StoreSettings = await settingsService.GetStoreSettingsAsync();
+                ApplyTheme(StoreSettings.Theme);
+                ApplyLanguage(StoreSettings.Language);
+                Log($"First-run setup completed. Store: {StoreSettings.StoreName}");
+            }
+
             if (StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnStartup)
             {
                 try
@@ -165,6 +188,7 @@ public partial class App : Application
             Log("Showing login window...");
             var login = Services.GetRequiredService<LoginView>();
             MainWindow = login;
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
             login.Show();
             _startupCompleted = true;
             Log("Login window shown. Startup complete.");
@@ -197,6 +221,7 @@ public partial class App : Application
         services.AddTransient<ICustomerService, CustomerService>();
         services.AddTransient<IReportService, ReportService>();
         services.AddTransient<ISettingsService, SettingsService>();
+        services.AddTransient<ISetupService, SetupService>();
         services.AddTransient<IPurchaseService, PurchaseService>();
         services.AddTransient<IRegisterService, RegisterService>();
         services.AddTransient<ICatalogTransferService, CatalogTransferService>();
@@ -215,6 +240,7 @@ public partial class App : Application
 
         // Views
         services.AddTransient<LoginView>();
+        services.AddTransient<SetupView>();
         services.AddTransient<MainWindow>();
         services.AddTransient<PosView>();
         services.AddTransient<ProductsView>();

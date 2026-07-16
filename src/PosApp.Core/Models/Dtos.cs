@@ -90,6 +90,15 @@ public class StoreSettings
     public int BackupRetentionCount { get; set; } = 20;
 }
 
+/// <summary>Information collected by the local first-run setup wizard.</summary>
+public class InitialSetupRequest
+{
+    public StoreSettings StoreSettings { get; set; } = new();
+    public string AdminFullName { get; set; } = "Administrator";
+    public string AdminUsername { get; set; } = "admin";
+    public string AdminPin { get; set; } = string.Empty;
+}
+
 public class PurchaseDraft
 {
     public int? SupplierId { get; set; }
