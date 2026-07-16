@@ -13,16 +13,19 @@ public partial class SettingsView : UserControl, IRefreshable
     private readonly ISettingsService _settings;
     private readonly IHardwareService _hardware;
     private readonly IBackupService _backup;
+    private readonly IUpdateService _updates;
     private StoreSettings _current = new();
     private bool _isLoading;
     private readonly SemaphoreSlim _appearanceSaveGate = new(1, 1);
 
-    public SettingsView(ISettingsService settings, IHardwareService hardware, IBackupService backup)
+    public SettingsView(ISettingsService settings, IHardwareService hardware, IBackupService backup,
+        IUpdateService updates)
     {
         InitializeComponent();
         _settings = settings;
         _hardware = hardware;
         _backup = backup;
+        _updates = updates;
     }
 
     public async void Refresh()
@@ -47,7 +50,8 @@ public partial class SettingsView : UserControl, IRefreshable
             "email" => 6,
             "print" => 7,
             "database" => 8,
-            "about" => 9,
+            "update" => 9,
+            "about" => 10,
             _ => 0
         };
     }
@@ -77,6 +81,12 @@ public partial class SettingsView : UserControl, IRefreshable
             BackupExitCheckbox.IsChecked = _current.BackupOnExit;
             BackupRetentionBox.Text = Math.Clamp(_current.BackupRetentionCount, 1, 200).ToString();
             BackupFolderText.Text = _backup.BackupFolder;
+            CurrentVersionText.Text = $"PosApp {_updates.CurrentVersion}";
+            AboutVersionText.Text = $"Version {_updates.CurrentVersion}";
+            UpdateDataFolderText.Text = _updates.DataFolder;
+            UpdateBackupFolderText.Text = _updates.UpdateBackupFolder;
+            SelectedInstallerText.Text = "No update installer selected.";
+            await LoadUpdateStatusAsync();
             DefaultServiceCombo.SelectedIndex = _current.DefaultServiceType switch
             {
                 "Takeaway" => 1,
@@ -398,6 +408,105 @@ public partial class SettingsView : UserControl, IRefreshable
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Unable to open backup folder", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task LoadUpdateStatusAsync()
+    {
+        var pending = await _updates.GetPendingUpdateAsync();
+        if (pending != null)
+        {
+            UpdateStatusText.Text =
+                $"An update to {pending.TargetVersion} is pending. Recovery backup: {pending.BackupPath}";
+            return;
+        }
+
+        var last = await _updates.GetLastUpdateAsync();
+        if (last == null)
+        {
+            UpdateStatusText.Text = "No safe update has been run on this computer yet.";
+            return;
+        }
+
+        var completed = last.CompletedAtUtc?.ToLocalTime().ToString("g") ?? "unknown time";
+        UpdateStatusText.Text = last.State switch
+        {
+            "Completed" =>
+                $"Last safe update completed at {completed}: {last.FromVersion} to {last.RunningVersion}. " +
+                $"Recovery backup retained at {last.BackupPath}",
+            "InstallerNotApplied" =>
+                $"The last installer was not applied. PosApp is still {last.RunningVersion}. " +
+                $"The safety backup is retained at {last.BackupPath}",
+            "LaunchFailed" =>
+                $"The last installer could not start. The safety backup is retained at {last.BackupPath}",
+            _ => $"Last update status: {last.State}. Recovery backup: {last.BackupPath}"
+        };
+    }
+
+    private async void SelectUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        var downloads = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        var dialog = new OpenFileDialog
+        {
+            Title = "Choose a newer PosApp setup installer",
+            Filter = "PosApp setup installer (PosApp-*-Setup.exe)|PosApp-*-Setup.exe|Windows executable (*.exe)|*.exe",
+            InitialDirectory = Directory.Exists(downloads) ? downloads : Environment.CurrentDirectory,
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+
+        try
+        {
+            IsEnabled = false;
+            var package = await _updates.InspectInstallerAsync(dialog.FileName);
+            if (!package.IsValid)
+                throw new InvalidOperationException(package.ValidationMessage);
+
+            var sizeMb = package.SizeBytes / 1024d / 1024d;
+            SelectedInstallerText.Text =
+                $"{package.FileName}\nVersion {package.TargetVersion} • {sizeMb:0.0} MB\nSHA-256: {package.Sha256}";
+            IsEnabled = true;
+
+            var confirmation =
+                $"Update PosApp {package.CurrentVersion} to {package.TargetVersion}?\n\n" +
+                "Before opening the installer, PosApp will create and validate a complete SQLite backup. " +
+                "The live database remains under your Windows profile and is not stored in Program Files.\n\n" +
+                $"Recovery backups:\n{_updates.UpdateBackupFolder}\n\n" +
+                "Only continue if this installer came from a PosApp release source you trust. " +
+                "PosApp will close after the installer starts.";
+            if (MessageBox.Show(confirmation, "Safe PosApp Update",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return;
+
+            IsEnabled = false;
+            await _updates.PrepareAndLaunchAsync(package.InstallerPath);
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            IsEnabled = true;
+            MessageBox.Show(ex.Message, "Update stopped", MessageBoxButton.OK, MessageBoxImage.Error);
+            await LoadUpdateStatusAsync();
+        }
+    }
+
+    private void OpenUpdateBackups_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{_updates.UpdateBackupFolder}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "Unable to open update backups", MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
     }
 }

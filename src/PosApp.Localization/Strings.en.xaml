@@ -314,7 +314,7 @@
     <sys:String x:Key="Promo_Active">Active</sys:String>
 
     <!-- Sectioned settings -->
-    <sys:String x:Key="Set_NewSubtitle">Application, order, hardware, receipt, database, language, and appearance settings</sys:String>
+    <sys:String x:Key="Set_NewSubtitle">Application, order, hardware, receipt, database, update, language, and appearance settings</sys:String>
     <sys:String x:Key="Set_General">General</sys:String>
     <sys:String x:Key="Set_OrderPayment">Order &amp; payment</sys:String>
     <sys:String x:Key="Set_ApplicationStyle">Application style</sys:String>
@@ -345,6 +345,18 @@
     <sys:String x:Key="Set_OfflineEmail">Email delivery is disabled while PosApp is in offline-only mode. Receipts can still be printed or exported locally.</sys:String>
     <sys:String x:Key="Set_Print">Print</sys:String>
     <sys:String x:Key="Set_Database">Database</sys:String>
+    <sys:String x:Key="Set_Update">Update &amp; recovery</sys:String>
+    <sys:String x:Key="Set_SafeUpdate">Safe offline update</sys:String>
+    <sys:String x:Key="Set_SafeUpdateHelp">Choose a newer PosApp setup installer already saved on this computer. PosApp verifies its product and version, records its SHA-256 hash, creates a healthy database snapshot, and then starts Setup.</sys:String>
+    <sys:String x:Key="Set_CurrentVersion">Current version</sys:String>
+    <sys:String x:Key="Set_UpdateStatus">Update status</sys:String>
+    <sys:String x:Key="Set_SelectedInstaller">Selected installer</sys:String>
+    <sys:String x:Key="Set_ChooseUpdate">Choose Update Installer…</sys:String>
+    <sys:String x:Key="Set_OpenUpdateBackups">Open Update Backups</sys:String>
+    <sys:String x:Key="Set_UpdateProtection">How your data is protected</sys:String>
+    <sys:String x:Key="Set_UpdateProtectionHelp">Store data is kept outside the installation folder. Updates replace program files only. Every update started here first creates and validates a recovery backup, which is retained after a successful update.</sys:String>
+    <sys:String x:Key="Set_DataFolder">Live data folder</sys:String>
+    <sys:String x:Key="Set_UpdateBackupFolder">Update recovery folder</sys:String>
     <sys:String x:Key="Set_About">About</sys:String>
     <sys:String x:Key="Set_OfflineAbout">Local-first point of sale. Sales, inventory, users, reports, configuration, and backups remain on this computer.</sys:String>
 

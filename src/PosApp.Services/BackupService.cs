@@ -44,31 +44,34 @@ public class BackupService : IBackupService
         });
     }
 
-    public async Task StageRestoreAsync(string backupPath)
+    public async Task ValidateBackupAsync(string backupPath)
     {
         if (!File.Exists(backupPath))
             throw new FileNotFoundException("Backup file not found.", backupPath);
 
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-            {
-                DataSource = Path.GetFullPath(backupPath),
-                Mode = SqliteOpenMode.ReadOnly
-            }.ToString());
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = "PRAGMA quick_check;";
-            var result = (await command.ExecuteScalarAsync())?.ToString();
-            if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("The selected file is not a healthy SQLite backup.");
+            DataSource = Path.GetFullPath(backupPath),
+            Mode = SqliteOpenMode.ReadOnly
+        }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA quick_check;";
+        var result = (await command.ExecuteScalarAsync())?.ToString();
+        if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The selected file is not a healthy SQLite backup.");
 
-            command.CommandText =
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' " +
-                "AND name IN ('Users', 'Products', 'Sales', 'Settings');";
-            var requiredTables = Convert.ToInt32(await command.ExecuteScalarAsync());
-            if (requiredTables != 4)
-                throw new InvalidOperationException("The selected file is not a PosApp database backup.");
-        }
+        command.CommandText =
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' " +
+            "AND name IN ('Users', 'Products', 'Sales', 'Settings');";
+        var requiredTables = Convert.ToInt32(await command.ExecuteScalarAsync());
+        if (requiredTables != 4)
+            throw new InvalidOperationException("The selected file is not a PosApp database backup.");
+    }
+
+    public async Task StageRestoreAsync(string backupPath)
+    {
+        await ValidateBackupAsync(backupPath);
 
         File.Copy(backupPath, DbPathResolver.PendingRestorePath(), overwrite: true);
     }

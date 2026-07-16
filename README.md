@@ -4,7 +4,7 @@ A feature-rich, **local-only** Point of Sale desktop application for Windows, bu
 
 ## Offline Boundary
 
-Version 1.3.0 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
+Version 1.3.2 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, safe updates, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
 
 This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
 
@@ -22,10 +22,10 @@ This is an original POS implementation inspired by the publicly known feature se
 | **Reports & Dashboard** | Management dashboard with monthly/today KPIs, daily sales, top products, hourly activity, payment breakdown, plus detailed date-range reports |
 | **Taxes & Discounts** | Per-product tax rate, reusable offline promotions with codes/dates/use limits, and percentage or fixed line discounts at the register |
 | **Management workspace** | Slide-over terminal menu, role-aware back-office navigation, documents/sales, products, price workflow, stock, purchases, customers/suppliers, reporting, promotions, users/security, payment/tax/company settings |
-| **Settings** | Sectioned General, Order & Payment, Products, Documents, Weighing Scale, Customer Display, Email/offline boundary, Print, Database, and About workflow; live English/বাংলা and Light/Dark switching |
+| **Settings** | Sectioned General, Order & Payment, Products, Documents, Weighing Scale, Customer Display, Email/offline boundary, Print, Database, Update & Recovery, and About workflow; live English/বাংলা and Light/Dark switching |
 | **Receipt Printer** | ESC/POS thermal printer via raw spooler (58/80mm) AND fallback Windows PrintDocument path for any printer |
 | **Hardware**        | Barcode scanner (HID keyboard + serial), cash drawer (serial DTR pulse + printer DK port), weighing scale (serial) — all gracefully degrade to "no-op" if absent |
-| **Data Safety**     | Consistent SQLite backups on startup/exit, manual backup, retention control, validated staged restore, and automatic pre-restore safety copy |
+| **Data Safety**     | Consistent SQLite backups on startup/exit, manual backup, retention control, validated staged restore, automatic pre-restore safety copy, and pre-migration safe-update snapshots |
 
 ## Tech Stack
 
@@ -102,7 +102,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-1.3.0-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-1.3.2-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -113,23 +113,34 @@ The output is `artifacts\installer\PosApp-1.3.0-Setup.exe`. The branded wizard p
 
 The installer contains the self-contained offline app and does not download components during installation. Uninstalling removes program files and shortcuts but intentionally leaves the local database under `%LOCALAPPDATA%\PosApp` so business data is not silently deleted.
 
+### Safe Offline Update
+
+1. Download or copy a newer trusted `PosApp-<version>-Setup.exe` onto the POS computer.
+2. In PosApp, open **Settings → Update & recovery → Choose Update Installer**.
+3. PosApp verifies that the file is a newer local PosApp setup package, calculates its SHA-256 digest, and asks for confirmation.
+4. Before Setup opens, PosApp creates a SQLite snapshot under `%LOCALAPPDATA%\PosApp\Backups\Updates` and runs `PRAGMA quick_check` plus PosApp table validation against it.
+5. Setup upgrades only the program files under `Program Files\PosApp`; the live database stays under the Windows user profile.
+6. On the first successful launch, PosApp records the completed update and keeps the recovery backup. If startup fails, the error dialog shows the backup path so the previous app version can be reinstalled and the backup restored from **Settings → Database**.
+
+This protection also runs before database migration when a newer installer is launched directly or a portable `PosApp.exe` is replaced. The updater does not contact a server. Package metadata and the recorded hash detect accidental or post-selection changes, but unsigned builds still must come from a release source you trust.
+
 ## CI / GitHub Actions
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v1.3.0`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v1.3.2`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.3.0
-git push origin v1.3.0
+git tag v1.3.2
+git push origin v1.3.2
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.3.0`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.3.2`.
 
 ## Configuration
 
@@ -142,6 +153,7 @@ All settings persist in the SQLite database and are editable from the in-app **S
 - **Language**: English (default) or বাংলা (Bengali) — switches live
 - **Theme**: Light / Dark
 - **Data safety**: automatic backups on startup and/or exit, retention count, manual backup, validated restore, and backup-folder access
+- **Update and recovery**: newer local installer selection, version/hash validation, pre-update database verification, recovery backup location, and last-update status
 
 You can also edit hardware defaults by deleting the `store:config` row in the `Settings` table (the app re-creates it with defaults on next run).
 
@@ -182,7 +194,7 @@ This project is provided as-is for your personal/commercial use. The architectur
 
 **Build fails on `dotnet restore`** — make sure you have the .NET 8 SDK installed: `dotnet --version` should report `8.x.x`.
 
-**Database upgrade errors** — do not delete the database. Copy `%LOCALAPPDATA%\PosApp\posapp.db` to a safe location, review `%LOCALAPPDATA%\PosApp\posapp.log`, and use **Settings → Data Safety & Backups → Restore** if you have a known-good backup. Version 1.1 upgrades older databases in place.
+**Database upgrade errors** — do not delete the database. Review `%LOCALAPPDATA%\PosApp\posapp.log`; update recovery copies are under `%LOCALAPPDATA%\PosApp\Backups\Updates`. Reinstall the previous PosApp version if necessary, then use **Settings → Database → Restore** with the newest `posapp-before-update-*.db` or `posapp-before-startup-*.db` file.
 
 **Receipt doesn't print** — in Settings, ensure the printer name matches exactly what's shown in `Control Panel → Devices and Printers`. Try the **Test Print** button.
 

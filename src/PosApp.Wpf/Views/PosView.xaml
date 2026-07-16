@@ -149,13 +149,13 @@
                           Background="{DynamicResource BackgroundBrush}">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="{DynamicResource POS_ProductName}"
-                                            Binding="{Binding ProductName}" Width="*"/>
+                                            Binding="{Binding ProductName, Mode=OneWay}" Width="*"/>
                         <DataGridTextColumn Header="{DynamicResource POS_Quantity}"
-                                            Binding="{Binding Quantity, StringFormat=0.###}" Width="120"/>
+                                            Binding="{Binding Quantity, Mode=OneWay, StringFormat=0.###}" Width="120"/>
                         <DataGridTextColumn Header="{DynamicResource POS_Price}"
-                                            Binding="{Binding UnitPrice, StringFormat={}{0:0.00}}" Width="135"/>
+                                            Binding="{Binding UnitPrice, Mode=OneWay, StringFormat={}{0:0.00}}" Width="135"/>
                         <DataGridTextColumn Header="{DynamicResource POS_Amount}"
-                                            Binding="{Binding LineTotal, StringFormat={}{0:0.00}}" Width="150"/>
+                                            Binding="{Binding LineTotal, Mode=OneWay, StringFormat={}{0:0.00}}" Width="150"/>
                     </DataGrid.Columns>
                 </DataGrid>
 
@@ -165,7 +165,7 @@
                         <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Collapsed"/>
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsCartEmpty}" Value="True">
+                                <DataTrigger Binding="{Binding IsCartEmpty, Mode=OneWay}" Value="True">
                                     <Setter Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -188,9 +188,9 @@
                         <ColumnDefinition Width="350"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SaleContextDisplay}" FontSize="15" FontWeight="SemiBold"
+                        <TextBlock Text="{Binding SaleContextDisplay, Mode=OneWay}" FontSize="15" FontWeight="SemiBold"
                                    Foreground="{DynamicResource TextDarkBrush}"/>
-                        <TextBlock Text="{Binding NoteDisplay}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"
+                        <TextBlock Text="{Binding NoteDisplay, Mode=OneWay}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource TextMutedBrush}"/>
                     </StackPanel>
                     <Grid Grid.Column="1">
@@ -205,17 +205,17 @@
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource POS_Subtotal}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,2"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Subtotal, StringFormat={}{0:0.00}}"
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Subtotal, Mode=OneWay, StringFormat={}{0:0.00}}"
                                    Foreground="{DynamicResource TextDarkBrush}" Margin="20,2,0,2"/>
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="{DynamicResource POS_TaxDiscount}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,2"/>
                         <TextBlock Grid.Row="1" Grid.Column="1" Margin="20,2,0,2"
                                    Foreground="{DynamicResource TextDarkBrush}">
-                            <Run Text="{Binding TaxTotal, StringFormat={}{0:0.00}}"/><Run Text=" / -"/><Run Text="{Binding DiscountTotal, StringFormat={}{0:0.00}}"/>
+                            <Run Text="{Binding TaxTotal, Mode=OneWay, StringFormat={}{0:0.00}}"/><Run Text=" / -"/><Run Text="{Binding DiscountTotal, Mode=OneWay, StringFormat={}{0:0.00}}"/>
                         </TextBlock>
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource POS_Total}"
                                    FontSize="21" FontWeight="Bold" Foreground="{DynamicResource TextDarkBrush}" Margin="0,8,0,0"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Total, StringFormat={}{0:0.00}}"
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Total, Mode=OneWay, StringFormat={}{0:0.00}}"
                                    FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PrimaryBrush}"
                                    Margin="20,8,0,0"/>
                     </Grid>
@@ -242,7 +242,7 @@
                     <StackPanel>
                         <TextBlock Text="{DynamicResource POS_Receipt}" Foreground="White"
                                    FontSize="23" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding CustomerDisplay}" Foreground="#CBD5E1" Margin="0,4,0,0"/>
+                        <TextBlock Text="{Binding CustomerDisplay, Mode=OneWay}" Foreground="#CBD5E1" Margin="0,4,0,0"/>
                     </StackPanel>
                     <Button Grid.Column="1" Content="{DynamicResource POS_Menu}" Style="{StaticResource CommandTile}"
                             Width="76" Height="48" Click="Management_Click"/>
@@ -297,8 +297,8 @@
                     </Grid.RowDefinitions>
                     <Border Grid.Row="0" Margin="3" Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="12">
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="{Binding ServiceTypeDisplay}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
-                            <TextBlock Text="{Binding ActiveSaleDisplay}" Foreground="#94A3B8" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding ServiceTypeDisplay, Mode=OneWay}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
+                            <TextBlock Text="{Binding ActiveSaleDisplay, Mode=OneWay}" Foreground="#94A3B8" Margin="0,5,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                     <Button Grid.Row="1" Style="{StaticResource DangerTile}" Click="VoidOrder_Click">

@@ -55,7 +55,21 @@ public interface IBackupService
 {
     string BackupFolder { get; }
     Task<string> CreateBackupAsync(string? destinationPath = null, int? retentionCount = null);
+    Task ValidateBackupAsync(string backupPath);
     Task StageRestoreAsync(string backupPath);
+}
+
+public interface IUpdateService
+{
+    string CurrentVersion { get; }
+    string DataFolder { get; }
+    string UpdateBackupFolder { get; }
+    Task<SafeUpdateRecord?> EnsurePreMigrationBackupAsync();
+    Task<SafeUpdatePackageInfo> InspectInstallerAsync(string installerPath);
+    Task<SafeUpdateLaunchResult> PrepareAndLaunchAsync(string installerPath);
+    Task<SafeUpdateRecord?> GetPendingUpdateAsync();
+    Task<SafeUpdateRecord?> GetLastUpdateAsync();
+    Task<SafeUpdateRecord?> MarkStartupSuccessfulAsync();
 }
 
 public interface ISaleService

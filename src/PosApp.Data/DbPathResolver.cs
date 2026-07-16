@@ -31,6 +31,26 @@ public static class DbPathResolver
         return folder;
     }
 
+    public static string UpdateFolder()
+    {
+        var folder = Path.Combine(AppFolder(), "Updates");
+        Directory.CreateDirectory(folder);
+        return folder;
+    }
+
+    public static string UpdateBackupFolder()
+    {
+        var folder = Path.Combine(BackupFolder(), "Updates");
+        Directory.CreateDirectory(folder);
+        return folder;
+    }
+
+    public static string PendingUpdateRecordPath() => Path.Combine(UpdateFolder(), "update-pending.json");
+
+    public static string LastUpdateRecordPath() => Path.Combine(UpdateFolder(), "update-last.json");
+
+    public static string LastSuccessfulVersionPath() => Path.Combine(UpdateFolder(), "last-successful-version.txt");
+
     public static string PendingRestorePath() => Path.Combine(AppFolder(), "posapp.restore-pending.db");
 
     /// <summary>

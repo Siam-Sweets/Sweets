@@ -123,6 +123,14 @@ public partial class App : Application
             Services = services.BuildServiceProvider();
             Log("DI container built.");
 
+            // Protect upgrades started either inside PosApp or by directly
+            // running a newer installer/portable executable. This snapshot is
+            // completed before EF is allowed to change the database schema.
+            var preMigrationBackup = await Services.GetRequiredService<IUpdateService>()
+                .EnsurePreMigrationBackupAsync();
+            if (preMigrationBackup != null)
+                Log($"Pre-migration safety backup ready: {preMigrationBackup.BackupPath}");
+
             // Initialize DB with explicit error handling
             using (var scope = Services.CreateScope())
             {
@@ -191,15 +199,53 @@ public partial class App : Application
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             login.Show();
             _startupCompleted = true;
+            try
+            {
+                // Do not clear update recovery state until the complete normal
+                // startup path, including setup, settings, language and login UI,
+                // has succeeded.
+                var completedUpdate = await Services.GetRequiredService<IUpdateService>()
+                    .MarkStartupSuccessfulAsync();
+                if (completedUpdate != null)
+                    Log($"Safe update result: {completedUpdate.State}; " +
+                        $"{completedUpdate.FromVersion} -> {completedUpdate.RunningVersion}; " +
+                        $"recovery backup: {completedUpdate.BackupPath}");
+            }
+            catch (Exception updateStatusError)
+            {
+                // The app and database are healthy. Retain the pending record
+                // and continue rather than blocking sales over status metadata.
+                Log($"Could not finalize safe update status: {updateStatusError}");
+            }
             Log("Login window shown. Startup complete.");
         }
         catch (Exception ex)
         {
             StartupError = ex.ToString();
             Log($"FATAL DURING STARTUP: {ex}");
+            var updateRecovery = string.Empty;
+            try
+            {
+                var updateService = Services?.GetService<IUpdateService>();
+                var pendingUpdate = updateService == null
+                    ? null
+                    : await updateService.GetPendingUpdateAsync();
+                if (pendingUpdate != null && File.Exists(pendingUpdate.BackupPath))
+                {
+                    updateRecovery =
+                        $"\n\nYour data was backed up before the update and has not been deleted.\n" +
+                        $"Recovery backup:\n{pendingUpdate.BackupPath}\n\n" +
+                        "You can reinstall the previous PosApp version and restore this file from Settings > Database.";
+                    Log($"Pending update recovery backup retained: {pendingUpdate.BackupPath}");
+                }
+            }
+            catch (Exception recoveryError)
+            {
+                Log($"Could not read update recovery information: {recoveryError}");
+            }
             MessageBox.Show(
                 $"PosApp failed to start.\n\nError: {ex.Message}\n\n" +
-                $"Full details were written to:\n{LogFilePath}",
+                $"Full details were written to:\n{LogFilePath}{updateRecovery}",
                 "PosApp - Startup Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -227,6 +273,7 @@ public partial class App : Application
         services.AddTransient<IRegisterService, RegisterService>();
         services.AddTransient<ICatalogTransferService, CatalogTransferService>();
         services.AddSingleton<IBackupService, BackupService>();
+        services.AddSingleton<IUpdateService, SafeUpdateService>();
 
         // Hardware drivers fail safely when a configured device is unavailable.
         services.AddSingleton<IReceiptPrinter>(sp =>

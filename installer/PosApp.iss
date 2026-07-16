@@ -1,9 +1,9 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.3.0"
+  #define MyAppVersion "1.3.2"
 #endif
 
 #ifndef MyAppNumericVersion
-  #define MyAppNumericVersion "1.3.0.0"
+  #define MyAppNumericVersion "1.3.2.0"
 #endif
 
 #ifndef MyAppSourceDir
@@ -24,6 +24,12 @@ AppCopyright=Copyright (C) 2026 {#MyAppPublisher}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
+UsePreviousAppDir=yes
+UsePreviousGroup=yes
+UsePreviousTasks=yes
+UsePreviousLanguage=yes
+CreateUninstallRegKey=yes
+Uninstallable=yes
 LicenseFile=LICENSE.txt
 OutputDir=..\artifacts\installer
 OutputBaseFilename=PosApp-{#MyAppVersion}-Setup
@@ -46,6 +52,9 @@ SolidCompression=yes
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
+; Business data is intentionally stored under %LOCALAPPDATA%\PosApp and is
+; never installed into or deleted from {app}. Keeping the AppId stable makes
+; this installer an in-place program-file upgrade without touching store data.
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} offline installer
 VersionInfoProductName={#MyAppName}

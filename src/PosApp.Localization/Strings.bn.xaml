@@ -314,7 +314,7 @@
     <sys:String x:Key="Promo_Active">সক্রিয়</sys:String>
 
     <!-- বিভাগভিত্তিক সেটিংস -->
-    <sys:String x:Key="Set_NewSubtitle">অ্যাপ, অর্ডার, হার্ডওয়্যার, রসিদ, ডেটাবেস, ভাষা ও চেহারার সেটিংস</sys:String>
+    <sys:String x:Key="Set_NewSubtitle">অ্যাপ, অর্ডার, হার্ডওয়্যার, রসিদ, ডেটাবেস, আপডেট, ভাষা ও চেহারার সেটিংস</sys:String>
     <sys:String x:Key="Set_General">সাধারণ</sys:String>
     <sys:String x:Key="Set_OrderPayment">অর্ডার ও পেমেন্ট</sys:String>
     <sys:String x:Key="Set_ApplicationStyle">অ্যাপের চেহারা</sys:String>
@@ -345,6 +345,18 @@
     <sys:String x:Key="Set_OfflineEmail">পসঅ্যাপ অফলাইন থাকায় ইমেইল পাঠানো বন্ধ। রসিদ স্থানীয়ভাবে প্রিন্ট বা রপ্তানি করা যাবে।</sys:String>
     <sys:String x:Key="Set_Print">প্রিন্ট</sys:String>
     <sys:String x:Key="Set_Database">ডেটাবেস</sys:String>
+    <sys:String x:Key="Set_Update">আপডেট ও পুনরুদ্ধার</sys:String>
+    <sys:String x:Key="Set_SafeUpdate">নিরাপদ অফলাইন আপডেট</sys:String>
+    <sys:String x:Key="Set_SafeUpdateHelp">এই কম্পিউটারে সংরক্ষিত নতুন PosApp সেটআপ ইনস্টলার বেছে নিন। PosApp পণ্য ও সংস্করণ যাচাই করে, SHA-256 হ্যাশ সংরক্ষণ করে, সুস্থ ডেটাবেস স্ন্যাপশট তৈরি করে এবং তারপর সেটআপ চালু করে।</sys:String>
+    <sys:String x:Key="Set_CurrentVersion">বর্তমান সংস্করণ</sys:String>
+    <sys:String x:Key="Set_UpdateStatus">আপডেটের অবস্থা</sys:String>
+    <sys:String x:Key="Set_SelectedInstaller">নির্বাচিত ইনস্টলার</sys:String>
+    <sys:String x:Key="Set_ChooseUpdate">আপডেট ইনস্টলার বেছে নিন…</sys:String>
+    <sys:String x:Key="Set_OpenUpdateBackups">আপডেট ব্যাকআপ খুলুন</sys:String>
+    <sys:String x:Key="Set_UpdateProtection">আপনার ডেটা যেভাবে সুরক্ষিত থাকে</sys:String>
+    <sys:String x:Key="Set_UpdateProtectionHelp">স্টোরের ডেটা ইনস্টলেশন ফোল্ডারের বাইরে থাকে। আপডেট শুধু প্রোগ্রাম ফাইল বদলায়। এখান থেকে প্রতিটি আপডেটের আগে যাচাইকৃত পুনরুদ্ধার ব্যাকআপ তৈরি হয় এবং সফল আপডেটের পরও তা রাখা হয়।</sys:String>
+    <sys:String x:Key="Set_DataFolder">লাইভ ডেটা ফোল্ডার</sys:String>
+    <sys:String x:Key="Set_UpdateBackupFolder">আপডেট পুনরুদ্ধার ফোল্ডার</sys:String>
     <sys:String x:Key="Set_About">পরিচিতি</sys:String>
     <sys:String x:Key="Set_OfflineAbout">স্থানীয় পয়েন্ট অফ সেল। বিক্রয়, ইনভেন্টরি, ব্যবহারকারী, রিপোর্ট, কনফিগারেশন ও ব্যাকআপ এই কম্পিউটারেই থাকে।</sys:String>
 

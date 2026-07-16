@@ -212,8 +212,46 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="{DynamicResource Set_Update}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_SafeUpdate}" Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Set_SafeUpdateHelp}" Style="{StaticResource Muted}"
+                                           TextWrapping="Wrap" Margin="0,6,0,18"/>
+                                <TextBlock Text="{DynamicResource Set_CurrentVersion}" Style="{StaticResource Muted}"/>
+                                <TextBlock x:Name="CurrentVersionText" FontSize="22" FontWeight="Bold" Margin="0,3,0,14"/>
+                                <TextBlock Text="{DynamicResource Set_UpdateStatus}" Style="{StaticResource Muted}"/>
+                                <TextBlock x:Name="UpdateStatusText" TextWrapping="Wrap" Margin="0,4,0,14"/>
+                                <TextBlock Text="{DynamicResource Set_SelectedInstaller}" Style="{StaticResource Muted}"/>
+                                <TextBlock x:Name="SelectedInstallerText" TextWrapping="Wrap" Margin="0,4,0,16"/>
+                                <WrapPanel>
+                                    <Button Content="{DynamicResource Set_ChooseUpdate}" Style="{StaticResource PrimaryButton}"
+                                            Click="SelectUpdate_Click" Padding="18,10" Margin="0,0,8,8"/>
+                                    <Button Content="{DynamicResource Set_OpenUpdateBackups}" Style="{StaticResource OutlineButton}"
+                                            Click="OpenUpdateBackups_Click" Padding="18,10" Margin="0,0,8,8"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Set_UpdateProtection}" Style="{StaticResource Heading3}"/>
+                                <TextBlock Text="{DynamicResource Set_UpdateProtectionHelp}" Style="{StaticResource Muted}"
+                                           TextWrapping="Wrap" Margin="0,7,0,14"/>
+                                <TextBlock Text="{DynamicResource Set_DataFolder}" Style="{StaticResource Muted}"/>
+                                <TextBlock x:Name="UpdateDataFolderText" TextWrapping="Wrap" Margin="0,3,0,12"/>
+                                <TextBlock Text="{DynamicResource Set_UpdateBackupFolder}" Style="{StaticResource Muted}"/>
+                                <TextBlock x:Name="UpdateBackupFolderText" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="{DynamicResource Set_About}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><Image Source="/PosApp;component/Assets/PosAppLogo.png" Width="72" Height="72" HorizontalAlignment="Left"/><TextBlock Text="PosApp" FontSize="26" FontWeight="Bold" Margin="0,12,0,0"/><TextBlock Text="Version 1.3.0" Style="{StaticResource Muted}" Margin="0,4,0,0"/><TextBlock Text="{DynamicResource Set_OfflineAbout}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,14,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><Image Source="/PosApp;component/Assets/PosAppLogo.png" Width="72" Height="72" HorizontalAlignment="Left"/><TextBlock Text="PosApp" FontSize="26" FontWeight="Bold" Margin="0,12,0,0"/><TextBlock x:Name="AboutVersionText" Style="{StaticResource Muted}" Margin="0,4,0,0"/><TextBlock Text="{DynamicResource Set_OfflineAbout}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,14,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
             </TabItem>
         </TabControl>
 

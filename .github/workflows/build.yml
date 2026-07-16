@@ -86,7 +86,9 @@ jobs:
           4. Complete the one-time store and administrator setup, then sign in
              with the administrator username and PIN you selected.
 
-          To remove: just delete PosApp.exe and the %LOCALAPPDATA%\PosApp folder.
+          To remove only the program: delete PosApp.exe. Business data remains in
+          %LOCALAPPDATA%\PosApp. Delete that data folder only after making a backup
+          and only when you intentionally want to erase the store database.
           "@ | Out-File -FilePath "$stage/INSTALL.txt" -Encoding utf8
 
       - name: Zip portable package

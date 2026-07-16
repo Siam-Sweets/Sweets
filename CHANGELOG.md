@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.2 — Safe offline updates and automatic upgrade recovery
+
+- Added **Settings → Update & recovery** for selecting a newer local PosApp setup installer without adding any online update dependency.
+- Validates the setup filename, Windows executable header, PosApp product metadata, and newer version; records a SHA-256 digest and prevents a changed package from launching.
+- Creates and health-checks a complete SQLite snapshot before the installer starts, then retains the recovery backup after a successful update.
+- Detects direct installer and portable-EXE version changes and creates a verified pre-migration backup before EF Core can modify the database schema.
+- Records pending, completed, cancelled/not-applied, and failed update status with installer logs and recovery paths.
+- Makes the installer explicitly reuse the existing application folder, Start Menu group, shortcut choices, and language while keeping `%LOCALAPPDATA%\PosApp` outside uninstall/update scope.
+
+## 1.3.1 — Receipt totals binding fix
+
+- Fixed the POS startup crash caused by WPF attempting to write into the calculated, read-only `DiscountTotal` property.
+- Made all calculated receipt totals and other read-only receipt display bindings explicitly one-way to prevent equivalent write-back failures.
+
 ## 1.3.0 — Receipt-first register and management workspace
 
 - Rebuilt the POS as a full-screen, receipt-first register with a compact command rail and stable product-search overlay.

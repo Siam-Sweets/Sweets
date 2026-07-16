@@ -112,6 +112,47 @@ public class StoreSettings
     public bool SelectBusinessDayOnStartup { get; set; } = false;
 }
 
+/// <summary>Validated metadata for a locally selected PosApp setup package.</summary>
+public sealed class SafeUpdatePackageInfo
+{
+    public string InstallerPath { get; init; } = string.Empty;
+    public string FileName { get; init; } = string.Empty;
+    public string ProductName { get; init; } = string.Empty;
+    public string CurrentVersion { get; init; } = string.Empty;
+    public string TargetVersion { get; init; } = string.Empty;
+    public string Sha256 { get; init; } = string.Empty;
+    public long SizeBytes { get; init; }
+    public bool IsValid { get; init; }
+    public string ValidationMessage { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Durable recovery information written before an updater is launched. The
+/// pre-update backup is intentionally retained after a successful upgrade.
+/// </summary>
+public sealed class SafeUpdateRecord
+{
+    public string State { get; set; } = "Prepared";
+    public string FromVersion { get; set; } = string.Empty;
+    public string TargetVersion { get; set; } = string.Empty;
+    public string? RunningVersion { get; set; }
+    public string InstallerPath { get; set; } = string.Empty;
+    public string InstallerSha256 { get; set; } = string.Empty;
+    public string BackupPath { get; set; } = string.Empty;
+    public string DatabasePath { get; set; } = string.Empty;
+    public string? InstallerLogPath { get; set; }
+    public int? InstallerProcessId { get; set; }
+    public DateTime PreparedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public string? FailureMessage { get; set; }
+}
+
+public sealed class SafeUpdateLaunchResult
+{
+    public SafeUpdatePackageInfo Package { get; init; } = new();
+    public SafeUpdateRecord Record { get; init; } = new();
+}
+
 /// <summary>Information collected by the local first-run setup wizard.</summary>
 public class InitialSetupRequest
 {
