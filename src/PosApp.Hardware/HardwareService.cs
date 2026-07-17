@@ -32,7 +32,7 @@ public class HardwareService : IHardwareService
 
     public Task<bool> OpenCashDrawerAsync() => _drawer.OpenAsync();
 
-    public Task<bool> IsScaleConnected() => Task.FromResult(_scale.IsConnected);
+    public Task<bool> IsScaleConnected() => _scale.ConnectAsync();
 
     public Task<decimal?> ReadScaleAsync() => _scale.ReadWeightAsync();
 

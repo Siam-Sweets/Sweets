@@ -244,29 +244,41 @@ public partial class PosView : UserControl, IRefreshable
         if (dialog.ShowDialog() == true) vm.SetQuantity(line, dialog.Value);
     }
 
-    private void NewSale_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not PosViewModel vm) return;
-        if (vm.CartLines.Count > 0 && MessageBox.Show(
-                "Start a new sale and clear the current receipt?", "New Sale",
-                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        vm.ClearCart();
-        BarcodeBox.Clear();
-        BarcodeBox.Focus();
-    }
-
     private async void Checkout_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is PosViewModel vm) await vm.CheckoutAsync();
-        BarcodeBox.Focus();
+        await OpenPaymentAsync();
     }
 
+    private async Task OpenPaymentAsync()
+    {
+        if (DataContext is PosViewModel vm)
+            await vm.CheckoutAsync();
+
+        BarcodeBox.Focus();
+    }
 
     private async void PosView_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (DataContext is not PosViewModel vm) return;
 
-        switch (e.Key)
+        // WPF can expose F10 as Key.System because Windows reserves it for
+        // keyboard menu activation. Resolve the effective key so the POS
+        // payment shortcut works consistently on physical and on-screen
+        // keyboards.
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Consume recognized shortcuts before awaiting any asynchronous work.
+        // Setting Handled after an await is too late: the routed event may have
+        // already continued and Windows can enter menu mode instead of opening
+        // the payment dialog.
+        if (key is not (Key.F2 or Key.F3 or Key.F4 or Key.F7 or Key.F9 or Key.F10 or Key.Delete))
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        switch (key)
         {
             case Key.F2:
                 Discount_Click(sender, e);
@@ -280,23 +292,16 @@ public partial class PosView : UserControl, IRefreshable
             case Key.F7:
                 await vm.ShowSuspendedAsync();
                 break;
-            case Key.F8:
-                NewSale_Click(sender, e);
-                break;
             case Key.F9:
                 await vm.SuspendAsync();
                 break;
             case Key.F10:
-                await vm.CheckoutAsync();
-                BarcodeBox.Focus();
+                await OpenPaymentAsync();
                 break;
             case Key.Delete:
                 DeleteLine_Click(sender, e);
                 break;
-            default:
-                return;
         }
-        e.Handled = true;
     }
 
     private async void Suspend_Click(object sender, RoutedEventArgs e)
@@ -316,7 +321,7 @@ public partial class PosView : UserControl, IRefreshable
 
     private async void Weigh_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is PosViewModel vm) await vm.WeighLastAsync();
+        if (DataContext is PosViewModel vm) await vm.WeighAsync(SelectedLine);
     }
 
     private async void CashDrawer_Click(object sender, RoutedEventArgs e)
@@ -691,19 +696,61 @@ public class PosViewModel : ViewModelBase
         }
     }
 
-    public async Task WeighLastAsync()
+    public async Task WeighAsync(SaleDraftLine? preferredLine = null)
     {
-        var last = CartLines.LastOrDefault(l => l.IsWeighted);
-        if (last == null)
+        // Suspended-sale rows do not persist the catalog-only IsWeighted flag.
+        // Refresh it from the current product catalog before deciding that the
+        // cart contains no weighted products. This also repairs receipt lines
+        // created from a stale product list after the flag was changed.
+        await RefreshWeightedFlagsFromCatalogAsync();
+
+        var target = preferredLine?.IsWeighted == true
+            ? preferredLine
+            : CartLines.LastOrDefault(line => line.IsWeighted);
+
+        if (target == null)
         {
             MessageBox.Show("Add a weighted product first, then press Weigh.", "Weigh",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var w = await _hardware.ReadScaleAsync();
-        if (!w.HasValue) { MessageBox.Show("Scale not responding.", "Weigh", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
-        last.Quantity = w.Value;
+
+        var weight = await _hardware.ReadScaleAsync();
+        if (!weight.HasValue || weight.Value <= 0m)
+        {
+            MessageBox.Show("Scale not responding or returned an invalid weight.", "Weigh",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        target.Quantity = weight.Value;
         RecalcTotals();
+    }
+
+    private async Task<HashSet<int>> GetWeightedProductIdsAsync()
+    {
+        await _productLoadGate.WaitAsync();
+        try
+        {
+            var products = await _inventory.SearchProductsAsync(null);
+            return products
+                .Where(product => product.IsWeighted)
+                .Select(product => product.Id)
+                .ToHashSet();
+        }
+        finally
+        {
+            _productLoadGate.Release();
+        }
+    }
+
+    private async Task RefreshWeightedFlagsFromCatalogAsync()
+    {
+        if (CartLines.Count == 0) return;
+
+        var weightedProductIds = await GetWeightedProductIdsAsync();
+        foreach (var line in CartLines)
+            line.IsWeighted = weightedProductIds.Contains(line.ProductId);
     }
 
     public async Task CheckoutAsync()
@@ -826,6 +873,8 @@ public class PosViewModel : ViewModelBase
         var dlg = new SuspendedSalesDialog(suspended, _sales) { Owner = Application.Current.MainWindow };
         if (dlg.ShowDialog() == true && dlg.SelectedSale != null)
         {
+            var weightedProductIds = await GetWeightedProductIdsAsync();
+
             ClearCart();
             foreach (var item in dlg.SelectedSale.Items)
             {
@@ -838,7 +887,8 @@ public class PosViewModel : ViewModelBase
                     UnitPrice = item.UnitPrice,
                     TaxRate = item.TaxRate,
                     DiscountAmount = item.DiscountAmount,
-                    DiscountReason = item.DiscountReason
+                    DiscountReason = item.DiscountReason,
+                    IsWeighted = weightedProductIds.Contains(item.ProductId)
                 });
             }
             _suspendedSaleId = dlg.SelectedSale.Id;

@@ -1,5 +1,75 @@
 # Changelog
 
+## 1.3.28 — Customer and supplier contact type selection
+
+- Added a **Customer / Supplier** selector when creating a new contact.
+- Combined active customers and suppliers in the **Customers & Suppliers** directory with a visible Type column.
+- Added supplier creation and editing directly from the shared contact page while retaining customer purchase history actions.
+- Supplier removal now safely deactivates the record so existing purchase documents remain intact.
+- Updated customer and supplier saves to modify tracked database records by key, preventing EF Core duplicate-tracking errors during repeated edits.
+- Updated English and Bengali contact-page labels for the combined workflow.
+
+## 1.3.27 — Functional user active-status control
+
+- Replaced the read-only Active column with an interactive checkbox in **Users & Roles**.
+- Saves activation and deactivation changes immediately to the local database.
+- Keeps the grid state synchronized with an already tracked user entity to avoid stale EF Core values.
+- Prevents deactivating the currently signed-in account.
+- Prevents deactivating the last active administrator account.
+- Restores the previous checkbox state and displays an error if persistence fails.
+
+## 1.3.26 — Weighted products in recalled sales
+
+- Fixed recalled/suspended receipt lines losing their weighted-product status.
+- Rehydrates each recalled line from the current product catalog so the **Weigh** command recognizes products marked as weighted.
+- Rechecks the catalog before showing the “Add a weighted product first” message, repairing carts created from stale product data.
+- Uses the selected weighted receipt line when available, otherwise the most recently added weighted line.
+- Rejects zero or negative scale readings instead of replacing the receipt quantity with an invalid value.
+
+## 1.3.25 — Simplified receipt controls
+
+- Removed the redundant **New sale** tile from the POS register command rail.
+- Removed the F8 new-sale shortcut and its confirmation/clear-cart handler.
+- Expanded **Delete** and **Quantity** evenly across the top command row.
+- Kept receipt clearing available through the existing void/cancel workflow rather than exposing a duplicate action.
+- Removed the unused English and Bengali `POS_NewSale` localization resources.
+
+## 1.3.24 — Reliable F10 payment shortcut
+
+- Fixed the F10 payment shortcut being ignored when WPF reports it as the Windows system/menu key.
+- Normalized `Key.System` to its effective `SystemKey`, allowing F10 to open the payment dialog consistently.
+- Marks recognized POS shortcuts handled before asynchronous operations begin, preventing Windows menu-mode processing from consuming F10.
+- Routed both the Payment tile and F10 shortcut through the same checkout method so their behavior remains identical.
+
+## 1.3.23 — Consolidated product search access
+
+- Removed the duplicate **Search** command tile from the POS register action rail.
+- Kept the top **Find products (F3)** control as the single visible product-search entry point.
+- Preserved the F3 keyboard shortcut and the existing product-search overlay, filters, barcode/SKU matching, and scanner workflow.
+- Expanded the remaining Delete, Quantity, and New sale tiles evenly across the released row.
+
+## 1.3.22 — Consolidated register overflow navigation
+
+- Removed the redundant **Menu** button from the register receipt header.
+- Kept **More** as the single entry point for the same management and overflow actions.
+- Simplified the receipt-header layout and removed the now-unused English and Bengali `POS_Menu` localization resources.
+
+## 1.3.21 — Global Enter-key form navigation
+
+- Added application-wide Enter-to-next-field navigation for single-line text boxes, password/PIN fields, editable and standard ComboBoxes, and DatePicker text inputs.
+- Registered the behavior once at the Window level so it also applies to dynamically created forms and dialogs without duplicating handlers in every view.
+- Preserved existing controls that intentionally handle Enter, including barcode/product search, cashier PIN submission, payment completion, and other specialized workflows.
+- Preserved Enter-generated line breaks in multiline notes, addresses, comments, and description fields.
+- Uses the existing WPF tab order, disabled state, and focusability rules when selecting the next control.
+
+## 1.3.20 — Functional weighing-scale connection
+
+- Replaced the permanently registered `NullWeighingScale` with a configurable serial-scale driver that uses the COM port saved in Settings.
+- Added an explicit serial-port connection probe, so **Test scale** now opens the configured port instead of always reporting that the scale is unavailable.
+- Applied scale-port changes immediately without requiring an application restart.
+- Added serialized connection/read access and safe port disposal when the configured COM port changes or the device disconnects.
+- Improved serial commands, timeout handling, invariant weight parsing, and Test Scale diagnostics.
+
 ## 1.3.19 — Reliable rolling GitHub releases
 
 - Fixed rolling `dev-build` publication failing with HTTP 404 after the tag was force-moved while its previous release record was still active.

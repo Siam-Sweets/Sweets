@@ -278,31 +278,19 @@
                 </Grid.RowDefinitions>
 
                 <Grid Grid.Row="0" Margin="8,8,8,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
                     <StackPanel>
                         <TextBlock Text="{DynamicResource POS_Receipt}" Foreground="{DynamicResource CommandTextBrush}"
                                    FontSize="23" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding CustomerDisplay, Mode=OneWay}" Foreground="{DynamicResource CommandMutedBrush}" Margin="0,4,0,0"/>
                     </StackPanel>
-                    <Button Grid.Column="1" Content="{DynamicResource POS_Menu}" Style="{StaticResource CommandTile}"
-                            Width="76" Height="48" Click="Management_Click"/>
                 </Grid>
 
-                <UniformGrid Grid.Row="1" Columns="4">
+                <UniformGrid Grid.Row="1" Columns="2">
                     <Button Style="{StaticResource CommandTile}" Click="DeleteLine_Click">
                         <StackPanel><TextBlock Text="Del" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource Common_Delete}" Style="{StaticResource CommandCaption}"/></StackPanel>
                     </Button>
-                    <Button Style="{StaticResource CommandTile}" Click="SearchProducts_Click">
-                        <StackPanel><TextBlock Text="F3" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource Common_Search}" Style="{StaticResource CommandCaption}"/></StackPanel>
-                    </Button>
                     <Button Style="{StaticResource CommandTile}" Click="Quantity_Click">
                         <StackPanel><TextBlock Text="F4" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Quantity}" Style="{StaticResource CommandCaption}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource CommandTile}" Click="NewSale_Click">
-                        <StackPanel><TextBlock Text="F8" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_NewSale}" Style="{StaticResource CommandCaption}"/></StackPanel>
                     </Button>
                 </UniformGrid>
 

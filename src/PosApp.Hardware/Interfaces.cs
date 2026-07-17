@@ -39,6 +39,7 @@ public interface IBarcodeScanner
 public interface IWeighingScale
 {
     bool IsConnected { get; }
+    Task<bool> ConnectAsync();
     Task<decimal?> ReadWeightAsync();
     Task<bool> ZeroAsync();
 }

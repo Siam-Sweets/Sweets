@@ -135,9 +135,12 @@
     <sys:String x:Key="Inv_Adjustment">Adjustment</sys:String>
 
     <!-- Customers -->
-    <sys:String x:Key="Cust_Title">Customers</sys:String>
-    <sys:String x:Key="Cust_Subtitle">Manage customer contacts and purchase history</sys:String>
-    <sys:String x:Key="Cust_Add">Add Customer</sys:String>
+    <sys:String x:Key="Cust_Title">Customers &amp; Suppliers</sys:String>
+    <sys:String x:Key="Cust_Subtitle">Manage customer and supplier contacts, sales, and purchase records</sys:String>
+    <sys:String x:Key="Cust_Add">Add Customer or Supplier</sys:String>
+    <sys:String x:Key="Cust_Type">Type</sys:String>
+    <sys:String x:Key="Cust_Customer">Customer</sys:String>
+    <sys:String x:Key="Cust_Supplier">Supplier</sys:String>
     <sys:String x:Key="Cust_Name">Name</sys:String>
     <sys:String x:Key="Cust_Phone">Phone</sys:String>
     <sys:String x:Key="Cust_Email">Email</sys:String>
@@ -267,8 +270,6 @@
     <sys:String x:Key="POS_NoItemsHint">Scan a barcode or press F3 to find a product</sys:String>
     <sys:String x:Key="POS_TaxDiscount">Tax / Discount</sys:String>
     <sys:String x:Key="POS_Receipt">Current receipt</sys:String>
-    <sys:String x:Key="POS_Menu">Menu</sys:String>
-    <sys:String x:Key="POS_NewSale">New sale</sys:String>
     <sys:String x:Key="POS_CashDrawer">Cash drawer</sys:String>
     <sys:String x:Key="POS_ServiceType">Service type</sys:String>
     <sys:String x:Key="POS_Comment">Comment</sys:String>

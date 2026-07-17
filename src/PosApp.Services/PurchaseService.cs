@@ -37,14 +37,22 @@ public class PurchaseService : IPurchaseService
             supplier.CreatedAt = DateTime.UtcNow;
             supplier.IsActive = true;
             _db.Suppliers.Add(supplier);
+            await _db.SaveChangesAsync();
+            return supplier;
         }
-        else
-        {
-            supplier.UpdatedAt = DateTime.UtcNow;
-            _db.Suppliers.Update(supplier);
-        }
+
+        var tracked = await _db.Suppliers.FindAsync(supplier.Id)
+            ?? throw new InvalidOperationException("Supplier not found.");
+        tracked.Name = supplier.Name;
+        tracked.Phone = supplier.Phone;
+        tracked.Email = supplier.Email;
+        tracked.Address = supplier.Address;
+        tracked.TaxId = supplier.TaxId;
+        tracked.Notes = supplier.Notes;
+        tracked.IsActive = supplier.IsActive;
+        tracked.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return supplier;
+        return tracked;
     }
 
     public async Task DeactivateSupplierAsync(int supplierId)

@@ -14,6 +14,7 @@ using PosApp.Hardware.Devices;
 using PosApp.Hardware.Printers;
 using PosApp.Localization;
 using PosApp.Services;
+using PosApp.Wpf.Helpers;
 using PosApp.Wpf.Views;
 
 namespace PosApp.Wpf;
@@ -33,6 +34,8 @@ public partial class App : Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+
+        EnterKeyNavigation.Register();
     }
 
     /// <summary>Path to a log file in %LOCALAPPDATA%\PosApp\posapp.log</summary>
@@ -286,7 +289,9 @@ public partial class App : Application
         });
         services.AddSingleton<ICashDrawer, SerialCashDrawer>();
         services.AddSingleton<IBarcodeScanner, NullBarcodeScanner>();
-        services.AddSingleton<IWeighingScale, NullWeighingScale>();
+        services.AddSingleton<IWeighingScale>(_ =>
+            new ConfigurableWeighingScale(() =>
+                Task.FromResult<string?>(StoreSettings.ScalePort)));
         services.AddSingleton<IHardwareService, HardwareService>();
 
         // Views

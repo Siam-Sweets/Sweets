@@ -206,7 +206,7 @@ public partial class SettingsView : UserControl, IRefreshable
             throw new InvalidOperationException("Receipt width must be a whole number from 40 to 120 mm.");
         _current.ReceiptWidth = receiptWidth;
         _current.CashDrawerPort = DrawerPortBox.Text;
-        _current.ScalePort = ScalePortBox.Text;
+        _current.ScalePort = ScalePortBox.Text.Trim();
         _current.PrintReceiptAutomatically = AutoPrintCheckbox.IsChecked ?? true;
         _current.OpenDrawerOnCashSale = OpenDrawerCheckbox.IsChecked ?? true;
         _current.ReceiptPrinterName = PrinterCombo.SelectedItem as string == "(default)" ? "" : PrinterCombo.SelectedItem as string ?? "";
@@ -294,9 +294,29 @@ public partial class SettingsView : UserControl, IRefreshable
         try
         {
             await SaveCurrentSettingsAsync();
+            var configuredPort = _current.ScalePort;
+            if (string.IsNullOrWhiteSpace(configuredPort))
+            {
+                MessageBox.Show("Enter the scale COM port before testing (for example, COM3).",
+                    "Test Scale", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var connected = await _hardware.IsScaleConnected();
-            MessageBox.Show(connected ? "Scale is connected." : "Scale is unavailable. Check the configured port and connection.",
-                "Test Scale", MessageBoxButton.OK, connected ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            if (!connected)
+            {
+                MessageBox.Show(
+                    $"Unable to open scale port {configuredPort}. Confirm the port in Windows Device Manager, close any other program using it, and check the cable and power.",
+                    "Test Scale", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var weight = await _hardware.ReadScaleAsync();
+            MessageBox.Show(weight.HasValue
+                    ? $"Scale connected on {configuredPort}. Current reading: {weight.Value:0.###} kg."
+                    : $"Scale port {configuredPort} opened, but no readable weight was received. Place an item on the scale and confirm that it uses 9600 baud, 8 data bits, no parity, one stop bit, and the R command protocol.",
+                "Test Scale", MessageBoxButton.OK,
+                weight.HasValue ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {

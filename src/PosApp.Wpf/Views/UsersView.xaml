@@ -31,7 +31,17 @@
                     <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="160"/>
                     <DataGridTextColumn Header="Full Name" Binding="{Binding FullName}" Width="200"/>
                     <DataGridTextColumn Header="Role" Binding="{Binding Role, Converter={StaticResource RoleStr}}" Width="120"/>
-                    <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive, Mode=OneWay}" Width="80"/>
+                    <DataGridTemplateColumn Header="Active" Width="80">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsActive, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Tag="{Binding}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Click="Active_Click"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="Last Login" Binding="{Binding LastLoginAt, StringFormat='yyyy-MM-dd HH:mm'}" Width="160"/>
                     <DataGridTemplateColumn Header="Actions" Width="220">
                         <DataGridTemplateColumn.CellTemplate>

@@ -28,18 +28,31 @@ public class CustomerService : ICustomerService
 
     public async Task<Customer> CreateOrUpdateCustomerAsync(Customer customer)
     {
+        if (string.IsNullOrWhiteSpace(customer.Name))
+            throw new InvalidOperationException("Customer name is required.");
+
+        customer.Name = customer.Name.Trim();
         if (customer.Id == 0)
         {
             customer.CreatedAt = DateTime.UtcNow;
             _db.Customers.Add(customer);
+            await _db.SaveChangesAsync();
+            return customer;
         }
-        else
-        {
-            customer.UpdatedAt = DateTime.UtcNow;
-            _db.Customers.Update(customer);
-        }
+
+        var tracked = await _db.Customers.FindAsync(customer.Id)
+            ?? throw new InvalidOperationException("Customer not found.");
+        tracked.Name = customer.Name;
+        tracked.Phone = customer.Phone;
+        tracked.Email = customer.Email;
+        tracked.Address = customer.Address;
+        tracked.TaxId = customer.TaxId;
+        tracked.LoyaltyPoints = customer.LoyaltyPoints;
+        tracked.StoreCredit = customer.StoreCredit;
+        tracked.LoyaltyRate = customer.LoyaltyRate;
+        tracked.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        return customer;
+        return tracked;
     }
 
     public async Task DeleteCustomerAsync(int id)

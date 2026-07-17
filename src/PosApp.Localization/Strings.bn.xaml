@@ -135,9 +135,12 @@
     <sys:String x:Key="Inv_Adjustment">সমন্বয়</sys:String>
 
     <!-- Customers -->
-    <sys:String x:Key="Cust_Title">গ্রাহক</sys:String>
-    <sys:String x:Key="Cust_Subtitle">গ্রাহকের যোগাযোগের তথ্য ও ক্রয় ইতিহাস পরিচালনা করুন</sys:String>
-    <sys:String x:Key="Cust_Add">গ্রাহক যোগ</sys:String>
+    <sys:String x:Key="Cust_Title">গ্রাহক ও সরবরাহকারী</sys:String>
+    <sys:String x:Key="Cust_Subtitle">গ্রাহক ও সরবরাহকারীর যোগাযোগ, বিক্রয় এবং ক্রয়ের তথ্য পরিচালনা করুন</sys:String>
+    <sys:String x:Key="Cust_Add">গ্রাহক বা সরবরাহকারী যোগ</sys:String>
+    <sys:String x:Key="Cust_Type">ধরন</sys:String>
+    <sys:String x:Key="Cust_Customer">গ্রাহক</sys:String>
+    <sys:String x:Key="Cust_Supplier">সরবরাহকারী</sys:String>
     <sys:String x:Key="Cust_Name">নাম</sys:String>
     <sys:String x:Key="Cust_Phone">ফোন</sys:String>
     <sys:String x:Key="Cust_Email">ইমেইল</sys:String>
@@ -267,8 +270,6 @@
     <sys:String x:Key="POS_NoItemsHint">বারকোড স্ক্যান করুন বা F3 চেপে পণ্য খুঁজুন</sys:String>
     <sys:String x:Key="POS_TaxDiscount">ট্যাক্স / ছাড়</sys:String>
     <sys:String x:Key="POS_Receipt">বর্তমান রসিদ</sys:String>
-    <sys:String x:Key="POS_Menu">মেনু</sys:String>
-    <sys:String x:Key="POS_NewSale">নতুন বিক্রয়</sys:String>
     <sys:String x:Key="POS_CashDrawer">ক্যাশ ড্রয়ার</sys:String>
     <sys:String x:Key="POS_ServiceType">সেবার ধরন</sys:String>
     <sys:String x:Key="POS_Comment">মন্তব্য</sys:String>

@@ -56,6 +56,75 @@ public partial class UsersView : UserControl, IRefreshable
         }
     }
 
+
+    private async void Active_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox checkBox || checkBox.Tag is not User user)
+            return;
+
+        var requestedState = checkBox.IsChecked == true;
+        var previousState = !requestedState;
+
+        if (!requestedState && user.Id == App.CurrentUser?.Id)
+        {
+            user.IsActive = previousState;
+            checkBox.IsChecked = previousState;
+            MessageBox.Show("You cannot deactivate the account that is currently signed in.",
+                "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (!requestedState && user.Role == UserRole.Admin)
+        {
+            var activeAdminCount = await _db.Users.CountAsync(x => x.Role == UserRole.Admin && x.IsActive);
+            if (activeAdminCount <= 1)
+            {
+                user.IsActive = previousState;
+                checkBox.IsChecked = previousState;
+                MessageBox.Show("At least one active administrator account is required.",
+                    "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
+
+        checkBox.IsEnabled = false;
+        try
+        {
+            var updatedAt = DateTime.UtcNow;
+            var trackedUser = _db.Users.Local.FirstOrDefault(x => x.Id == user.Id);
+
+            if (trackedUser != null)
+            {
+                trackedUser.IsActive = requestedState;
+                trackedUser.UpdatedAt = updatedAt;
+                await _db.SaveChangesAsync();
+            }
+            else
+            {
+                var affected = await _db.Users
+                    .Where(x => x.Id == user.Id)
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.IsActive, requestedState)
+                        .SetProperty(x => x.UpdatedAt, updatedAt));
+
+                if (affected != 1)
+                    throw new InvalidOperationException("The selected user could not be found.");
+            }
+
+            user.IsActive = requestedState;
+        }
+        catch (Exception ex)
+        {
+            user.IsActive = previousState;
+            checkBox.IsChecked = previousState;
+            MessageBox.Show(ex.Message, "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            checkBox.IsEnabled = true;
+        }
+    }
+
     private async void ResetPin_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is User u)
