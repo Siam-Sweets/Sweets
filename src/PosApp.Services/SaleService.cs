@@ -24,9 +24,11 @@ public class SaleService : ISaleService
 
     public async Task<string> GenerateReceiptNumberAsync()
     {
-        var date = DateTime.Today;
-        var prefix = date.ToString("yyyyMMdd");
-        var count = await _db.Sales.CountAsync(s => s.SaleDate.Date == date);
+        var localDate = DateTime.Today;
+        var fromUtc = LocalDateBoundaryToUtc(localDate);
+        var toUtc = LocalDateBoundaryToUtc(localDate.AddDays(1));
+        var prefix = localDate.ToString("yyyyMMdd");
+        var count = await _db.Sales.CountAsync(s => s.SaleDate >= fromUtc && s.SaleDate < toUtc);
         return $"{prefix}-{(count + 1):D4}";
     }
 
@@ -250,13 +252,31 @@ public class SaleService : ISaleService
 
     public async Task<IReadOnlyList<Sale>> GetSalesAsync(DateTime from, DateTime to, SaleStatus? status = null)
     {
+        var fromDate = from.Date;
+        var toDate = to.Date;
+        if (toDate < fromDate)
+            throw new ArgumentException("The end date cannot be earlier than the start date.", nameof(to));
+
+        // SaleDate is persisted in UTC. DatePicker values represent local calendar
+        // dates, so translate the inclusive local range into [UTC start, UTC end).
+        // Using an exclusive next-day boundary includes every transaction on the
+        // selected To date instead of including only midnight.
+        var fromUtc = LocalDateBoundaryToUtc(fromDate);
+        var toUtcExclusive = LocalDateBoundaryToUtc(toDate.AddDays(1));
+
         var q = _db.Sales.AsNoTracking()
             .Include(s => s.Items)
             .Include(s => s.Customer)
             .Include(s => s.User)
-            .Where(s => s.SaleDate >= from && s.SaleDate <= to);
+            .Where(s => s.SaleDate >= fromUtc && s.SaleDate < toUtcExclusive);
         if (status.HasValue) q = q.Where(s => s.Status == status.Value);
         return await q.OrderByDescending(s => s.SaleDate).ToListAsync();
+    }
+
+    private static DateTime LocalDateBoundaryToUtc(DateTime localDate)
+    {
+        var unspecifiedLocal = DateTime.SpecifyKind(localDate.Date, DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(unspecifiedLocal, TimeZoneInfo.Local);
     }
 
     public async Task<Sale> VoidSaleAsync(int saleId, int userId)

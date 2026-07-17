@@ -20,18 +20,22 @@ public class InventoryService : IInventoryService
         var q = _db.Products.AsNoTracking().Include(p => p.Category).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
         {
-            var term = query.Trim();
+            var term = query.Trim().ToLowerInvariant();
             q = searchField switch
             {
-                ProductSearchField.Name => q.Where(p => p.Name.Contains(term)),
+                // Product-name lookup behaves like a normal catalog search:
+                // it ignores letter casing and matches only from the beginning
+                // of the name, so "ba" finds "Banana" but not "25bag".
+                ProductSearchField.Name => q.Where(p =>
+                    p.Name.ToLower().StartsWith(term)),
                 ProductSearchField.Code => q.Where(p =>
-                    p.Sku != null && p.Sku.Contains(term)),
+                    p.Sku != null && p.Sku.ToLower().Contains(term)),
                 ProductSearchField.Barcode => q.Where(p =>
-                    p.Barcode != null && p.Barcode.Contains(term)),
+                    p.Barcode != null && p.Barcode.ToLower().Contains(term)),
                 _ => q.Where(p =>
-                    p.Name.Contains(term) ||
-                    (p.Sku != null && p.Sku.Contains(term)) ||
-                    (p.Barcode != null && p.Barcode.Contains(term)))
+                    p.Name.ToLower().StartsWith(term) ||
+                    (p.Sku != null && p.Sku.ToLower().Contains(term)) ||
+                    (p.Barcode != null && p.Barcode.ToLower().Contains(term)))
             };
         }
         if (categoryId.HasValue) q = q.Where(p => p.CategoryId == categoryId.Value);
@@ -42,41 +46,101 @@ public class InventoryService : IInventoryService
     public async Task<Product?> GetProductBySkuAsync(string sku)
     {
         if (string.IsNullOrWhiteSpace(sku)) return null;
-        var term = sku.Trim();
+        var term = sku.Trim().ToLowerInvariant();
         return await _db.Products.AsNoTracking()
             .Include(p => p.Category)
             .FirstOrDefaultAsync(p =>
-                p.IsActive && (p.Sku == term || p.Barcode == term));
+                p.IsActive &&
+                ((p.Sku != null && p.Sku.ToLower() == term) ||
+                 (p.Barcode != null && p.Barcode.ToLower() == term)));
     }
 
     public async Task<Product> CreateOrUpdateProductAsync(Product product)
     {
+        ArgumentNullException.ThrowIfNull(product);
+
         if (product.Id == 0)
         {
-            product.CreatedAt = DateTime.UtcNow;
-            _db.Products.Add(product);
-            if (product.StockQuantity is > 0)
+            // Never attach the view model's navigation graph. Product rows loaded for
+            // the catalog contain no-tracking Category instances, and attaching those
+            // instances can conflict with categories already tracked by this long-lived
+            // desktop DbContext.
+            var created = new Product();
+            CopyEditableProductValues(product, created);
+            created.CreatedAt = DateTime.UtcNow;
+            created.UpdatedAt = null;
+            _db.Products.Add(created);
+
+            if (created.StockQuantity is > 0)
             {
                 _db.StockTransactions.Add(new StockTransaction
                 {
-                    // The database generates the product key. Using the navigation
-                    // property lets EF propagate that key to the stock transaction.
-                    Product = product,
+                    // The database generates the product key. Using the clean tracked
+                    // product lets EF propagate that key to the stock transaction.
+                    Product = created,
                     Type = StockTransactionType.InitialStock,
-                    Quantity = product.StockQuantity.Value,
-                    BalanceAfter = product.StockQuantity.Value,
-                    UnitCost = product.CostPrice,
+                    Quantity = created.StockQuantity.Value,
+                    BalanceAfter = created.StockQuantity.Value,
+                    UnitCost = created.CostPrice,
                     Note = "Initial stock on product create"
                 });
             }
+
+            await _db.SaveChangesAsync();
+            product.Id = created.Id;
+            product.CreatedAt = created.CreatedAt;
+            product.UpdatedAt = created.UpdatedAt;
+            return product;
         }
-        else
-        {
-            product.UpdatedAt = DateTime.UtcNow;
-            _db.Products.Update(product);
-        }
+
+        // Reuse EF's one tracked instance for this key instead of calling Update on
+        // the detached UI object. This prevents duplicate Product and Category keys
+        // from being attached when weighted status or other fields are changed.
+        var tracked = _db.Products.Local.FirstOrDefault(existing => existing.Id == product.Id);
+        tracked ??= await _db.Products.FirstOrDefaultAsync(existing => existing.Id == product.Id);
+        if (tracked is null)
+            throw new InvalidOperationException("Product not found");
+
+        if (tracked.Category?.Id != product.CategoryId)
+            tracked.Category = null;
+
+        CopyEditableProductValues(product, tracked);
+        tracked.UpdatedAt = DateTime.UtcNow;
+
         await _db.SaveChangesAsync();
+        product.UpdatedAt = tracked.UpdatedAt;
         return product;
+    }
+
+    public async Task SetProductWeightedAsync(int productId, bool isWeighted)
+    {
+        var tracked = _db.Products.Local.FirstOrDefault(product => product.Id == productId);
+        tracked ??= await _db.Products.FirstOrDefaultAsync(product => product.Id == productId);
+        if (tracked is null)
+            throw new InvalidOperationException("Product not found");
+
+        tracked.IsWeighted = isWeighted;
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+    }
+
+    private static void CopyEditableProductValues(Product source, Product target)
+    {
+        target.Name = source.Name;
+        target.Description = source.Description;
+        target.Sku = source.Sku;
+        target.Barcode = source.Barcode;
+        target.CategoryId = source.CategoryId;
+        target.Price = source.Price;
+        target.CostPrice = source.CostPrice;
+        target.TaxRate = source.TaxRate;
+        target.Unit = source.Unit;
+        target.StockQuantity = source.StockQuantity;
+        target.LowStockThreshold = source.LowStockThreshold;
+        target.ImagePath = source.ImagePath;
+        target.IsWeighted = source.IsWeighted;
+        target.IsActive = source.IsActive;
+        target.AllowDiscount = source.AllowDiscount;
     }
 
     public async Task AdjustStockAsync(int productId, decimal delta, StockTransactionType type,

@@ -273,7 +273,6 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="108"/>
-                    <RowDefinition Height="68"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="174"/>
                 </Grid.RowDefinitions>
@@ -307,19 +306,8 @@
                     </Button>
                 </UniformGrid>
 
-                <UniformGrid Grid.Row="2" Columns="3">
-                    <Button Style="{StaticResource PaymentTile}" Click="QuickCash_Click">
-                        <StackPanel><TextBlock Text="F12" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource Pay_Cash}" Style="{StaticResource CommandCaption}"/></StackPanel>
-                    </Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Card_Click">
-                        <TextBlock Text="{DynamicResource Pay_Card}" Style="{StaticResource CommandCaption}"/>
-                    </Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Check_Click">
-                        <TextBlock Text="{DynamicResource POS_Check}" Style="{StaticResource CommandCaption}"/>
-                    </Button>
-                </UniformGrid>
 
-                <UniformGrid Grid.Row="3" Columns="4" Rows="3">
+                <UniformGrid Grid.Row="2" Columns="4" Rows="3">
                     <Button Style="{StaticResource CommandTile}" Click="CashDrawer_Click"><TextBlock Text="{DynamicResource POS_CashDrawer}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="ServiceType_Click"><TextBlock Text="{DynamicResource POS_ServiceType}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Discount_Click"><StackPanel><TextBlock Text="F2" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Discount}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
@@ -334,7 +322,7 @@
                     <Button Style="{StaticResource CommandTile}" Click="Management_Click"><TextBlock Text="{DynamicResource POS_More}" Style="{StaticResource CommandCaption}"/></Button>
                 </UniformGrid>
 
-                <Grid Grid.Row="4">
+                <Grid Grid.Row="3">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="68"/>
@@ -411,8 +399,22 @@
                         <TextBlock Text="{DynamicResource POS_SearchFilterHint}"
                                    Margin="16,0,0,0" VerticalAlignment="Center"
                                    Foreground="{DynamicResource TextMutedBrush}" FontSize="15"
-                                   IsHitTestVisible="False"
-                                   Visibility="{Binding SearchPlaceholderVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                   IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Text, ElementName=ProductSearchBox}" Value=""/>
+                                                <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=ProductSearchBox}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Grid>
 
                     <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

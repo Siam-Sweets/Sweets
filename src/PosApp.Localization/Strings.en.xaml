@@ -65,8 +65,6 @@
     <sys:String x:Key="POS_Tax">Tax</sys:String>
     <sys:String x:Key="POS_Total">Total</sys:String>
     <sys:String x:Key="POS_Checkout">Checkout</sys:String>
-    <sys:String x:Key="POS_QuickCash">Cash (F12)</sys:String>
-    <sys:String x:Key="POS_QuickCashHint">Complete immediately with exact cash</sys:String>
     <sys:String x:Key="POS_Payment">Payment (F10)</sys:String>
     <sys:String x:Key="POS_PaymentHint">Open payment, change, and split tender</sys:String>
     <sys:String x:Key="POS_Suspend">Suspend</sys:String>
@@ -271,7 +269,6 @@
     <sys:String x:Key="POS_Receipt">Current receipt</sys:String>
     <sys:String x:Key="POS_Menu">Menu</sys:String>
     <sys:String x:Key="POS_NewSale">New sale</sys:String>
-    <sys:String x:Key="POS_Check">Check</sys:String>
     <sys:String x:Key="POS_CashDrawer">Cash drawer</sys:String>
     <sys:String x:Key="POS_ServiceType">Service type</sys:String>
     <sys:String x:Key="POS_Comment">Comment</sys:String>
@@ -290,12 +287,7 @@
     <sys:String x:Key="Shell_Dashboard">Dashboard</sys:String>
     <sys:String x:Key="Shell_Documents">Documents &amp; sales</sys:String>
     <sys:String x:Key="Shell_Stock">Stock</sys:String>
-    <sys:String x:Key="Shell_PriceLists">Price lists</sys:String>
     <sys:String x:Key="Shell_Promotions">Promotions &amp; discounts</sys:String>
-    <sys:String x:Key="Shell_PaymentTypes">Payment types</sys:String>
-    <sys:String x:Key="Shell_Countries">Country &amp; currency</sys:String>
-    <sys:String x:Key="Shell_TaxRates">Tax rates</sys:String>
-    <sys:String x:Key="Shell_MyCompany">My company</sys:String>
     <sys:String x:Key="Shell_CustomersSuppliers">Customers &amp; suppliers</sys:String>
     <sys:String x:Key="Shell_Reporting">Reporting</sys:String>
     <sys:String x:Key="Shell_UsersSecurity">Users &amp; security</sys:String>

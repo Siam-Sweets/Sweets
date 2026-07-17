@@ -261,23 +261,6 @@ public partial class PosView : UserControl, IRefreshable
         BarcodeBox.Focus();
     }
 
-    private async void QuickCash_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is PosViewModel vm) await vm.QuickCashCheckoutAsync();
-        BarcodeBox.Focus();
-    }
-
-    private async void Card_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is PosViewModel vm) await vm.PayExactAsync(PaymentMethod.Card);
-        BarcodeBox.Focus();
-    }
-
-    private async void Check_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is PosViewModel vm) await vm.PayExactAsync(PaymentMethod.BankTransfer);
-        BarcodeBox.Focus();
-    }
 
     private async void PosView_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -305,10 +288,6 @@ public partial class PosView : UserControl, IRefreshable
                 break;
             case Key.F10:
                 await vm.CheckoutAsync();
-                BarcodeBox.Focus();
-                break;
-            case Key.F12:
-                await vm.QuickCashCheckoutAsync();
                 BarcodeBox.Focus();
                 break;
             case Key.Delete:
@@ -435,11 +414,8 @@ public class PosViewModel : ViewModelBase
             // Invalidate an in-flight query immediately. Without this, the old
             // result could repaint the catalog during the debounce interval.
             Interlocked.Increment(ref _productLoadVersion);
-            OnPropertyChanged(nameof(SearchPlaceholderVisible));
         }
     }
-    public bool SearchPlaceholderVisible => string.IsNullOrEmpty(SearchText);
-
     private ProductSearchField _searchField = ProductSearchField.All;
     public ProductSearchField SearchField
     {
@@ -757,33 +733,6 @@ public class PosViewModel : ViewModelBase
         await CompleteCheckoutAsync(draft);
     }
 
-    public async Task QuickCashCheckoutAsync()
-    {
-        if (_checkoutInProgress || CartLines.Count == 0 || App.CurrentUser == null) return;
-        if (!await EnsureRegisterReadyAsync()) return;
-
-        var draft = BuildDraft();
-        draft.AmountTendered = draft.Total;
-        draft.Payments = new List<SalePayment>
-        {
-            new() { Method = PaymentMethod.Cash, Amount = draft.Total }
-        };
-
-        await CompleteCheckoutAsync(draft);
-    }
-
-    public async Task PayExactAsync(PaymentMethod method)
-    {
-        if (_checkoutInProgress || CartLines.Count == 0 || App.CurrentUser == null) return;
-        if (!await EnsureRegisterReadyAsync()) return;
-        var draft = BuildDraft();
-        draft.AmountTendered = draft.Total;
-        draft.Payments = new List<SalePayment>
-        {
-            new() { Method = method, Amount = draft.Total }
-        };
-        await CompleteCheckoutAsync(draft);
-    }
 
     private async Task<bool> EnsureRegisterReadyAsync()
     {

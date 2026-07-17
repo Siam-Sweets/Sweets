@@ -65,8 +65,6 @@
     <sys:String x:Key="POS_Tax">ট্যাক্স</sys:String>
     <sys:String x:Key="POS_Total">মোট</sys:String>
     <sys:String x:Key="POS_Checkout">চেকআউট</sys:String>
-    <sys:String x:Key="POS_QuickCash">নগদ (F12)</sys:String>
-    <sys:String x:Key="POS_QuickCashHint">ঠিক নগদে সঙ্গে সঙ্গে বিক্রয় সম্পন্ন করুন</sys:String>
     <sys:String x:Key="POS_Payment">পেমেন্ট (F10)</sys:String>
     <sys:String x:Key="POS_PaymentHint">পেমেন্ট, খুচরা ও ভাগ করা পেমেন্ট খুলুন</sys:String>
     <sys:String x:Key="POS_Suspend">স্থগিত</sys:String>
@@ -271,7 +269,6 @@
     <sys:String x:Key="POS_Receipt">বর্তমান রসিদ</sys:String>
     <sys:String x:Key="POS_Menu">মেনু</sys:String>
     <sys:String x:Key="POS_NewSale">নতুন বিক্রয়</sys:String>
-    <sys:String x:Key="POS_Check">চেক</sys:String>
     <sys:String x:Key="POS_CashDrawer">ক্যাশ ড্রয়ার</sys:String>
     <sys:String x:Key="POS_ServiceType">সেবার ধরন</sys:String>
     <sys:String x:Key="POS_Comment">মন্তব্য</sys:String>
@@ -290,12 +287,7 @@
     <sys:String x:Key="Shell_Dashboard">ড্যাশবোর্ড</sys:String>
     <sys:String x:Key="Shell_Documents">ডকুমেন্ট ও বিক্রয়</sys:String>
     <sys:String x:Key="Shell_Stock">স্টক</sys:String>
-    <sys:String x:Key="Shell_PriceLists">মূল্য তালিকা</sys:String>
     <sys:String x:Key="Shell_Promotions">প্রমোশন ও ছাড়</sys:String>
-    <sys:String x:Key="Shell_PaymentTypes">পেমেন্টের ধরন</sys:String>
-    <sys:String x:Key="Shell_Countries">দেশ ও মুদ্রা</sys:String>
-    <sys:String x:Key="Shell_TaxRates">ট্যাক্স হার</sys:String>
-    <sys:String x:Key="Shell_MyCompany">আমার প্রতিষ্ঠান</sys:String>
     <sys:String x:Key="Shell_CustomersSuppliers">গ্রাহক ও সরবরাহকারী</sys:String>
     <sys:String x:Key="Shell_Reporting">রিপোর্টিং</sys:String>
     <sys:String x:Key="Shell_UsersSecurity">ব্যবহারকারী ও নিরাপত্তা</sys:String>

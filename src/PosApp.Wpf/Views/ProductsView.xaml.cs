@@ -146,8 +146,8 @@ public partial class ProductsView : UserControl, IRefreshable
         checkBox.IsEnabled = false;
         try
         {
+            await _inventory.SetProductWeightedAsync(product.Id, requestedValue);
             product.IsWeighted = requestedValue;
-            await _inventory.CreateOrUpdateProductAsync(product);
         }
         catch (Exception ex)
         {

@@ -25,7 +25,7 @@ public partial class SalesView : UserControl, IRefreshable
         _hardware = hardware;
         _db = db;
         FromDate.SelectedDate = DateTime.Today.AddDays(-7);
-        ToDate.SelectedDate = DateTime.Today.AddDays(1);
+        ToDate.SelectedDate = DateTime.Today;
     }
 
     public async void Refresh()
@@ -38,8 +38,15 @@ public partial class SalesView : UserControl, IRefreshable
     private async Task LoadAsync()
     {
         var version = ++_loadVersion;
-        var from = FromDate.SelectedDate ?? DateTime.Today.AddDays(-7);
-        var to = ToDate.SelectedDate ?? DateTime.Today.AddDays(1);
+        var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+        var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+
+        if (to < from)
+        {
+            MessageBox.Show("The To date cannot be earlier than the From date.",
+                "Invalid date range", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
 
         SaleStatus? statusFilter = null;
         if (StatusFilter.SelectedItem is ComboBoxItem ci && ci.Tag is string s && Enum.TryParse<SaleStatus>(s, out var st))

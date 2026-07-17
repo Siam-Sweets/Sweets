@@ -21,7 +21,6 @@ public partial class MainWindow : Window
     private readonly SettingsView _settings;
     private readonly PurchasesView _purchases;
     private readonly RegisterView _register;
-    private Button? _activeNav;
     private bool _fullScreen;
 
     public MainWindow(PosView pos, DashboardView dashboard, ProductsView products, PromotionsView promotions,
@@ -57,17 +56,12 @@ public partial class MainWindow : Window
         var admin = user.Role >= UserRole.Admin;
         NavDashboard.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavProducts.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
-        NavPriceLists.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavInventory.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavPurchases.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavCustomers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavPromotions.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavUsers.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
-        NavPaymentTypes.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
-        NavCountries.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
-        NavTaxes.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
-        NavCompany.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
         NavSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
         DrawerManagement.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         DrawerReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
@@ -134,19 +128,25 @@ public partial class MainWindow : Window
             "settings" => NavSettings,
             _ => null
         };
-        if (_activeNav != null) _activeNav.Style = (Style)FindResource("NavButton");
+        ResetNavigationStyles();
         if (newActive != null)
-        {
             newActive.Style = (Style)FindResource("NavButtonActive");
-            _activeNav = newActive;
-        }
-        else
-        {
-            _activeNav = null;
-        }
 
         if (contentChanged && view.IsEnabled && view is IRefreshable refreshable)
             refreshable.Refresh();
+    }
+
+    private void ResetNavigationStyles()
+    {
+        var inactiveStyle = (Style)FindResource("NavButton");
+        foreach (var button in new[]
+                 {
+                     NavDashboard, NavSales, NavProducts, NavInventory, NavPurchases,
+                     NavRegister, NavCustomers, NavReports, NavPromotions, NavUsers, NavSettings
+                 })
+        {
+            button.Style = inactiveStyle;
+        }
     }
 
     public void ToggleManagementDrawer()

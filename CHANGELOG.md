@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.3.18 — Reliable weighted-product updates
+
+- Fixed the EF Core tracking conflict that prevented weighted-product checkboxes from being updated when multiple products shared the same category.
+- Stopped attaching detached product/category graphs from the Products grid to the long-lived application DbContext.
+- Added a field-specific weighted-status update that changes only `IsWeighted` and `UpdatedAt`, avoiding stale stock or pricing overwrites from the grid row.
+- Reused the single tracked product instance for full product edits and copied only editable scalar values before saving.
+- Applied the same safe persistence path to product edits and soft deletion, preventing equivalent duplicate-key tracking failures outside the weighted checkbox.
+
+## 1.3.17 — Consolidated payment workflow
+
+- Removed the direct **Cash**, **Card**, and **Check** payment buttons from the POS home command rail.
+- Removed the F12 exact-cash shortcut so checkout methods are selected only from the F10 payment dialog.
+- Preserved cash, card, and bank-transfer payment handling inside the dedicated payment workflow.
+- Expanded the remaining command area to use the space released by the duplicate payment row.
+
+## 1.3.16 — Exclusive sidebar selection
+
+- Fixed the Dashboard item remaining highlighted when another management page, such as Documents & sales, was selected.
+- Changed every management navigation button to start in the inactive style.
+- Reset all sidebar button styles before applying the active style to the current page, ensuring only one item can appear selected.
+
+## 1.3.15 — Simplified settings navigation
+
+- Removed the duplicate **Payment types**, **Country & currency**, **Tax rates**, and **My company** entries from the management sidebar.
+- Kept all four configuration areas available from the main **Settings** page.
+- Removed obsolete sidebar-only localization resources and role-visibility references.
+
+## 1.3.14 — Simplified product navigation
+
+- Removed the duplicate **Price lists** item from the management sidebar because it opened the same Products workspace.
+- Removed the obsolete role-visibility reference and unused English/Bengali localization keys for that navigation item.
+- Kept **Products** as the single catalog and pricing-management entry point.
+
+## 1.3.13 — Reliable local-date Sales History
+
+- Fixed Sales History returning no or incomplete transactions because UTC sale timestamps were compared directly with local DatePicker values.
+- Converted the inclusive local From/To calendar range into correct UTC boundaries before querying SQLite.
+- Included the complete selected To date by using an exclusive next-day boundary instead of stopping at midnight.
+- Changed the default To date from tomorrow to today and added clear validation for reversed date ranges.
+- Aligned daily receipt-number counting with the same local-business-day UTC boundaries.
+
+## 1.3.12 — Focus-aware product search placeholder
+
+- Hid the product-search placeholder whenever the search field has keyboard focus, preventing the caret from appearing on top of the hint text.
+- Kept the placeholder visible only while the search field is empty and unfocused.
+- Removed the obsolete view-model placeholder visibility property so the behavior is controlled directly by the actual TextBox state.
+
+## 1.3.11 — Predictable product-name search
+
+- Made product-name filtering case-insensitive, so equivalent searches such as `Ban`, `BAN`, and `ban` return the same products.
+- Changed product-name filtering to prefix matching, so `ba` finds names beginning with `ba` without incorrectly matching text buried later in a name such as `25bag`.
+- Applied case-insensitive matching to product-code and barcode filters and to exact scanner/code lookup while preserving their existing identifier behavior.
+
 ## 1.3.10 — DatePicker template build correction
 
 - Fixed WPF XAML compilation error `MC3011` by removing the inaccessible `DatePickerTextBox.Watermark` template binding.
