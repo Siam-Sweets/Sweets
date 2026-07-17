@@ -350,7 +350,7 @@
                                         VerticalAlignment="Center"
                                         IsHitTestVisible="False"
                                         Foreground="{DynamicResource TextMutedBrush}"
-                                        Content="{TemplateBinding Watermark}"
+                                        Content="{DynamicResource Common_SelectDate}"
                                         Visibility="Collapsed"/>
                     </Grid>
                     <ControlTemplate.Triggers>

@@ -6,6 +6,9 @@
     <sys:String x:Key="App_Title">PosApp</sys:String>
     <sys:String x:Key="App_Tagline">Local Point of Sale</sys:String>
 
+    <!-- Common -->
+    <sys:String x:Key="Common_SelectDate">Select date</sys:String>
+
     <!-- Login -->
     <sys:String x:Key="Login_Title">Cashier Login</sys:String>
     <sys:String x:Key="Login_Username">Username</sys:String>

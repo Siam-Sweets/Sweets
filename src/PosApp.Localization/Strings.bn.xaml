@@ -6,6 +6,9 @@
     <sys:String x:Key="App_Title">পসঅ্যাপ</sys:String>
     <sys:String x:Key="App_Tagline">স্থানীয় পয়েন্ট অফ সেল</sys:String>
 
+    <!-- Common -->
+    <sys:String x:Key="Common_SelectDate">তারিখ নির্বাচন করুন</sys:String>
+
     <!-- Login -->
     <sys:String x:Key="Login_Title">ক্যাশিয়ার লগইন</sys:String>
     <sys:String x:Key="Login_Username">ব্যবহারকারী নাম</sys:String>

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.10 — DatePicker template build correction
+
+- Fixed WPF XAML compilation error `MC3011` by removing the inaccessible `DatePickerTextBox.Watermark` template binding.
+- Added a compile-safe localized empty-date placeholder for English and Bengali.
+- Preserved the theme-aware `DatePickerTextBox` layout, text colors, padding, and empty-state visibility behavior.
+
 ## 1.3.9 — Non-failing CI build summary
 
 - Fixed the GitHub Actions summary step so it no longer throws a second `Get-Item` error when an earlier build or publish step fails.
