@@ -4,7 +4,7 @@ A feature-rich, **local-only** Point of Sale desktop application for Windows, bu
 
 ## Offline Boundary
 
-Version 1.3.8 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, safe updates, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
+Version 1.3.9 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, safe updates, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
 
 This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
 
@@ -102,7 +102,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-1.3.8-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-1.3.9-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -129,18 +129,18 @@ This protection also runs before database migration when a newer installer is la
 The workflow at `.github/workflows/build.yml` triggers on:
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v1.3.8`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v1.3.9`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.3.8
-git push origin v1.3.8
+git tag v1.3.9
+git push origin v1.3.9
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.3.8`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.3.9`.
 
 ## Configuration
 

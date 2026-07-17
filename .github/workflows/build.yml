@@ -188,14 +188,44 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Write-Host "## Build Summary"  | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          Write-Host "✅ PosApp.exe built successfully ($([math]::Round((Get-Item './publish/${{ env.APP_NAME }}.exe').Length / 1MB, 2)) MB)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          if (Test-Path './installer-output/${{ env.APP_NAME }}-${{ steps.ver.outputs.version }}-Setup.exe') {
-            Write-Host "✅ Guided Windows installer built successfully" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          $summaryPath = $env:GITHUB_STEP_SUMMARY
+          $exePath = Join-Path $PWD "publish\${{ env.APP_NAME }}.exe"
+          $installerPath = Join-Path $PWD "installer-output\${{ env.APP_NAME }}-${{ steps.ver.outputs.version }}-Setup.exe"
+          $portablePath = Join-Path $PWD "${{ env.APP_NAME }}-portable.zip"
+
+          "## Build Summary" | Out-File -FilePath $summaryPath -Append -Encoding utf8
+
+          if (Test-Path -LiteralPath $exePath -PathType Leaf) {
+            $exe = Get-Item -LiteralPath $exePath
+            $sizeMB = [math]::Round($exe.Length / 1MB, 2)
+            "✅ ${{ env.APP_NAME }}.exe built successfully ($sizeMB MB)" |
+              Out-File -FilePath $summaryPath -Append -Encoding utf8
+          } else {
+            "❌ ${{ env.APP_NAME }}.exe was not created. Review the first failed Build, Publish, or Verify step above." |
+              Out-File -FilePath $summaryPath -Append -Encoding utf8
           }
-          Write-Host "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          Write-Host "### Download the installer or portable exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          Write-Host "Scroll down to the **Artifacts** section at the bottom of this page." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+          if (Test-Path -LiteralPath $portablePath -PathType Leaf) {
+            "✅ Portable ZIP built successfully" |
+              Out-File -FilePath $summaryPath -Append -Encoding utf8
+          } else {
+            "⚠️ Portable ZIP was not created." |
+              Out-File -FilePath $summaryPath -Append -Encoding utf8
+          }
+
+          if (Test-Path -LiteralPath $installerPath -PathType Leaf) {
+            "✅ Guided Windows installer built successfully" |
+              Out-File -FilePath $summaryPath -Append -Encoding utf8
+          } else {
+            "⚠️ Guided Windows installer was not created." |
+              Out-File -FilePath $summaryPath -Append -Encoding utf8
+          }
+
+          "" | Out-File -FilePath $summaryPath -Append -Encoding utf8
+          "### Download the installer or portable exe" |
+            Out-File -FilePath $summaryPath -Append -Encoding utf8
+          "When the build succeeds, scroll down to the **Artifacts** section at the bottom of this page." |
+            Out-File -FilePath $summaryPath -Append -Encoding utf8
 
   release:
     name: Publish GitHub Release

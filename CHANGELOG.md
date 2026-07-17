@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.9 — Non-failing CI build summary
+
+- Fixed the GitHub Actions summary step so it no longer throws a second `Get-Item` error when an earlier build or publish step fails.
+- Checks the executable, portable ZIP, and installer independently before reporting their status.
+- Keeps the summary available on failed runs while directing developers to the original failed step, preserving the actionable error.
+
 ## 1.3.8 — Complete Light-mode overlays
 
 - Replaced the remaining hard-coded black drawer and product-search scrims with theme-aware overlay resources.
