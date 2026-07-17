@@ -6,6 +6,99 @@
     <sys:String x:Key="App_Title">পসঅ্যাপ</sys:String>
     <sys:String x:Key="App_Tagline">স্থানীয় পয়েন্ট অফ সেল</sys:String>
 
+    <!-- Additional localized application UI -->
+    <sys:String x:Key="Common_All">সব</sys:String>
+    <sys:String x:Key="Common_Refresh">রিফ্রেশ</sys:String>
+    <sys:String x:Key="Common_View">দেখুন</sys:String>
+    <sys:String x:Key="Common_Edit">সম্পাদনা</sys:String>
+    <sys:String x:Key="Common_Print">প্রিন্ট</sys:String>
+    <sys:String x:Key="Prod_Subtitle">পণ্যের তালিকা, মূল্য ও শনাক্তকারী পরিচালনা করুন</sys:String>
+    <sys:String x:Key="Prod_ImportCsv">CSV আমদানি</sys:String>
+    <sys:String x:Key="Prod_ExportCsv">CSV রপ্তানি</sys:String>
+    <sys:String x:Key="Prod_SkuOnly">SKU</sys:String>
+    <sys:String x:Key="Prod_Barcode">বারকোড</sys:String>
+    <sys:String x:Key="Prod_WeightedHint">পণ্যটি ওজন অনুযায়ী বিক্রি হবে কি না পরিবর্তন করতে ক্লিক করুন</sys:String>
+    <sys:String x:Key="Inv_Subtitle">স্টক পর্যায়, সমন্বয় ও চলাচলের ইতিহাস পরিচালনা করুন</sys:String>
+    <sys:String x:Key="Inv_Count">ইনভেন্টরি গণনা</sys:String>
+    <sys:String x:Key="Inv_TotalProducts">মোট পণ্য</sys:String>
+    <sys:String x:Key="Inv_StockValue">স্টক মূল্য (খরচ)</sys:String>
+    <sys:String x:Key="Inv_CurrentLevels">বর্তমান স্টক</sys:String>
+    <sys:String x:Key="Inv_Threshold">সীমা</sys:String>
+    <sys:String x:Key="Inv_RecentMovements">সাম্প্রতিক স্টক চলাচল</sys:String>
+    <sys:String x:Key="Inv_CountTitle">শারীরিক ইনভেন্টরি গণনা</sys:String>
+    <sys:String x:Key="Inv_CountSubtitle">শুধু গণনা করা পণ্য লিখুন। সংরক্ষণ করলে সব পার্থক্য একটি নিরীক্ষিত স্টক সমন্বয় হিসেবে যোগ হবে।</sys:String>
+    <sys:String x:Key="Inv_CountSearchHint">পণ্য, SKU বা বারকোড দিয়ে খুঁজুন</sys:String>
+    <sys:String x:Key="Inv_SystemQty">সিস্টেম পরিমাণ</sys:String>
+    <sys:String x:Key="Inv_CountedQty">গণনা করা পরিমাণ</sys:String>
+    <sys:String x:Key="Inv_Difference">পার্থক্য</sys:String>
+    <sys:String x:Key="Inv_CountNote">গণনার নোট / রেফারেন্স</sys:String>
+    <sys:String x:Key="Inv_PostCount">গণনা পোস্ট করুন</sys:String>
+    <sys:String x:Key="Purch_Title">ক্রয় ও সরবরাহকারী</sys:String>
+    <sys:String x:Key="Purch_Subtitle">সরবরাহকারীর ডেলিভারি গ্রহণ, স্টক আপডেট ও স্থানীয় ক্রয় ইতিহাস রাখুন</sys:String>
+    <sys:String x:Key="Purch_AddSupplier">সরবরাহকারী যোগ</sys:String>
+    <sys:String x:Key="Purch_NewPurchase">নতুন ক্রয়</sys:String>
+    <sys:String x:Key="Purch_Documents">ক্রয় ডকুমেন্ট</sys:String>
+    <sys:String x:Key="Purch_Total">ক্রয়ের মোট</sys:String>
+    <sys:String x:Key="Purch_ActiveSuppliers">সক্রিয় সরবরাহকারী</sys:String>
+    <sys:String x:Key="Purch_Posted">পোস্ট করা ক্রয়</sys:String>
+    <sys:String x:Key="Purch_Document">ডকুমেন্ট</sys:String>
+    <sys:String x:Key="Purch_Supplier">সরবরাহকারী</sys:String>
+    <sys:String x:Key="Purch_Reference">রেফারেন্স</sys:String>
+    <sys:String x:Key="Purch_Suppliers">সরবরাহকারী</sys:String>
+    <sys:String x:Key="Purch_SearchSupplier">সরবরাহকারী খুঁজুন</sys:String>
+    <sys:String x:Key="Reg_Title">ক্যাশ রেজিস্টার</sys:String>
+    <sys:String x:Key="Reg_Subtitle">শুরুর নগদ, ক্যাশ ইন/আউট, X রিপোর্ট ও দিনের শেষ বন্ধ পরিচালনা করুন</sys:String>
+    <sys:String x:Key="Reg_NoOpen">কোনো খোলা সেশন নেই</sys:String>
+    <sys:String x:Key="Reg_OpeningCash">শুরুর নগদ</sys:String>
+    <sys:String x:Key="Reg_CashSales">নগদ বিক্রয়</sys:String>
+    <sys:String x:Key="Reg_CashInOut">ক্যাশ ইন / আউট</sys:String>
+    <sys:String x:Key="Reg_ExpectedDrawer">ড্রয়ারে প্রত্যাশিত</sys:String>
+    <sys:String x:Key="Reg_Open">রেজিস্টার খুলুন</sys:String>
+    <sys:String x:Key="Reg_CashIn">ক্যাশ ইন</sys:String>
+    <sys:String x:Key="Reg_CashOut">ক্যাশ আউট</sys:String>
+    <sys:String x:Key="Reg_XReport">X রিপোর্ট</sys:String>
+    <sys:String x:Key="Reg_CloseZ">বন্ধ ও Z রিপোর্ট</sys:String>
+    <sys:String x:Key="Reg_CurrentMovements">বর্তমান সেশনের চলাচল</sys:String>
+    <sys:String x:Key="Reg_Time">সময়</sys:String>
+    <sys:String x:Key="Reg_Reason">কারণ</sys:String>
+    <sys:String x:Key="Reg_Amount">পরিমাণ</sys:String>
+    <sys:String x:Key="Reg_RecentSessions">সাম্প্রতিক রেজিস্টার সেশন (দেখতে ডাবল-ক্লিক করুন)</sys:String>
+    <sys:String x:Key="Reg_Opened">খোলা</sys:String>
+    <sys:String x:Key="Reg_Closed">বন্ধ</sys:String>
+    <sys:String x:Key="Reg_Expected">প্রত্যাশিত</sys:String>
+    <sys:String x:Key="Reg_Variance">পার্থক্য</sys:String>
+    <sys:String x:Key="Rpt_Subtitle">বিক্রয় প্রবণতা, শীর্ষ পণ্য, পেমেন্ট বিভাজন ও বিভাগ বিশ্লেষণ</sys:String>
+    <sys:String x:Key="Rpt_From">থেকে:</sys:String>
+    <sys:String x:Key="Rpt_To">পর্যন্ত:</sys:String>
+    <sys:String x:Key="Rpt_Apply">প্রয়োগ</sys:String>
+    <sys:String x:Key="Rpt_Product">পণ্য</sys:String>
+    <sys:String x:Key="Rpt_Qty">পরিমাণ</sys:String>
+    <sys:String x:Key="Rpt_Revenue">আয়</sys:String>
+    <sys:String x:Key="Rpt_Category">বিভাগ</sys:String>
+    <sys:String x:Key="Rpt_Date">তারিখ</sys:String>
+    <sys:String x:Key="Rpt_Txns">লেনদেন</sys:String>
+    <sys:String x:Key="Rpt_Net">নিট</sys:String>
+    <sys:String x:Key="Rpt_Method">পদ্ধতি</sys:String>
+    <sys:String x:Key="Rpt_Count">সংখ্যা</sys:String>
+    <sys:String x:Key="Rpt_Total">মোট</sys:String>
+    <sys:String x:Key="Sales_Subtitle">পুরোনো লেনদেন দেখুন, ফিল্টার করুন, ফেরত দিন, বাতিল করুন ও পুনরায় প্রিন্ট করুন</sys:String>
+    <sys:String x:Key="Sales_All">সব</sys:String>
+    <sys:String x:Key="Sales_Subtotal">উপমোট</sys:String>
+    <sys:String x:Key="Sales_Discount">ছাড়</sys:String>
+    <sys:String x:Key="Sales_Tax">ট্যাক্স</sys:String>
+    <sys:String x:Key="Sales_Actions">অ্যাকশন</sys:String>
+    <sys:String x:Key="Usr_Subtitle">ভূমিকাভিত্তিক অনুমতিসহ ক্যাশিয়ার, ম্যানেজার ও অ্যাডমিন অ্যাকাউন্ট পরিচালনা করুন</sys:String>
+    <sys:String x:Key="Usr_Edit">সম্পাদনা</sys:String>
+    <sys:String x:Key="Usr_ResetPin">PIN পুনঃসেট</sys:String>
+    <sys:String x:Key="Usr_Delete">মুছুন</sys:String>
+    <sys:String x:Key="Set_CurrencyDecimals">মুদ্রার দশমিক ঘর (০-৪)</sys:String>
+    <sys:String x:Key="Service_Retail">রিটেইল</sys:String>
+    <sys:String x:Key="Service_Takeaway">টেকঅ্যাওয়ে</sys:String>
+    <sys:String x:Key="Service_Delivery">ডেলিভারি</sys:String>
+    <sys:String x:Key="Service_DineIn">ডাইন-ইন</sys:String>
+    <sys:String x:Key="Promo_ActiveHint">প্রমোশন সক্রিয় বা নিষ্ক্রিয় করতে ক্লিক করুন</sys:String>
+    <sys:String x:Key="Login_Footer">© ২০২৬ PosApp - স্থানীয় পয়েন্ট অফ সেল</sys:String>
+
     <!-- Common -->
     <sys:String x:Key="Common_SelectDate">তারিখ নির্বাচন করুন</sys:String>
 
@@ -73,7 +166,6 @@
     <sys:String x:Key="POS_AddDiscount">ছাড় যোগ করুন</sys:String>
     <sys:String x:Key="POS_SelectCustomer">গ্রাহক নির্বাচন</sys:String>
     <sys:String x:Key="POS_WalkIn">ওয়াক-ইন গ্রাহক</sys:String>
-    <sys:String x:Key="POS_Weigh">ওজন</sys:String>
     <sys:String x:Key="POS_Stock">স্টক</sys:String>
 
     <!-- Payment -->
@@ -87,6 +179,9 @@
     <sys:String x:Key="Pay_Mobile">মোবাইল ওয়ালেট</sys:String>
     <sys:String x:Key="Pay_Bank">ব্যাংক ট্রান্সফার</sys:String>
     <sys:String x:Key="Pay_StoreCredit">স্টোর ক্রেডিট</sys:String>
+    <sys:String x:Key="Pay_Coupon">কুপন</sys:String>
+    <sys:String x:Key="Pay_Reference">লেনদেন রেফারেন্স</sys:String>
+    <sys:String x:Key="Pay_ReferenceRequired">কার্ড, ওয়ালেট বা ব্যাংক লেনদেনের রেফারেন্স লিখুন।</sys:String>
     <sys:String x:Key="Pay_Complete">বিক্রয় সম্পূর্ণ</sys:String>
     <sys:String x:Key="Pay_Cancel">বাতিল</sys:String>
     <sys:String x:Key="Pay_QuickCash">দ্রুত নগদ</sys:String>
@@ -156,6 +251,10 @@
     <sys:String x:Key="Sales_Cashier">ক্যাশিয়ার</sys:String>
     <sys:String x:Key="Sales_Total">মোট</sys:String>
     <sys:String x:Key="Sales_Status">অবস্থা</sys:String>
+    <sys:String x:Key="Sales_StatusCompleted">সম্পন্ন</sys:String>
+    <sys:String x:Key="Sales_StatusSuspended">স্থগিত</sys:String>
+    <sys:String x:Key="Sales_StatusVoided">বাতিল</sys:String>
+    <sys:String x:Key="Sales_StatusRefunded">ফেরত</sys:String>
     <sys:String x:Key="Sales_Items">পণ্য</sys:String>
     <sys:String x:Key="Sales_View">দেখুন</sys:String>
     <sys:String x:Key="Sales_Refund">ফেরত</sys:String>
@@ -211,12 +310,8 @@
     <sys:String x:Key="Set_Country">দেশ</sys:String>
     <sys:String x:Key="Set_CurrencyCode">মুদ্রা কোড</sys:String>
     <sys:String x:Key="Set_Footer">রসিদ ফুটার</sys:String>
-    <sys:String x:Key="Set_Hardware">হার্ডওয়্যার</sys:String>
     <sys:String x:Key="Set_Printer">রসিদ প্রিন্টার</sys:String>
-    <sys:String x:Key="Set_DrawerPort">ক্যাশ ড্রয়ার পোর্ট</sys:String>
-    <sys:String x:Key="Set_ScalePort">স্কেল পোর্ট</sys:String>
     <sys:String x:Key="Set_AutoPrint">অটো-প্রিন্ট রসিদ</sys:String>
-    <sys:String x:Key="Set_OpenDrawer">নগদ বিক্রয়ে ড্রয়ার খোলা</sys:String>
     <sys:String x:Key="Set_Language">ভাষা</sys:String>
     <sys:String x:Key="Set_Theme">থিম</sys:String>
     <sys:String x:Key="Set_Light">হালকা</sys:String>
@@ -225,7 +320,6 @@
     <sys:String x:Key="Set_Bengali">বাংলা</sys:String>
     <sys:String x:Key="Set_Save">সেটিংস সংরক্ষণ</sys:String>
     <sys:String x:Key="Set_TestPrint">টেস্ট প্রিন্ট</sys:String>
-    <sys:String x:Key="Set_TestDrawer">টেস্ট ড্রয়ার</sys:String>
     <sys:String x:Key="Set_DataSafety">ডেটা সুরক্ষা ও ব্যাকআপ</sys:String>
     <sys:String x:Key="Set_BackupDescription">ব্যাকআপ এই কম্পিউটারেই থাকে। রিস্টোর নিরাপদে প্রস্তুত হয়ে পরবর্তীবার চালুর সময় প্রয়োগ হয়।</sys:String>
     <sys:String x:Key="Set_AutoBackup">স্বয়ংক্রিয় স্থানীয় ব্যাকআপ চালু করুন</sys:String>
@@ -270,7 +364,6 @@
     <sys:String x:Key="POS_NoItemsHint">বারকোড স্ক্যান করুন বা F3 চেপে পণ্য খুঁজুন</sys:String>
     <sys:String x:Key="POS_TaxDiscount">ট্যাক্স / ছাড়</sys:String>
     <sys:String x:Key="POS_Receipt">বর্তমান রসিদ</sys:String>
-    <sys:String x:Key="POS_CashDrawer">ক্যাশ ড্রয়ার</sys:String>
     <sys:String x:Key="POS_ServiceType">সেবার ধরন</sys:String>
     <sys:String x:Key="POS_Comment">মন্তব্য</sys:String>
     <sys:String x:Key="POS_Customer">গ্রাহক</sys:String>
@@ -352,10 +445,6 @@
     <sys:String x:Key="Set_Documents">ডকুমেন্ট</sys:String>
     <sys:String x:Key="Set_Receipt">রসিদ</sys:String>
     <sys:String x:Key="Set_ReceiptWidth">কাগজের প্রস্থ (মিমি)</sys:String>
-    <sys:String x:Key="Set_WeighingScale">ওজন মাপার স্কেল</sys:String>
-    <sys:String x:Key="Set_TestScale">স্কেল পরীক্ষা</sys:String>
-    <sys:String x:Key="Set_CustomerDisplay">গ্রাহক ডিসপ্লে</sys:String>
-    <sys:String x:Key="Set_CustomerDisplayHelp">স্থানীয়ভাবে সংযুক্ত দ্বিতীয় স্ক্রিনের জন্য গ্রাহক ডিসপ্লে প্রস্তুত। কোনো ক্লাউড সংযোগ ব্যবহৃত হয় না।</sys:String>
     <sys:String x:Key="Set_EmailSection">ইমেইল</sys:String>
     <sys:String x:Key="Set_OfflineEmail">পসঅ্যাপ অফলাইন থাকায় ইমেইল পাঠানো বন্ধ। রসিদ স্থানীয়ভাবে প্রিন্ট বা রপ্তানি করা যাবে।</sys:String>
     <sys:String x:Key="Set_Print">প্রিন্ট</sys:String>
@@ -389,5 +478,7 @@
     <sys:String x:Key="Common_Error">ত্রুটি</sys:String>
     <sys:String x:Key="Common_Success">সফল</sys:String>
     <sys:String x:Key="Common_Actions">অ্যাকশন</sys:String>
+    <sys:String x:Key="Common_Deactivate">নিষ্ক্রিয় করুন</sys:String>
+    <sys:String x:Key="Common_Restore">পুনরুদ্ধার</sys:String>
 
 </ResourceDictionary>

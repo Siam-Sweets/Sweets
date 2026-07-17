@@ -375,7 +375,7 @@ jobs:
           - Users and roles (Cashier / Manager / Admin)
           - Reports and dashboard
           - Bilingual EN + বাংলা UI with Light and Dark themes
-          - ESC/POS thermal printer, cash drawer, and weighing scale drivers
+          - ESC/POS receipt-printer support and reliable single-click checkboxes
           - Safe local updates with verified pre-update database backups
           - Local SQLite database (no cloud, no runtime internet)
 

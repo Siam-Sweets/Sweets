@@ -119,7 +119,7 @@ public static class DbSeeder
             db.Discounts.AddRange(
                 new Discount { Name = "5% Off", Type = DiscountType.Percentage, Value = 5m, Code = "SAVE5", IsActive = true },
                 new Discount { Name = "Senior Citizen", Type = DiscountType.Percentage, Value = 10m, IsActive = true },
-                new Discount { Name = "৳ 50 Off", Type = DiscountType.FixedAmount, Value = 50m, Code = "BD50", IsActive = true }
+                new Discount { Name = "50 Off", Type = DiscountType.FixedAmount, Value = 50m, Code = "BD50", IsActive = true }
             );
         }
 
@@ -132,28 +132,70 @@ public static class DbSeeder
         await db.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Minimal SHA256-based PIN hasher. Salt is 16 random bytes hex-encoded.
-    /// </summary>
+    private const int Pbkdf2Iterations = 120_000;
+
     public static (string hash, string salt) HashPin(string pin)
     {
-        var saltBytes = new byte[16];
-        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(saltBytes);
-        }
-        var salt = Convert.ToHexString(saltBytes);
-        var hash = ComputeHash(pin, salt);
-        return (hash, salt);
+        ValidatePin(pin);
+        var saltBytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+        var derived = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+            pin,
+            saltBytes,
+            Pbkdf2Iterations,
+            System.Security.Cryptography.HashAlgorithmName.SHA256,
+            32);
+        return ($"PBKDF2${Pbkdf2Iterations}${Convert.ToBase64String(derived)}", Convert.ToBase64String(saltBytes));
     }
 
-    public static string ComputeHash(string pin, string salt)
+    public static bool VerifyPin(string pin, string hash, string salt)
+    {
+        if (hash.StartsWith("PBKDF2$", StringComparison.Ordinal))
+        {
+            var parts = hash.Split('$');
+            if (parts.Length != 3 || !int.TryParse(parts[1], out var iterations) || iterations < 10_000)
+                return false;
+            try
+            {
+                var saltBytes = Convert.FromBase64String(salt);
+                var expected = Convert.FromBase64String(parts[2]);
+                var actual = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+                    pin, saltBytes, iterations,
+                    System.Security.Cryptography.HashAlgorithmName.SHA256,
+                    expected.Length);
+                return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(actual, expected);
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
+        // Backward-compatible verification for databases created before v1.4.0.
+        var legacy = ComputeLegacyHash(pin, salt);
+        try
+        {
+            return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                Convert.FromHexString(legacy), Convert.FromHexString(hash));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    public static bool IsLegacyHash(string hash)
+        => !hash.StartsWith("PBKDF2$", StringComparison.Ordinal);
+
+    public static void ValidatePin(string pin)
+    {
+        if (pin.Length is < 4 or > 12 || pin.Any(ch => !char.IsDigit(ch)))
+            throw new InvalidOperationException("PIN must contain 4 to 12 digits.");
+    }
+
+    private static string ComputeLegacyHash(string pin, string salt)
     {
         using var sha = System.Security.Cryptography.SHA256.Create();
         var bytes = System.Text.Encoding.UTF8.GetBytes(pin + ":" + salt);
         return Convert.ToHexString(sha.ComputeHash(bytes));
     }
-
-    public static bool VerifyPin(string pin, string hash, string salt)
-        => string.Equals(ComputeHash(pin, salt), hash, StringComparison.OrdinalIgnoreCase);
 }

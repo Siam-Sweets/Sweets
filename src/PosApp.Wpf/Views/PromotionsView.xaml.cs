@@ -19,7 +19,7 @@ public partial class PromotionsView : UserControl, IRefreshable
         PromotionGrid.ItemsSource = _rows;
     }
 
-    public async void Refresh() => await LoadAsync();
+    public async Task RefreshAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
@@ -59,6 +59,35 @@ public partial class PromotionsView : UserControl, IRefreshable
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Unable to save promotion", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void Active_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox checkBox || checkBox.Tag is not PromotionRow row)
+            return;
+
+        var previousState = row.IsActive;
+        var requestedState = checkBox.IsChecked == true;
+        if (requestedState == previousState) return;
+
+        checkBox.IsEnabled = false;
+        try
+        {
+            var updated = Clone(row.Discount);
+            updated.IsActive = requestedState;
+            await _discounts.SaveAsync(updated);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            checkBox.IsChecked = previousState;
+            MessageBox.Show(ex.Message, "Unable to update promotion",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            checkBox.IsEnabled = true;
         }
     }
 

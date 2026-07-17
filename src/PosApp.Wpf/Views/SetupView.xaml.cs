@@ -113,7 +113,7 @@ public partial class SetupView : Window
             };
 
             await _setup.CompleteSetupAsync(request);
-            App.StoreSettings = _storeSettings;
+            App.PublishSettings(_storeSettings);
             App.ApplyLanguage(_storeSettings.Language);
             App.ApplyTheme(_storeSettings.Theme);
             DialogResult = true;

@@ -5,6 +5,7 @@ using System.Windows.Input;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -21,7 +22,7 @@ public partial class RegisterView : UserControl, IRefreshable
         _hardware = hardware;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try { await LoadAsync(); }
@@ -57,7 +58,7 @@ public partial class RegisterView : UserControl, IRefreshable
             return;
         }
 
-        StatusText.Text = $"Open since {_openSession!.OpenedAt.ToLocalTime():dd MMM, HH:mm}";
+        StatusText.Text = $"Open since {DateTimeUtilities.ToLocal(_openSession!.OpenedAt):dd MMM, HH:mm}";
         StatusBorder.Background = (System.Windows.Media.Brush)FindResource("SuccessSurfaceBrush");
         var summary = await _register.GetSummaryAsync(_openSession.Id);
         var movements = await _register.GetMovementsAsync(_openSession.Id);
@@ -79,7 +80,7 @@ public partial class RegisterView : UserControl, IRefreshable
         try
         {
             await _register.OpenSessionAsync(dialog.Amount, App.CurrentUser.Id, dialog.Reason);
-            Refresh();
+            _ = RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -104,7 +105,7 @@ public partial class RegisterView : UserControl, IRefreshable
         try
         {
             await _register.AddMovementAsync(type, dialog.Amount, dialog.Reason, App.CurrentUser.Id);
-            Refresh();
+            _ = RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -144,7 +145,7 @@ public partial class RegisterView : UserControl, IRefreshable
                 _openSession.Id, dialog.Amount, App.CurrentUser.Id, dialog.Reason);
             var report = BuildReport(closedSummary, "Z REPORT");
             new RegisterReportDialog(report, _hardware) { Owner = Window.GetWindow(this) }.ShowDialog();
-            Refresh();
+            _ = RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -174,38 +175,37 @@ public partial class RegisterView : UserControl, IRefreshable
 
     private static string BuildReport(RegisterSummary summary, string title)
     {
-        var symbol = App.StoreSettings.CurrencySymbol;
         var builder = new StringBuilder();
         builder.AppendLine(App.StoreSettings.StoreName);
         builder.AppendLine(title);
         builder.AppendLine(new string('=', 38));
         builder.AppendLine($"Session:       {summary.SessionId}");
-        builder.AppendLine($"Opened:        {summary.OpenedAt.ToLocalTime():dd MMM yyyy HH:mm}");
-        builder.AppendLine($"Through:       {(summary.ClosedAt ?? DateTime.UtcNow).ToLocalTime():dd MMM yyyy HH:mm}");
+        builder.AppendLine($"Opened:        {DateTimeUtilities.ToLocal(summary.OpenedAt):dd MMM yyyy HH:mm}");
+        builder.AppendLine($"Through:       {DateTimeUtilities.ToLocal(summary.ClosedAt ?? DateTime.UtcNow):dd MMM yyyy HH:mm}");
         builder.AppendLine(new string('-', 38));
         builder.AppendLine($"Transactions:  {summary.TransactionCount}");
-        builder.AppendLine($"Gross sales:   {symbol} {summary.GrossSales:0.00}");
+        builder.AppendLine($"Gross sales:   {Money(summary.GrossSales)}");
         builder.AppendLine();
         builder.AppendLine("PAYMENTS");
         foreach (var payment in summary.ByPaymentMethod.OrderBy(item => item.Key))
-            builder.AppendLine($"{payment.Key,-18} {symbol} {payment.Value,10:0.00}");
+            builder.AppendLine($"{payment.Key,-18} {Money(payment.Value)}");
         builder.AppendLine(new string('-', 38));
-        builder.AppendLine($"Opening cash:  {symbol} {summary.OpeningFloat:0.00}");
-        builder.AppendLine($"Cash sales:    {symbol} {summary.CashSales:0.00}");
-        builder.AppendLine($"Cash in:       {symbol} {summary.CashIn:0.00}");
-        builder.AppendLine($"Cash out:      {symbol} {summary.CashOut:0.00}");
-        builder.AppendLine($"Expected cash: {symbol} {summary.ExpectedCash:0.00}");
+        builder.AppendLine($"Opening cash:  {Money(summary.OpeningFloat)}");
+        builder.AppendLine($"Cash sales:    {Money(summary.CashSales)}");
+        builder.AppendLine($"Cash in:       {Money(summary.CashIn)}");
+        builder.AppendLine($"Cash out:      {Money(summary.CashOut)}");
+        builder.AppendLine($"Expected cash: {Money(summary.ExpectedCash)}");
         if (summary.CountedCash.HasValue)
         {
-            builder.AppendLine($"Counted cash:  {symbol} {summary.CountedCash.Value:0.00}");
-            builder.AppendLine($"Variance:      {symbol} {summary.Variance.GetValueOrDefault():+0.00;-0.00;0.00}");
+            builder.AppendLine($"Counted cash:  {Money(summary.CountedCash.Value)}");
+            builder.AppendLine($"Variance:      {Money(summary.Variance.GetValueOrDefault())}");
         }
         builder.AppendLine(new string('=', 38));
         builder.AppendLine($"Printed {DateTime.Now:dd MMM yyyy HH:mm}");
         return builder.ToString();
     }
 
-    private static string Money(decimal value) => $"{App.StoreSettings.CurrencySymbol} {value:0.00}";
+    private static string Money(decimal value) => FormattingUtilities.Money(value, App.StoreSettings);
 }
 
 public sealed class RegisterSessionRow
@@ -213,8 +213,8 @@ public sealed class RegisterSessionRow
     public RegisterSessionRow(CashSession session)
     {
         Session = session;
-        OpenedLocal = session.OpenedAt.ToLocalTime();
-        ClosedLocal = session.ClosedAt?.ToLocalTime();
+        OpenedLocal = DateTimeUtilities.ToLocal(session.OpenedAt);
+        ClosedLocal = session.ClosedAt.HasValue ? DateTimeUtilities.ToLocal(session.ClosedAt.Value) : null;
         Status = session.IsOpen ? "Open" : "Closed";
         Expected = session.ExpectedCash;
         Variance = session.Variance;
@@ -232,7 +232,7 @@ public sealed class CashMovementRow
 {
     public CashMovementRow(CashMovement movement)
     {
-        LocalTime = movement.CreatedAt.ToLocalTime();
+        LocalTime = DateTimeUtilities.ToLocal(movement.CreatedAt);
         Type = movement.Type == CashMovementType.CashIn ? "Cash In" : "Cash Out";
         Description = movement.Description;
         SignedAmount = movement.Type == CashMovementType.CashIn ? movement.Amount : -movement.Amount;
@@ -277,7 +277,7 @@ public sealed class CashEntryDialog : Window
 
     public decimal Amount
     {
-        get => decimal.TryParse(_amountBox.Text, out var value) ? value : 0m;
+        get => FormattingUtilities.TryParseDecimal(_amountBox.Text, out var value) ? value : 0m;
         set => _amountBox.Text = value.ToString("0.00");
     }
 
@@ -285,7 +285,7 @@ public sealed class CashEntryDialog : Window
 
     private void Confirm_Click(object sender, RoutedEventArgs e)
     {
-        if (!decimal.TryParse(_amountBox.Text, out var amount) || amount < 0m ||
+        if (!FormattingUtilities.TryParseDecimal(_amountBox.Text, out var amount) || amount < 0m ||
             (_requireReason && amount == 0m))
         {
             MessageBox.Show(_requireReason

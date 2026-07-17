@@ -548,6 +548,8 @@
     <Style TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="IsThreeState" Value="False"/>
+        <Setter Property="MinHeight" Value="22"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>

@@ -9,6 +9,7 @@ using PosApp.Core.Enums;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
 using PosApp.Wpf.Helpers;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -31,9 +32,16 @@ public partial class PosView : UserControl, IRefreshable
         };
 
         DataContext = vm;
+        Loaded += (_, _) => App.SettingsChanged += SettingsChanged;
+        Unloaded += (_, _) => App.SettingsChanged -= SettingsChanged;
     }
 
-    public async void Refresh()
+    private void SettingsChanged(object? sender, EventArgs e)
+    {
+        if (DataContext is PosViewModel vm) vm.ApplySettings();
+    }
+
+    public async Task RefreshAsync()
     {
         if (DataContext is not PosViewModel vm) return;
         IsEnabled = false;
@@ -319,15 +327,6 @@ public partial class PosView : UserControl, IRefreshable
         if (DataContext is PosViewModel vm) vm.PickCustomer();
     }
 
-    private async void Weigh_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is PosViewModel vm) await vm.WeighAsync(SelectedLine);
-    }
-
-    private async void CashDrawer_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is PosViewModel vm) await vm.OpenCashDrawerAsync();
-    }
 
     private void ServiceType_Click(object sender, RoutedEventArgs e)
     {
@@ -352,7 +351,7 @@ public partial class PosView : UserControl, IRefreshable
         var promotions = await vm.GetActivePromotionsAsync();
         var dialog = new DiscountEntryDialog(line, promotions) { Owner = Window.GetWindow(this) };
         if (dialog.ShowDialog() == true)
-            vm.ApplyLineDiscount(line, dialog.DiscountAmount, dialog.Reason);
+            vm.ApplyLineDiscount(line, dialog.DiscountAmount, dialog.Reason, dialog.PromotionId);
     }
 
     private void Comment_Click(object sender, RoutedEventArgs e)
@@ -467,8 +466,6 @@ public class PosViewModel : ViewModelBase
         ? $"Editing saved sale #{_suspendedSaleId.Value}"
         : (string.IsNullOrWhiteSpace(Note) ? "Ready for the next item" : Note);
 
-    private bool _isScaleConnected;
-    public bool IsScaleConnected { get => _isScaleConnected; set => Set(ref _isScaleConnected, value); }
 
     public decimal Subtotal => CartLines.Sum(l => l.UnitPrice * l.Quantity);
     public decimal DiscountTotal => CartLines.Sum(l => l.DiscountAmount);
@@ -496,11 +493,24 @@ public class PosViewModel : ViewModelBase
             ? "Retail" : App.StoreSettings.DefaultServiceType;
     }
 
+    public void ApplySettings()
+    {
+        ServiceType = string.IsNullOrWhiteSpace(App.StoreSettings.DefaultServiceType)
+            ? "Retail" : App.StoreSettings.DefaultServiceType;
+        OnPropertyChanged(nameof(VirtualKeyboardVisible));
+        OnPropertyChanged(nameof(ProductCardWidth));
+        OnPropertyChanged(nameof(ProductCardHeight));
+        OnPropertyChanged(nameof(Subtotal));
+        OnPropertyChanged(nameof(DiscountTotal));
+        OnPropertyChanged(nameof(TaxTotal));
+        OnPropertyChanged(nameof(Total));
+    }
+
     public async Task LoadAsync()
     {
+        ApplySettings();
         await LoadCategoriesAsync();
         await LoadProductsAsync();
-        IsScaleConnected = await _hardware.IsScaleConnected();
     }
 
     public Task RefreshAsync() => LoadAsync();
@@ -595,15 +605,11 @@ public class PosViewModel : ViewModelBase
         await LoadProductsAsync();
     }
 
-    public async Task AddToCartAsync(Product product)
+    public Task AddToCartAsync(Product product)
     {
-        // Weighted items: read scale if connected
-        decimal qty = 1m;
-        if (product.IsWeighted && await _hardware.IsScaleConnected())
-        {
-            var w = await _hardware.ReadScaleAsync();
-            if (w.HasValue && w.Value > 0) qty = w.Value;
-        }
+        // Weighted products remain supported through decimal quantities.
+        // Quantity can be entered with F4; no weighing-scale hardware is required.
+        const decimal qty = 1m;
 
         var existing = CartLines.FirstOrDefault(l => l.ProductId == product.Id);
         if (existing != null)
@@ -619,11 +625,14 @@ public class PosViewModel : ViewModelBase
                 Sku = product.Sku,
                 Quantity = qty,
                 UnitPrice = product.Price,
+                CostPrice = product.CostPrice,
                 TaxRate = product.TaxRate,
+                AllowDiscount = product.AllowDiscount,
                 IsWeighted = product.IsWeighted
             });
         }
         RecalcTotals();
+        return Task.CompletedTask;
     }
 
     public void ChangeQty(SaleDraftLine line, decimal delta)
@@ -647,11 +656,14 @@ public class PosViewModel : ViewModelBase
         RecalcTotals();
     }
 
-    public void ApplyLineDiscount(SaleDraftLine line, decimal amount, string? reason)
+    public void ApplyLineDiscount(SaleDraftLine line, decimal amount, string? reason, int? promotionId = null)
     {
+        if (!line.AllowDiscount && amount > 0m)
+            throw new InvalidOperationException($"Discounts are disabled for {line.ProductName}.");
         var lineGross = line.UnitPrice * line.Quantity;
         line.DiscountAmount = Math.Clamp(amount, 0m, lineGross);
         line.DiscountReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        line.PromotionId = line.DiscountAmount > 0m ? promotionId : null;
         RecalcTotals();
     }
 
@@ -696,63 +708,6 @@ public class PosViewModel : ViewModelBase
         }
     }
 
-    public async Task WeighAsync(SaleDraftLine? preferredLine = null)
-    {
-        // Suspended-sale rows do not persist the catalog-only IsWeighted flag.
-        // Refresh it from the current product catalog before deciding that the
-        // cart contains no weighted products. This also repairs receipt lines
-        // created from a stale product list after the flag was changed.
-        await RefreshWeightedFlagsFromCatalogAsync();
-
-        var target = preferredLine?.IsWeighted == true
-            ? preferredLine
-            : CartLines.LastOrDefault(line => line.IsWeighted);
-
-        if (target == null)
-        {
-            MessageBox.Show("Add a weighted product first, then press Weigh.", "Weigh",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        var weight = await _hardware.ReadScaleAsync();
-        if (!weight.HasValue || weight.Value <= 0m)
-        {
-            MessageBox.Show("Scale not responding or returned an invalid weight.", "Weigh",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        target.Quantity = weight.Value;
-        RecalcTotals();
-    }
-
-    private async Task<HashSet<int>> GetWeightedProductIdsAsync()
-    {
-        await _productLoadGate.WaitAsync();
-        try
-        {
-            var products = await _inventory.SearchProductsAsync(null);
-            return products
-                .Where(product => product.IsWeighted)
-                .Select(product => product.Id)
-                .ToHashSet();
-        }
-        finally
-        {
-            _productLoadGate.Release();
-        }
-    }
-
-    private async Task RefreshWeightedFlagsFromCatalogAsync()
-    {
-        if (CartLines.Count == 0) return;
-
-        var weightedProductIds = await GetWeightedProductIdsAsync();
-        foreach (var line in CartLines)
-            line.IsWeighted = weightedProductIds.Contains(line.ProductId);
-    }
-
     public async Task CheckoutAsync()
     {
         if (_checkoutInProgress || CartLines.Count == 0 || App.CurrentUser == null) return;
@@ -792,21 +747,6 @@ public class PosViewModel : ViewModelBase
         return false;
     }
 
-    public async Task OpenCashDrawerAsync()
-    {
-        try
-        {
-            var opened = await _hardware.OpenCashDrawerAsync();
-            if (!opened)
-                MessageBox.Show("Cash drawer is unavailable. Check the configured port and connection.",
-                    "Cash Drawer", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "Cash Drawer", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
     public Task<IReadOnlyList<Discount>> GetActivePromotionsAsync() => _discounts.GetActiveAsync();
 
     private async Task CompleteCheckoutAsync(SaleDraft draft)
@@ -817,18 +757,22 @@ public class PosViewModel : ViewModelBase
         {
             var sale = await _sales.CheckoutAsync(draft);
 
-            // Hardware: print receipt + open drawer
+            // Printing is deliberately outside the database transaction. A printer
+            // failure must not roll back a completed sale, but it must be visible.
             var store = App.StoreSettings;
+            bool? printSucceeded = null;
             if (store.PrintReceiptAutomatically)
-                _ = await _hardware.PrintReceiptAsync(sale);
-            if (store.OpenDrawerOnCashSale && draft.Payments.Any(p => p.Method == PaymentMethod.Cash))
-                _ = await _hardware.OpenCashDrawerAsync();
+                printSucceeded = await _hardware.PrintReceiptAsync(sale);
 
             ClearCart();
+            var printMessage = printSucceeded == false
+                ? "\n\nThe sale was saved, but the receipt could not be printed. Reprint it from Sales History."
+                : string.Empty;
             MessageBox.Show($"Sale completed. Receipt: {sale.ReceiptNumber}\n" +
-                            $"Received: {App.StoreSettings.CurrencySymbol} {sale.AmountPaid:0.00}\n" +
-                            $"Change: {App.StoreSettings.CurrencySymbol} {sale.Change:0.00}",
-                "Sale Completed", MessageBoxButton.OK, MessageBoxImage.Information);
+                            $"Received: {FormattingUtilities.Money(sale.AmountPaid, App.StoreSettings)}\n" +
+                            $"Change: {FormattingUtilities.Money(sale.Change, App.StoreSettings)}{printMessage}",
+                "Sale Completed", MessageBoxButton.OK,
+                printSucceeded == false ? MessageBoxImage.Warning : MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
@@ -873,11 +817,13 @@ public class PosViewModel : ViewModelBase
         var dlg = new SuspendedSalesDialog(suspended, _sales) { Owner = Application.Current.MainWindow };
         if (dlg.ShowDialog() == true && dlg.SelectedSale != null)
         {
-            var weightedProductIds = await GetWeightedProductIdsAsync();
+            var catalog = (await _inventory.SearchProductsAsync(null, includeInactive: true))
+                .ToDictionary(product => product.Id);
 
             ClearCart();
             foreach (var item in dlg.SelectedSale.Items)
             {
+                catalog.TryGetValue(item.ProductId, out var product);
                 CartLines.Add(new SaleDraftLine
                 {
                     ProductId = item.ProductId,
@@ -885,15 +831,37 @@ public class PosViewModel : ViewModelBase
                     Sku = item.Sku,
                     Quantity = item.Quantity,
                     UnitPrice = item.UnitPrice,
+                    CostPrice = item.CostPrice,
                     TaxRate = item.TaxRate,
                     DiscountAmount = item.DiscountAmount,
                     DiscountReason = item.DiscountReason,
-                    IsWeighted = weightedProductIds.Contains(item.ProductId)
+                    PromotionId = item.PromotionId,
+                    AllowDiscount = product?.AllowDiscount ?? true,
+                    IsWeighted = product?.IsWeighted ?? false
                 });
             }
             _suspendedSaleId = dlg.SelectedSale.Id;
             _selectedCustomer = dlg.SelectedSale.Customer;
-            Note = dlg.SelectedSale.Note ?? string.Empty;
+            var recalledNote = dlg.SelectedSale.Note ?? string.Empty;
+            var recalledServiceType = string.IsNullOrWhiteSpace(dlg.SelectedSale.ServiceType)
+                ? "Retail" : dlg.SelectedSale.ServiceType;
+            // Older versions embedded the service type in the note. Strip every
+            // legacy prefix during recall so saving again cannot duplicate it.
+            while (recalledNote.StartsWith("Service type:", StringComparison.OrdinalIgnoreCase))
+            {
+                var lineBreak = recalledNote.IndexOfAny(new[] { '\r', '\n' });
+                var firstLine = lineBreak < 0 ? recalledNote : recalledNote[..lineBreak];
+                var legacyType = firstLine["Service type:".Length..].Trim();
+                if (!string.IsNullOrWhiteSpace(legacyType) &&
+                    (string.IsNullOrWhiteSpace(dlg.SelectedSale.ServiceType) ||
+                     string.Equals(recalledServiceType, "Retail", StringComparison.OrdinalIgnoreCase)))
+                    recalledServiceType = legacyType;
+                recalledNote = lineBreak < 0
+                    ? string.Empty
+                    : recalledNote[(lineBreak + 1)..].TrimStart('\r', '\n');
+            }
+            Note = recalledNote;
+            ServiceType = recalledServiceType;
             OnPropertyChanged(nameof(CustomerDisplay));
             OnPropertyChanged(nameof(SaleContextDisplay));
             OnPropertyChanged(nameof(ActiveSaleDisplay));
@@ -908,9 +876,8 @@ public class PosViewModel : ViewModelBase
             UserId = App.CurrentUser!.Id,
             CustomerId = _selectedCustomer?.Id,
             Lines = CartLines.ToList(),
-            Note = string.IsNullOrWhiteSpace(Note)
-                ? $"Service type: {ServiceType}"
-                : $"Service type: {ServiceType}\n{Note}",
+            Note = string.IsNullOrWhiteSpace(Note) ? null : Note.Trim(),
+            ServiceType = ServiceType,
             SuspendedSaleId = _suspendedSaleId
         };
     }
@@ -1210,6 +1177,7 @@ public class DiscountEntryDialog : Window
     private readonly ComboBox _promotionBox;
     public decimal DiscountAmount { get; private set; }
     public string? Reason { get; private set; }
+    public int? PromotionId { get; private set; }
 
     public DiscountEntryDialog(SaleDraftLine line, IReadOnlyList<Discount>? promotions = null)
     {
@@ -1227,7 +1195,7 @@ public class DiscountEntryDialog : Window
 
         var lineLabel = new TextBlock
         {
-            Text = $"{line.ProductName}  •  {App.StoreSettings.CurrencySymbol} {line.UnitPrice * line.Quantity:0.00}",
+            Text = $"{line.ProductName}  •  {FormattingUtilities.Money(line.UnitPrice * line.Quantity, App.StoreSettings)}",
             Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextDarkBrush"),
             FontWeight = FontWeights.SemiBold,
             FontSize = 15,
@@ -1336,6 +1304,7 @@ public class DiscountEntryDialog : Window
             return;
         }
         Reason = _reasonBox.Text.Trim();
+        PromotionId = (_promotionBox.SelectedItem as PromotionChoice)?.Discount?.Id;
         DialogResult = true;
         Close();
     }

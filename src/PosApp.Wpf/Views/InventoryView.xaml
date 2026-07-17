@@ -5,6 +5,7 @@
              Background="{DynamicResource BackgroundBrush}">
     <UserControl.Resources>
         <conv:StockColorConverter x:Key="StockColor"/>
+        <conv:UtcToLocalConverter x:Key="UtcToLocal"/>
     </UserControl.Resources>
     <Grid Margin="{StaticResource PagePadding}">
         <Grid.RowDefinitions>
@@ -20,16 +21,16 @@
             </Grid.ColumnDefinitions>
             <StackPanel>
                 <TextBlock Text="{DynamicResource Inv_Title}" Style="{StaticResource Heading1}"/>
-                <TextBlock Text="Track stock levels, make adjustments, and review movement history" Style="{StaticResource Muted}"/>
+                <TextBlock Text="{DynamicResource Inv_Subtitle}" Style="{StaticResource Muted}"/>
             </StackPanel>
-            <Button Grid.Column="1" Content="Inventory Count" Style="{StaticResource PrimaryButton}"
+            <Button Grid.Column="1" Content="{DynamicResource Inv_Count}" Style="{StaticResource PrimaryButton}"
                     Click="InventoryCount_Click" VerticalAlignment="Center"/>
         </Grid>
 
         <UniformGrid Grid.Row="1" Columns="3" Margin="0,0,0,16">
             <Border Style="{StaticResource StatCard}" Margin="0,0,8,0">
                 <StackPanel>
-                    <TextBlock Text="Total Products" Style="{StaticResource Muted}"/>
+                    <TextBlock Text="{DynamicResource Inv_TotalProducts}" Style="{StaticResource Muted}"/>
                     <TextBlock x:Name="TotalProductsText" FontSize="24" FontWeight="Bold"/>
                 </StackPanel>
             </Border>
@@ -41,7 +42,7 @@
             </Border>
             <Border Style="{StaticResource StatCard}" Margin="8,0,0,0" Background="{DynamicResource SuccessSurfaceBrush}">
                 <StackPanel>
-                    <TextBlock Text="Stock Value (Cost)" Style="{StaticResource Muted}" Foreground="{DynamicResource SuccessTextBrush}"/>
+                    <TextBlock Text="{DynamicResource Inv_StockValue}" Style="{StaticResource Muted}" Foreground="{DynamicResource SuccessTextBrush}"/>
                     <TextBlock x:Name="StockValueText" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource SuccessTextBrush}"/>
                 </StackPanel>
             </Border>
@@ -56,17 +57,17 @@
             <!-- Stock levels -->
             <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,8,0" Padding="0">
                 <DockPanel>
-                    <TextBlock Text="Current Stock Levels" DockPanel.Dock="Top" FontWeight="SemiBold" Margin="16,16,16,8"/>
+                    <TextBlock Text="{DynamicResource Inv_CurrentLevels}" DockPanel.Dock="Top" FontWeight="SemiBold" Margin="16,16,16,8"/>
                     <DataGrid x:Name="StockGrid" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Product" Binding="{Binding Name}" Width="*"/>
-                            <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="100"/>
-                            <DataGridTextColumn Header="Stock" Binding="{Binding StockQuantity, StringFormat=' {0:0.###}'}" Width="80"/>
-                            <DataGridTextColumn Header="Threshold" Binding="{Binding LowStockThreshold, StringFormat=' {0}'}" Width="80"/>
-                            <DataGridTemplateColumn Header="Adjust" Width="100">
+                            <DataGridTextColumn Header="{DynamicResource Rpt_Product}" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="{DynamicResource Prod_SkuOnly}" Binding="{Binding Sku}" Width="100"/>
+                            <DataGridTextColumn Header="{DynamicResource Prod_Stock}" Binding="{Binding StockQuantity, StringFormat=' {0:0.###}'}" Width="80"/>
+                            <DataGridTextColumn Header="{DynamicResource Inv_Threshold}" Binding="{Binding LowStockThreshold, StringFormat=' {0}'}" Width="80"/>
+                            <DataGridTemplateColumn Header="{DynamicResource Inv_Adjust}" Width="100">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Button Content="Adjust" Style="{StaticResource OutlineButton}"
+                                        <Button Content="{DynamicResource Inv_Adjust}" Style="{StaticResource OutlineButton}"
                                                 Padding="8,4" Margin="2" Click="Adjust_Click" Tag="{Binding}"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -79,14 +80,14 @@
             <!-- Low stock + recent history -->
             <Border Grid.Column="1" Style="{StaticResource Card}" Margin="8,0,0,0" Padding="0">
                 <DockPanel>
-                    <TextBlock Text="Recent Stock Movements" DockPanel.Dock="Top" FontWeight="SemiBold" Margin="16,16,16,8"/>
+                    <TextBlock Text="{DynamicResource Inv_RecentMovements}" DockPanel.Dock="Top" FontWeight="SemiBold" Margin="16,16,16,8"/>
                     <DataGrid x:Name="HistoryGrid" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Product" Binding="{Binding Product.Name}" Width="*"/>
-                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
-                            <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, StringFormat=' {0:0.###}'}" Width="60"/>
-                            <DataGridTextColumn Header="Balance" Binding="{Binding BalanceAfter, StringFormat=' {0:0.###}'}" Width="70"/>
-                            <DataGridTextColumn Header="Date" Binding="{Binding CreatedAt, StringFormat=' {0:MM-dd HH:mm}'}" Width="100"/>
+                            <DataGridTextColumn Header="{DynamicResource Rpt_Product}" Binding="{Binding Product.Name}" Width="*"/>
+                            <DataGridTextColumn Header="{DynamicResource Inv_Type}" Binding="{Binding Type}" Width="80"/>
+                            <DataGridTextColumn Header="{DynamicResource Rpt_Qty}" Binding="{Binding Quantity, StringFormat=' {0:0.###}'}" Width="60"/>
+                            <DataGridTextColumn Header="{DynamicResource Inv_Balance}" Binding="{Binding BalanceAfter, StringFormat=' {0:0.###}'}" Width="70"/>
+                            <DataGridTextColumn Header="{DynamicResource Inv_Date}" Binding="{Binding CreatedAt, Converter={StaticResource UtcToLocal}, ConverterParameter=MM-dd HH:mm}" Width="100"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

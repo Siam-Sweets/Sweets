@@ -63,7 +63,7 @@
             </StackPanel>
         </Border>
 
-        <TextBlock Grid.Row="2" Text="© 2026 PosApp - Local Point of Sale"
+        <TextBlock Grid.Row="2" Text="{DynamicResource Login_Footer}"
                    Style="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,0,0,12"/>
     </Grid>
 </Window>

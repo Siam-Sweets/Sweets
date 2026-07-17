@@ -17,9 +17,10 @@ public interface IInventoryService
     Task<IReadOnlyList<Product>> SearchProductsAsync(
         string? query,
         int? categoryId = null,
-        ProductSearchField searchField = ProductSearchField.All);
+        ProductSearchField searchField = ProductSearchField.All,
+        bool includeInactive = false);
     Task<Product?> GetProductBySkuAsync(string sku);
-    Task<Product> CreateOrUpdateProductAsync(Product product);
+    Task<Product> CreateOrUpdateProductAsync(Product product, int? userId = null);
     Task SetProductWeightedAsync(int productId, bool isWeighted);
     Task AdjustStockAsync(int productId, decimal delta, StockTransactionType type, string? note = null, int? userId = null, decimal? unitCost = null);
     Task<IReadOnlyList<StockTransaction>> GetStockHistoryAsync(int productId);
@@ -32,9 +33,9 @@ public interface IInventoryService
 
 public interface IPurchaseService
 {
-    Task<IReadOnlyList<Supplier>> SearchSuppliersAsync(string? query = null);
+    Task<IReadOnlyList<Supplier>> SearchSuppliersAsync(string? query = null, bool includeInactive = false);
     Task<Supplier> CreateOrUpdateSupplierAsync(Supplier supplier);
-    Task DeactivateSupplierAsync(int supplierId);
+    Task SetSupplierActiveAsync(int supplierId, bool isActive);
     Task<IReadOnlyList<PurchaseDocument>> GetPurchasesAsync(DateTime from, DateTime to);
     Task<PurchaseDocument> PostPurchaseAsync(PurchaseDraft draft);
 }
@@ -92,10 +93,10 @@ public interface ISaleService
 
 public interface ICustomerService
 {
-    Task<IReadOnlyList<Customer>> SearchCustomersAsync(string? query);
+    Task<IReadOnlyList<Customer>> SearchCustomersAsync(string? query, bool includeInactive = false);
     Task<Customer?> GetCustomerAsync(int id);
     Task<Customer> CreateOrUpdateCustomerAsync(Customer customer);
-    Task DeleteCustomerAsync(int id);
+    Task SetCustomerActiveAsync(int id, bool isActive);
     Task<IReadOnlyList<Sale>> GetCustomerHistoryAsync(int customerId);
 }
 
@@ -136,9 +137,6 @@ public interface IHardwareService
 {
     Task<bool> PrintReceiptAsync(Sale sale);
     Task<bool> PrintTextAsync(string text);
-    Task<bool> OpenCashDrawerAsync();
-    Task<bool> IsScaleConnected();
-    Task<decimal?> ReadScaleAsync();
     Task<bool> IsScannerConnected();
     Task StartScannerAsync(Action<string> onScan);
     Task StopScannerAsync();

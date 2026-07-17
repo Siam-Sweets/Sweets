@@ -14,7 +14,7 @@ public class CatalogTransferService : ICatalogTransferService
     private static readonly string[] Headers =
     {
         "Name", "SKU", "Barcode", "Category", "Price", "CostPrice", "TaxRate",
-        "StockQuantity", "LowStockThreshold", "Unit", "IsWeighted", "IsActive"
+        "StockQuantity", "LowStockThreshold", "Unit", "IsWeighted", "AllowDiscount", "IsActive"
     };
 
     public CatalogTransferService(AppDbContext db) => _db = db;
@@ -44,6 +44,7 @@ public class CatalogTransferService : ICatalogTransferService
                 product.LowStockThreshold.HasValue ? Format(product.LowStockThreshold.Value) : "",
                 product.Unit.ToString(),
                 product.IsWeighted.ToString(),
+                product.AllowDiscount.ToString(),
                 product.IsActive.ToString()
             };
             await writer.WriteLineAsync(string.Join(',', values.Select(Escape)));
@@ -65,6 +66,9 @@ public class CatalogTransferService : ICatalogTransferService
             .ToDictionary(group => group.Key, group => group.First().Index);
         if (!headerMap.ContainsKey("name"))
             throw new InvalidOperationException("CSV must contain a Name column.");
+        var hasSkuColumn = headerMap.ContainsKey("sku");
+        var hasBarcodeColumn = headerMap.ContainsKey("barcode");
+        var hasUnitColumn = headerMap.ContainsKey("unit");
 
         var result = new CatalogImportResult();
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -118,8 +122,14 @@ public class CatalogTransferService : ICatalogTransferService
                 var product = products.FirstOrDefault(item =>
                     (!string.IsNullOrEmpty(sku) && string.Equals(item.Sku, sku, StringComparison.OrdinalIgnoreCase)) ||
                     (!string.IsNullOrEmpty(barcode) && string.Equals(item.Barcode, barcode, StringComparison.OrdinalIgnoreCase)));
-                product ??= products.FirstOrDefault(item =>
-                    string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (product == null && string.IsNullOrEmpty(sku) && string.IsNullOrEmpty(barcode))
+                {
+                    var nameMatches = products.Where(item =>
+                        string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (nameMatches.Count > 1)
+                        throw new InvalidOperationException($"Row {rowNumber + 1}: multiple products are named '{name}'. Add an SKU or barcode to identify the correct product.");
+                    product = nameMatches.SingleOrDefault();
+                }
                 var isNew = product == null;
                 if (isNew)
                 {
@@ -133,8 +143,9 @@ public class CatalogTransferService : ICatalogTransferService
                         CostPrice = rowCost ?? 0m,
                         TaxRate = rowTax ?? 0m,
                         LowStockThreshold = rowThreshold,
-                        Unit = UnitField(row, headerMap),
+                        Unit = UnitField(row, headerMap, rowNumber + 1),
                         IsWeighted = BoolField(row, headerMap, "isweighted") ?? false,
+                        AllowDiscount = BoolField(row, headerMap, "allowdiscount") ?? true,
                         IsActive = BoolField(row, headerMap, "isactive") ?? true,
                         StockQuantity = rowStock,
                         CreatedAt = DateTime.UtcNow
@@ -169,15 +180,17 @@ public class CatalogTransferService : ICatalogTransferService
                 var oldQuantity = product!.StockQuantity;
                 var oldCost = product.CostPrice;
                 product.Name = name;
-                if (sku != null) product.Sku = sku;
-                if (barcode != null) product.Barcode = barcode;
+                if (hasSkuColumn) product.Sku = sku;
+                if (hasBarcodeColumn) product.Barcode = barcode;
                 product.Category = category;
                 SetDecimal(row, headerMap, "price", value => product.Price = value);
                 SetDecimal(row, headerMap, "taxrate", value => product.TaxRate = value);
                 SetDecimal(row, headerMap, "lowstockthreshold", value => product.LowStockThreshold = value);
-                if (HasValue(row, headerMap, "unit")) product.Unit = UnitField(row, headerMap);
+                if (hasUnitColumn && HasValue(row, headerMap, "unit")) product.Unit = UnitField(row, headerMap, rowNumber + 1);
                 var weighted = BoolField(row, headerMap, "isweighted");
                 if (weighted.HasValue) product.IsWeighted = weighted.Value;
+                var allowDiscount = BoolField(row, headerMap, "allowdiscount");
+                if (allowDiscount.HasValue) product.AllowDiscount = allowDiscount.Value;
                 var active = BoolField(row, headerMap, "isactive");
                 if (active.HasValue) product.IsActive = active.Value;
 
@@ -254,7 +267,7 @@ public class CatalogTransferService : ICatalogTransferService
     {
         if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r'))
             return value;
-        return $"\"{value.Replace("\"", "\"\"")}\"";
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     private static string NormalizeHeader(string value) => new(
@@ -307,12 +320,12 @@ public class CatalogTransferService : ICatalogTransferService
     }
 
     private static UnitOfMeasure UnitField(
-        IReadOnlyList<string> row, IReadOnlyDictionary<string, int> headers)
+        IReadOnlyList<string> row, IReadOnlyDictionary<string, int> headers, int rowNumber)
     {
         var raw = Field(row, headers, "unit");
-        return Enum.TryParse<UnitOfMeasure>(raw, ignoreCase: true, out var unit)
-            ? unit
-            : UnitOfMeasure.Piece;
+        if (string.IsNullOrWhiteSpace(raw)) return UnitOfMeasure.Piece;
+        if (Enum.TryParse<UnitOfMeasure>(raw.Trim(), ignoreCase: true, out var unit)) return unit;
+        throw new InvalidOperationException($"Row {rowNumber}: '{raw}' is not a supported unit of measure.");
     }
 
     private static List<List<string>> ParseCsv(string text)

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -18,7 +19,7 @@ public partial class CustomersView : UserControl, IRefreshable
         _purchases = purchases;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try
@@ -38,13 +39,15 @@ public partial class CustomersView : UserControl, IRefreshable
 
     private async Task LoadAsync()
     {
-        var customersTask = _customers.SearchCustomersAsync(null);
-        var suppliersTask = _purchases.SearchSuppliersAsync(null);
+        var customersTask = _customers.SearchCustomersAsync(null, includeInactive: true);
+        var suppliersTask = _purchases.SearchSuppliersAsync(null, includeInactive: true);
         await Task.WhenAll(customersTask, suppliersTask);
 
-        _all = customersTask.Result
+        var customers = await customersTask;
+        var suppliers = await suppliersTask;
+        _all = customers
             .Select(ContactListItem.FromCustomer)
-            .Concat(suppliersTask.Result.Select(ContactListItem.FromSupplier))
+            .Concat(suppliers.Select(ContactListItem.FromSupplier))
             .OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
             .ThenBy(item => item.TypeLabel, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
@@ -74,7 +77,7 @@ public partial class CustomersView : UserControl, IRefreshable
         {
             Owner = Window.GetWindow(this)
         };
-        if (dialog.ShowDialog() == true) Refresh();
+        if (dialog.ShowDialog() == true) _ = RefreshAsync();
     }
 
     private void Edit_Click(object sender, RoutedEventArgs e)
@@ -84,45 +87,28 @@ public partial class CustomersView : UserControl, IRefreshable
         {
             Owner = Window.GetWindow(this)
         };
-        if (dialog.ShowDialog() == true) Refresh();
+        if (dialog.ShowDialog() == true) _ = RefreshAsync();
     }
 
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: ContactListItem item }) return;
-
-        if (item.IsCustomer)
-        {
-            var confirm = MessageBox.Show($"Delete customer '{item.Name}'?", "Confirm",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.Yes) return;
-
-            try
-            {
-                await _customers.DeleteCustomerAsync(item.Id);
-                Refresh();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Cannot delete customer",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-            return;
-        }
-
-        var supplierConfirm = MessageBox.Show(
-            $"Remove supplier '{item.Name}'? Existing purchase history will be kept.",
-            "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (supplierConfirm != MessageBoxResult.Yes) return;
+        var activate = !item.IsActive;
+        var action = activate ? "restore" : "deactivate";
+        if (MessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} {item.TypeLabel.ToLowerInvariant()} '{item.Name}'?",
+                "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         try
         {
-            await _purchases.DeactivateSupplierAsync(item.Id);
-            Refresh();
+            if (item.IsCustomer)
+                await _customers.SetCustomerActiveAsync(item.Id, activate);
+            else
+                await _purchases.SetSupplierActiveAsync(item.Id, activate);
+            await RefreshAsync();
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Cannot remove supplier",
+            MessageBox.Show(ex.GetBaseException().Message, $"Cannot {action} {item.TypeLabel.ToLowerInvariant()}",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -150,6 +136,7 @@ public sealed class ContactListItem
     public required ContactRecordType RecordType { get; init; }
     public Customer? Customer { get; init; }
     public Supplier? Supplier { get; init; }
+    public bool IsActive { get; init; }
 
     public bool IsCustomer => RecordType == ContactRecordType.Customer;
     public string TypeLabel => IsCustomer
@@ -165,6 +152,7 @@ public sealed class ContactListItem
         Address = customer.Address,
         TaxId = customer.TaxId,
         RecordType = ContactRecordType.Customer,
+        IsActive = customer.IsActive,
         Customer = customer
     };
 
@@ -178,6 +166,7 @@ public sealed class ContactListItem
         TaxId = supplier.TaxId,
         Notes = supplier.Notes,
         RecordType = ContactRecordType.Supplier,
+        IsActive = supplier.IsActive,
         Supplier = supplier
     };
 }
@@ -333,6 +322,7 @@ public sealed class ContactEditDialog : Window
                     LoyaltyPoints = source?.LoyaltyPoints ?? 0m,
                     StoreCredit = source?.StoreCredit ?? 0m,
                     LoyaltyRate = source?.LoyaltyRate ?? 0m,
+                    IsActive = source?.IsActive ?? true,
                     CreatedAt = source?.CreatedAt ?? DateTime.UtcNow,
                     UpdatedAt = source?.UpdatedAt
                 };
@@ -408,11 +398,11 @@ public sealed class CustomerHistoryDialog : Window
             Margin = new Thickness(0, 0, 0, 12),
             FontSize = 13
         };
-        summary.Inlines.Add(new System.Windows.Documents.Run($"Total purchases: {history.Count}    ")
+        summary.Inlines.Add(new System.Windows.Documents.Run($"Total purchases: {history.Count(sale => sale.Status == SaleStatus.Completed)}    ")
         {
             Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush")
         });
-        summary.Inlines.Add(new System.Windows.Documents.Run($"Total spent: ৳ {history.Sum(sale => sale.Total):0.00}")
+        summary.Inlines.Add(new System.Windows.Documents.Run($"Total spent: {FormattingUtilities.Money(history.Sum(sale => sale.Total), App.StoreSettings)}")
         {
             FontWeight = FontWeights.Bold
         });
@@ -434,7 +424,11 @@ public sealed class CustomerHistoryDialog : Window
         dataGrid.Columns.Add(new DataGridTextColumn
         {
             Header = "Date",
-            Binding = new System.Windows.Data.Binding("SaleDate") { StringFormat = "yyyy-MM-dd HH:mm" },
+            Binding = new System.Windows.Data.Binding("SaleDate")
+            {
+                Converter = new PosApp.Wpf.Converters.UtcToLocalConverter(),
+                ConverterParameter = "yyyy-MM-dd HH:mm"
+            },
             Width = 140
         });
         dataGrid.Columns.Add(new DataGridTextColumn
@@ -446,13 +440,19 @@ public sealed class CustomerHistoryDialog : Window
         dataGrid.Columns.Add(new DataGridTextColumn
         {
             Header = "Total",
-            Binding = new System.Windows.Data.Binding("Total") { StringFormat = "৳ {0:0.00}" },
+            Binding = new System.Windows.Data.Binding("Total")
+            {
+                Converter = new PosApp.Wpf.Converters.MoneyConverter()
+            },
             Width = 100
         });
         dataGrid.Columns.Add(new DataGridTextColumn
         {
             Header = "Status",
-            Binding = new System.Windows.Data.Binding("Status"),
+            Binding = new System.Windows.Data.Binding("Status")
+            {
+                Converter = new PosApp.Wpf.Converters.SaleStatusToStringConverter()
+            },
             Width = 100
         });
         grid.Children.Add(dataGrid);

@@ -1,7 +1,7 @@
 <Window x:Class="PosApp.Wpf.Views.InventoryCountDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Inventory Count" Width="820" Height="680"
+        Title="{DynamicResource Inv_Count}" Width="820" Height="680"
         Icon="/PosApp;component/Assets/PosApp.ico"
         MinWidth="720" MinHeight="560"
         WindowStartupLocation="CenterOwner">
@@ -13,22 +13,22 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <StackPanel Margin="0,0,0,14">
-            <TextBlock Text="Physical Inventory Count" Style="{StaticResource Heading2}"/>
-            <TextBlock Text="Enter only the products you counted. Saving posts all differences as one audited stock adjustment."
+            <TextBlock Text="{DynamicResource Inv_CountTitle}" Style="{StaticResource Heading2}"/>
+            <TextBlock Text="{DynamicResource Inv_CountSubtitle}"
                        Style="{StaticResource Muted}"/>
         </StackPanel>
         <TextBox Grid.Row="1" x:Name="SearchBox" TextChanged="Search_TextChanged"
-                 ToolTip="Search by product, SKU, or barcode" Margin="0,0,0,10"/>
+                 ToolTip="{DynamicResource Inv_CountSearchHint}" Margin="0,0,0,10"/>
         <DataGrid Grid.Row="2" x:Name="CountGrid" AutoGenerateColumns="False"
                   IsReadOnly="False" CanUserAddRows="False">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Product" Binding="{Binding Name}" Width="*" IsReadOnly="True"/>
-                <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="130" IsReadOnly="True"/>
-                <DataGridTextColumn Header="System Qty" Binding="{Binding SystemQuantity, StringFormat='{}{0:0.###}'}"
+                <DataGridTextColumn Header="{DynamicResource Rpt_Product}" Binding="{Binding Name}" Width="*" IsReadOnly="True"/>
+                <DataGridTextColumn Header="{DynamicResource Prod_SkuOnly}" Binding="{Binding Sku}" Width="130" IsReadOnly="True"/>
+                <DataGridTextColumn Header="{DynamicResource Inv_SystemQty}" Binding="{Binding SystemQuantity, StringFormat='{}{0:0.###}'}"
                                     Width="110" IsReadOnly="True"/>
-                <DataGridTextColumn Header="Counted Qty" Binding="{Binding CountedQuantity, UpdateSourceTrigger=PropertyChanged}"
+                <DataGridTextColumn Header="{DynamicResource Inv_CountedQty}" Binding="{Binding CountedQuantity, UpdateSourceTrigger=PropertyChanged}"
                                     Width="120"/>
-                <DataGridTextColumn Header="Difference" Binding="{Binding Difference, StringFormat='{}{0:+0.###;-0.###;0}'}"
+                <DataGridTextColumn Header="{DynamicResource Inv_Difference}" Binding="{Binding Difference, StringFormat='{}{0:+0.###;-0.###;0}'}"
                                     Width="110" IsReadOnly="True"/>
             </DataGrid.Columns>
         </DataGrid>
@@ -38,13 +38,13 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel>
-                <TextBlock Text="Count note / reference" FontSize="12" Margin="0,0,0,4"/>
+                <TextBlock Text="{DynamicResource Inv_CountNote}" FontSize="12" Margin="0,0,0,4"/>
                 <TextBox x:Name="NoteBox" Width="380" HorizontalAlignment="Left"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Bottom">
-                <Button Content="Cancel" Style="{StaticResource OutlineButton}"
+                <Button Content="{DynamicResource Common_Cancel}" Style="{StaticResource OutlineButton}"
                         Click="Cancel_Click" Margin="0,0,8,0"/>
-                <Button Content="Post Count" Style="{StaticResource SuccessButton}"
+                <Button Content="{DynamicResource Inv_PostCount}" Style="{StaticResource SuccessButton}"
                         Click="Save_Click"/>
             </StackPanel>
         </Grid>

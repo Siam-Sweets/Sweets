@@ -6,6 +6,99 @@
     <sys:String x:Key="App_Title">PosApp</sys:String>
     <sys:String x:Key="App_Tagline">Local Point of Sale</sys:String>
 
+    <!-- Additional localized application UI -->
+    <sys:String x:Key="Common_All">All</sys:String>
+    <sys:String x:Key="Common_Refresh">Refresh</sys:String>
+    <sys:String x:Key="Common_View">View</sys:String>
+    <sys:String x:Key="Common_Edit">Edit</sys:String>
+    <sys:String x:Key="Common_Print">Print</sys:String>
+    <sys:String x:Key="Prod_Subtitle">Manage your product catalog, prices, and identifiers</sys:String>
+    <sys:String x:Key="Prod_ImportCsv">Import CSV</sys:String>
+    <sys:String x:Key="Prod_ExportCsv">Export CSV</sys:String>
+    <sys:String x:Key="Prod_SkuOnly">SKU</sys:String>
+    <sys:String x:Key="Prod_Barcode">Barcode</sys:String>
+    <sys:String x:Key="Prod_WeightedHint">Click to change whether this product is sold by weight</sys:String>
+    <sys:String x:Key="Inv_Subtitle">Track stock levels, make adjustments, and review movement history</sys:String>
+    <sys:String x:Key="Inv_Count">Inventory Count</sys:String>
+    <sys:String x:Key="Inv_TotalProducts">Total Products</sys:String>
+    <sys:String x:Key="Inv_StockValue">Stock Value (Cost)</sys:String>
+    <sys:String x:Key="Inv_CurrentLevels">Current Stock Levels</sys:String>
+    <sys:String x:Key="Inv_Threshold">Threshold</sys:String>
+    <sys:String x:Key="Inv_RecentMovements">Recent Stock Movements</sys:String>
+    <sys:String x:Key="Inv_CountTitle">Physical Inventory Count</sys:String>
+    <sys:String x:Key="Inv_CountSubtitle">Enter only the products you counted. Saving posts all differences as one audited stock adjustment.</sys:String>
+    <sys:String x:Key="Inv_CountSearchHint">Search by product, SKU, or barcode</sys:String>
+    <sys:String x:Key="Inv_SystemQty">System Qty</sys:String>
+    <sys:String x:Key="Inv_CountedQty">Counted Qty</sys:String>
+    <sys:String x:Key="Inv_Difference">Difference</sys:String>
+    <sys:String x:Key="Inv_CountNote">Count note / reference</sys:String>
+    <sys:String x:Key="Inv_PostCount">Post Count</sys:String>
+    <sys:String x:Key="Purch_Title">Purchases &amp; Suppliers</sys:String>
+    <sys:String x:Key="Purch_Subtitle">Receive supplier deliveries, update stock, and keep a local purchase history</sys:String>
+    <sys:String x:Key="Purch_AddSupplier">Add Supplier</sys:String>
+    <sys:String x:Key="Purch_NewPurchase">New Purchase</sys:String>
+    <sys:String x:Key="Purch_Documents">Purchase Documents</sys:String>
+    <sys:String x:Key="Purch_Total">Purchase Total</sys:String>
+    <sys:String x:Key="Purch_ActiveSuppliers">Active Suppliers</sys:String>
+    <sys:String x:Key="Purch_Posted">Posted Purchases</sys:String>
+    <sys:String x:Key="Purch_Document">Document</sys:String>
+    <sys:String x:Key="Purch_Supplier">Supplier</sys:String>
+    <sys:String x:Key="Purch_Reference">Reference</sys:String>
+    <sys:String x:Key="Purch_Suppliers">Suppliers</sys:String>
+    <sys:String x:Key="Purch_SearchSupplier">Search supplier</sys:String>
+    <sys:String x:Key="Reg_Title">Cash Register</sys:String>
+    <sys:String x:Key="Reg_Subtitle">Track opening cash, paid in/out movements, X reports, and end-of-day close</sys:String>
+    <sys:String x:Key="Reg_NoOpen">No open session</sys:String>
+    <sys:String x:Key="Reg_OpeningCash">Opening Cash</sys:String>
+    <sys:String x:Key="Reg_CashSales">Cash Sales</sys:String>
+    <sys:String x:Key="Reg_CashInOut">Cash In / Out</sys:String>
+    <sys:String x:Key="Reg_ExpectedDrawer">Expected in Drawer</sys:String>
+    <sys:String x:Key="Reg_Open">Open Register</sys:String>
+    <sys:String x:Key="Reg_CashIn">Cash In</sys:String>
+    <sys:String x:Key="Reg_CashOut">Cash Out</sys:String>
+    <sys:String x:Key="Reg_XReport">X Report</sys:String>
+    <sys:String x:Key="Reg_CloseZ">Close &amp; Z Report</sys:String>
+    <sys:String x:Key="Reg_CurrentMovements">Current Session Movements</sys:String>
+    <sys:String x:Key="Reg_Time">Time</sys:String>
+    <sys:String x:Key="Reg_Reason">Reason</sys:String>
+    <sys:String x:Key="Reg_Amount">Amount</sys:String>
+    <sys:String x:Key="Reg_RecentSessions">Recent Register Sessions (double-click to view)</sys:String>
+    <sys:String x:Key="Reg_Opened">Opened</sys:String>
+    <sys:String x:Key="Reg_Closed">Closed</sys:String>
+    <sys:String x:Key="Reg_Expected">Expected</sys:String>
+    <sys:String x:Key="Reg_Variance">Variance</sys:String>
+    <sys:String x:Key="Rpt_Subtitle">Sales trends, top products, payment breakdown, and category analysis</sys:String>
+    <sys:String x:Key="Rpt_From">From:</sys:String>
+    <sys:String x:Key="Rpt_To">To:</sys:String>
+    <sys:String x:Key="Rpt_Apply">Apply</sys:String>
+    <sys:String x:Key="Rpt_Product">Product</sys:String>
+    <sys:String x:Key="Rpt_Qty">Qty</sys:String>
+    <sys:String x:Key="Rpt_Revenue">Revenue</sys:String>
+    <sys:String x:Key="Rpt_Category">Category</sys:String>
+    <sys:String x:Key="Rpt_Date">Date</sys:String>
+    <sys:String x:Key="Rpt_Txns">Txns</sys:String>
+    <sys:String x:Key="Rpt_Net">Net</sys:String>
+    <sys:String x:Key="Rpt_Method">Method</sys:String>
+    <sys:String x:Key="Rpt_Count">Count</sys:String>
+    <sys:String x:Key="Rpt_Total">Total</sys:String>
+    <sys:String x:Key="Sales_Subtitle">Browse, filter, refund, void, and reprint past transactions</sys:String>
+    <sys:String x:Key="Sales_All">All</sys:String>
+    <sys:String x:Key="Sales_Subtotal">Subtotal</sys:String>
+    <sys:String x:Key="Sales_Discount">Discount</sys:String>
+    <sys:String x:Key="Sales_Tax">Tax</sys:String>
+    <sys:String x:Key="Sales_Actions">Actions</sys:String>
+    <sys:String x:Key="Usr_Subtitle">Manage cashier, manager, and admin accounts with role-based permissions</sys:String>
+    <sys:String x:Key="Usr_Edit">Edit</sys:String>
+    <sys:String x:Key="Usr_ResetPin">Reset PIN</sys:String>
+    <sys:String x:Key="Usr_Delete">Delete</sys:String>
+    <sys:String x:Key="Set_CurrencyDecimals">Currency decimal places (0-4)</sys:String>
+    <sys:String x:Key="Service_Retail">Retail</sys:String>
+    <sys:String x:Key="Service_Takeaway">Takeaway</sys:String>
+    <sys:String x:Key="Service_Delivery">Delivery</sys:String>
+    <sys:String x:Key="Service_DineIn">Dine-in</sys:String>
+    <sys:String x:Key="Promo_ActiveHint">Click to activate or deactivate this promotion</sys:String>
+    <sys:String x:Key="Login_Footer">© 2026 PosApp - Local Point of Sale</sys:String>
+
     <!-- Common -->
     <sys:String x:Key="Common_SelectDate">Select date</sys:String>
 
@@ -73,7 +166,6 @@
     <sys:String x:Key="POS_AddDiscount">Add Discount</sys:String>
     <sys:String x:Key="POS_SelectCustomer">Select Customer</sys:String>
     <sys:String x:Key="POS_WalkIn">Walk-in Customer</sys:String>
-    <sys:String x:Key="POS_Weigh">Weigh</sys:String>
     <sys:String x:Key="POS_Stock">Stock</sys:String>
 
     <!-- Payment -->
@@ -87,6 +179,9 @@
     <sys:String x:Key="Pay_Mobile">Mobile Wallet</sys:String>
     <sys:String x:Key="Pay_Bank">Bank Transfer</sys:String>
     <sys:String x:Key="Pay_StoreCredit">Store Credit</sys:String>
+    <sys:String x:Key="Pay_Coupon">Coupon</sys:String>
+    <sys:String x:Key="Pay_Reference">Transaction reference</sys:String>
+    <sys:String x:Key="Pay_ReferenceRequired">Enter the card, wallet, or bank transaction reference.</sys:String>
     <sys:String x:Key="Pay_Complete">Complete Sale</sys:String>
     <sys:String x:Key="Pay_Cancel">Cancel</sys:String>
     <sys:String x:Key="Pay_QuickCash">Quick Cash</sys:String>
@@ -156,6 +251,10 @@
     <sys:String x:Key="Sales_Cashier">Cashier</sys:String>
     <sys:String x:Key="Sales_Total">Total</sys:String>
     <sys:String x:Key="Sales_Status">Status</sys:String>
+    <sys:String x:Key="Sales_StatusCompleted">Completed</sys:String>
+    <sys:String x:Key="Sales_StatusSuspended">Suspended</sys:String>
+    <sys:String x:Key="Sales_StatusVoided">Voided</sys:String>
+    <sys:String x:Key="Sales_StatusRefunded">Refunded</sys:String>
     <sys:String x:Key="Sales_Items">Items</sys:String>
     <sys:String x:Key="Sales_View">View</sys:String>
     <sys:String x:Key="Sales_Refund">Refund</sys:String>
@@ -211,12 +310,8 @@
     <sys:String x:Key="Set_Country">Country</sys:String>
     <sys:String x:Key="Set_CurrencyCode">Currency code</sys:String>
     <sys:String x:Key="Set_Footer">Receipt Footer</sys:String>
-    <sys:String x:Key="Set_Hardware">Hardware</sys:String>
     <sys:String x:Key="Set_Printer">Receipt Printer</sys:String>
-    <sys:String x:Key="Set_DrawerPort">Cash Drawer Port</sys:String>
-    <sys:String x:Key="Set_ScalePort">Scale Port</sys:String>
     <sys:String x:Key="Set_AutoPrint">Auto-print receipt</sys:String>
-    <sys:String x:Key="Set_OpenDrawer">Open drawer on cash sale</sys:String>
     <sys:String x:Key="Set_Language">Language</sys:String>
     <sys:String x:Key="Set_Theme">Theme</sys:String>
     <sys:String x:Key="Set_Light">Light</sys:String>
@@ -225,7 +320,6 @@
     <sys:String x:Key="Set_Bengali">বাংলা</sys:String>
     <sys:String x:Key="Set_Save">Save Settings</sys:String>
     <sys:String x:Key="Set_TestPrint">Test Print</sys:String>
-    <sys:String x:Key="Set_TestDrawer">Test Drawer</sys:String>
     <sys:String x:Key="Set_DataSafety">Data Safety &amp; Backups</sys:String>
     <sys:String x:Key="Set_BackupDescription">Backups stay on this computer. Restore is staged safely and applied on the next start.</sys:String>
     <sys:String x:Key="Set_AutoBackup">Enable automatic local backups</sys:String>
@@ -270,7 +364,6 @@
     <sys:String x:Key="POS_NoItemsHint">Scan a barcode or press F3 to find a product</sys:String>
     <sys:String x:Key="POS_TaxDiscount">Tax / Discount</sys:String>
     <sys:String x:Key="POS_Receipt">Current receipt</sys:String>
-    <sys:String x:Key="POS_CashDrawer">Cash drawer</sys:String>
     <sys:String x:Key="POS_ServiceType">Service type</sys:String>
     <sys:String x:Key="POS_Comment">Comment</sys:String>
     <sys:String x:Key="POS_Customer">Customer</sys:String>
@@ -352,10 +445,6 @@
     <sys:String x:Key="Set_Documents">Documents</sys:String>
     <sys:String x:Key="Set_Receipt">Receipt</sys:String>
     <sys:String x:Key="Set_ReceiptWidth">Paper width (mm)</sys:String>
-    <sys:String x:Key="Set_WeighingScale">Weighing scale</sys:String>
-    <sys:String x:Key="Set_TestScale">Test scale</sys:String>
-    <sys:String x:Key="Set_CustomerDisplay">Customer display</sys:String>
-    <sys:String x:Key="Set_CustomerDisplayHelp">Customer-facing display support is prepared for a locally connected second screen. No cloud connection is used.</sys:String>
     <sys:String x:Key="Set_EmailSection">Email</sys:String>
     <sys:String x:Key="Set_OfflineEmail">Email delivery is disabled while PosApp is in offline-only mode. Receipts can still be printed or exported locally.</sys:String>
     <sys:String x:Key="Set_Print">Print</sys:String>
@@ -389,5 +478,7 @@
     <sys:String x:Key="Common_Error">Error</sys:String>
     <sys:String x:Key="Common_Success">Success</sys:String>
     <sys:String x:Key="Common_Actions">Actions</sys:String>
+    <sys:String x:Key="Common_Deactivate">Deactivate</sys:String>
+    <sys:String x:Key="Common_Restore">Restore</sys:String>
 
 </ResourceDictionary>

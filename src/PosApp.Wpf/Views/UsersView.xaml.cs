@@ -18,7 +18,7 @@ public partial class UsersView : UserControl, IRefreshable
         _auth = auth;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try
@@ -44,7 +44,7 @@ public partial class UsersView : UserControl, IRefreshable
     private void Add_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new UserEditDialog(_db, null) { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true) Refresh();
+        if (dlg.ShowDialog() == true) _ = RefreshAsync();
     }
 
     private void Edit_Click(object sender, RoutedEventArgs e)
@@ -52,7 +52,7 @@ public partial class UsersView : UserControl, IRefreshable
         if (sender is Button btn && btn.Tag is User u)
         {
             var dlg = new UserEditDialog(_db, u) { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true) Refresh();
+            if (dlg.ShowDialog() == true) _ = RefreshAsync();
         }
     }
 
@@ -132,8 +132,15 @@ public partial class UsersView : UserControl, IRefreshable
             var dlg = new ResetPinDialog() { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true && !string.IsNullOrEmpty(dlg.NewPin))
             {
-                await _auth.ChangePasswordAsync(u.Id, dlg.NewPin);
-                MessageBox.Show("PIN reset successfully.", "Reset", MessageBoxButton.OK, MessageBoxImage.Information);
+                try
+                {
+                    await _auth.ChangePasswordAsync(u.Id, dlg.NewPin);
+                    MessageBox.Show("PIN reset successfully.", "Reset", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.GetBaseException().Message, "Unable to reset PIN", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
         }
     }
@@ -165,20 +172,24 @@ public partial class UsersView : UserControl, IRefreshable
                                  await _db.PurchaseDocuments.AnyAsync(purchase => purchase.UserId == u.Id) ||
                                  await _db.CashSessions.AnyAsync(session =>
                                      session.OpenedByUserId == u.Id || session.ClosedByUserId == u.Id) ||
-                                 await _db.CashMovements.AnyAsync(movement => movement.UserId == u.Id);
+                                 await _db.CashMovements.AnyAsync(movement => movement.UserId == u.Id) ||
+                                 await _db.StockTransactions.AnyAsync(transaction => transaction.UserId == u.Id);
                 if (hasHistory)
                 {
                     // Keep historical receipts valid while removing login access.
-                    u.IsActive = false;
-                    u.UpdatedAt = DateTime.UtcNow;
-                    _db.Users.Update(u);
+                    var tracked = await _db.Users.FindAsync(u.Id)
+                        ?? throw new InvalidOperationException("User not found.");
+                    tracked.IsActive = false;
+                    tracked.UpdatedAt = DateTime.UtcNow;
                 }
                 else
                 {
-                    _db.Users.Remove(u);
+                    var tracked = await _db.Users.FindAsync(u.Id)
+                        ?? throw new InvalidOperationException("User not found.");
+                    _db.Users.Remove(tracked);
                 }
                 await _db.SaveChangesAsync();
-                Refresh();
+                await RefreshAsync();
             }
             catch (Exception ex)
             {
@@ -191,116 +202,163 @@ public partial class UsersView : UserControl, IRefreshable
 public class UserEditDialog : Window
 {
     private readonly Data.AppDbContext _db;
-    private readonly User _user;
+    private readonly int _userId;
+    private readonly UserRole _originalRole;
+    private readonly bool _originalActive;
     private readonly bool _isNew;
-    private readonly ComboBox _roleCombo;
-    private readonly CheckBox _activeCheckbox;
-    private readonly TextBox _usernameBox;
-    private readonly TextBox _fullnameBox;
-    private readonly PasswordBox _pinBox;
+    private readonly ComboBox _roleCombo = new();
+    private readonly CheckBox _activeCheckbox = new() { Content = "Active" };
+    private readonly TextBox _usernameBox = new();
+    private readonly TextBox _fullnameBox = new();
+    private readonly PasswordBox _pinBox = new();
 
     public UserEditDialog(Data.AppDbContext db, User? existing)
     {
         _db = db;
         _isNew = existing == null;
-        _user = existing ?? new User { IsActive = true, Role = UserRole.Cashier };
+        _userId = existing?.Id ?? 0;
+        _originalRole = existing?.Role ?? UserRole.Cashier;
+        _originalActive = existing?.IsActive ?? true;
 
         Title = _isNew ? "Add User" : "Edit User";
-        Width = 460; Height = 520;
+        Width = 460;
+        Height = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("BackgroundBrush");
+        Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
 
-        var panel = new StackPanel { Margin = new Thickness(24) };
-
-        _usernameBox = new TextBox { Text = _user.Username, Margin = new Thickness(0, 0, 0, 12) };
-        _fullnameBox = new TextBox { Text = _user.FullName, Margin = new Thickness(0, 0, 0, 12) };
-        _roleCombo = new ComboBox { Margin = new Thickness(0, 0, 0, 12) };
+        _usernameBox.Text = existing?.Username ?? string.Empty;
+        _fullnameBox.Text = existing?.FullName ?? string.Empty;
+        _activeCheckbox.IsChecked = existing?.IsActive ?? true;
         _roleCombo.Items.Add(new ComboBoxItem { Content = "Cashier", Tag = UserRole.Cashier });
         _roleCombo.Items.Add(new ComboBoxItem { Content = "Manager", Tag = UserRole.Manager });
         _roleCombo.Items.Add(new ComboBoxItem { Content = "Admin", Tag = UserRole.Admin });
-        for (int i = 0; i < _roleCombo.Items.Count; i++)
-        {
-            if (_roleCombo.Items[i] is ComboBoxItem ci && (UserRole)ci.Tag! == _user.Role) { _roleCombo.SelectedIndex = i; break; }
-        }
-        if (_roleCombo.SelectedIndex < 0) _roleCombo.SelectedIndex = 0;
+        _roleCombo.SelectedIndex = Math.Max(0, (int)_originalRole);
 
-        _pinBox = new PasswordBox { Margin = new Thickness(0, 0, 0, 12) };
-        _activeCheckbox = new CheckBox { Content = "Active", IsChecked = _user.IsActive, Margin = new Thickness(0, 0, 0, 16) };
-
+        var panel = new StackPanel { Margin = new Thickness(24) };
         panel.Children.Add(MakeRow("Username", _usernameBox));
         panel.Children.Add(MakeRow("Full Name", _fullnameBox));
         panel.Children.Add(MakeRow("Role", _roleCombo));
-        if (_isNew) panel.Children.Add(MakeRow("Initial PIN", _pinBox));
+        if (_isNew) panel.Children.Add(MakeRow("Initial PIN (4-12 digits)", _pinBox));
+        _activeCheckbox.Margin = new Thickness(0, 0, 0, 16);
         panel.Children.Add(_activeCheckbox);
 
-        var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var cancelBtn = new Button
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var cancel = new Button
         {
             Content = "Cancel",
-            Style = (Style)System.Windows.Application.Current.FindResource("OutlineButton"),
+            Style = (Style)Application.Current.FindResource("OutlineButton"),
             Padding = new Thickness(20, 10, 20, 10),
             Margin = new Thickness(0, 0, 8, 0)
         };
-        cancelBtn.Click += (_, _) => { DialogResult = false; Close(); };
-        btnRow.Children.Add(cancelBtn);
-
-        var saveBtn = new Button
+        cancel.Click += (_, _) => { DialogResult = false; Close(); };
+        var save = new Button
         {
             Content = "Save",
-            Style = (Style)System.Windows.Application.Current.FindResource("PrimaryButton"),
+            Style = (Style)Application.Current.FindResource("PrimaryButton"),
             Padding = new Thickness(20, 10, 20, 10)
         };
-        saveBtn.Click += async (_, _) =>
-        {
-            if (string.IsNullOrWhiteSpace(_usernameBox.Text) || string.IsNullOrWhiteSpace(_fullnameBox.Text))
-            {
-                MessageBox.Show("Username and full name are required", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            _user.Username = _usernameBox.Text.Trim();
-            _user.FullName = _fullnameBox.Text.Trim();
-            _user.Role = (UserRole)((ComboBoxItem)_roleCombo.SelectedItem).Tag!;
-            _user.IsActive = _activeCheckbox.IsChecked ?? true;
-            if (_isNew)
-            {
-                if (string.IsNullOrEmpty(_pinBox.Password))
-                {
-                    MessageBox.Show("Initial PIN is required", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-                var (hash, salt) = Data.DbSeeder.HashPin(_pinBox.Password);
-                _user.PasswordHash = hash;
-                _user.PasswordSalt = salt;
-                _db.Users.Add(_user);
-            }
-            else
-            {
-                _user.UpdatedAt = DateTime.UtcNow;
-                _db.Users.Update(_user);
-            }
-            try
-            {
-                await _db.SaveChangesAsync();
-                DialogResult = true;
-                Close();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Unable to save user", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        };
-        btnRow.Children.Add(saveBtn);
-        panel.Children.Add(btnRow);
-
+        save.Click += Save_Click;
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(save);
+        panel.Children.Add(buttons);
         Content = panel;
     }
 
-    private static System.Windows.Controls.Border MakeRow(string label, FrameworkElement ctrl)
+    private async void Save_Click(object sender, RoutedEventArgs e)
+    {
+        var username = _usernameBox.Text.Trim();
+        var fullName = _fullnameBox.Text.Trim();
+        if (username.Length == 0 || fullName.Length == 0)
+        {
+            MessageBox.Show("Username and full name are required.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (username.Any(char.IsWhiteSpace))
+        {
+            MessageBox.Show("Username cannot contain spaces.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (await _db.Users.AsNoTracking().AnyAsync(u => u.Id != _userId && u.Username.ToLower() == username.ToLower()))
+        {
+            MessageBox.Show("Another user already has this username.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var role = (UserRole)((ComboBoxItem)_roleCombo.SelectedItem).Tag!;
+        var isActive = _activeCheckbox.IsChecked == true;
+        if (!_isNew && _userId == App.CurrentUser?.Id && (!isActive || role != _originalRole))
+        {
+            MessageBox.Show("You cannot deactivate or change the role of the account currently signed in.",
+                "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (!_isNew && _originalRole == UserRole.Admin && _originalActive && (!isActive || role != UserRole.Admin))
+        {
+            var otherActiveAdmins = await _db.Users.AsNoTracking().CountAsync(u =>
+                u.Id != _userId && u.Role == UserRole.Admin && u.IsActive);
+            if (otherActiveAdmins == 0)
+            {
+                MessageBox.Show("At least one active administrator account is required.",
+                    "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
+
+        try
+        {
+            IsEnabled = false;
+            if (_isNew)
+            {
+                Data.DbSeeder.ValidatePin(_pinBox.Password);
+                var (hash, salt) = Data.DbSeeder.HashPin(_pinBox.Password);
+                _db.Users.Add(new User
+                {
+                    Username = username,
+                    FullName = fullName,
+                    Role = role,
+                    IsActive = isActive,
+                    PasswordHash = hash,
+                    PasswordSalt = salt,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                var tracked = await _db.Users.FindAsync(_userId)
+                    ?? throw new InvalidOperationException("User not found.");
+                tracked.Username = username;
+                tracked.FullName = fullName;
+                tracked.Role = role;
+                tracked.IsActive = isActive;
+                tracked.UpdatedAt = DateTime.UtcNow;
+            }
+            await _db.SaveChangesAsync();
+            DialogResult = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.GetBaseException().Message, "Unable to save user", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
+    }
+
+    private static Border MakeRow(string label, FrameworkElement control)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextMutedBrush"), Margin = new Thickness(0, 0, 0, 4) });
-        stack.Children.Add(ctrl);
-        return new System.Windows.Controls.Border { Child = stack };
+        stack.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 12,
+            Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush"),
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+        control.Margin = new Thickness(0, 0, 0, 12);
+        stack.Children.Add(control);
+        return new Border { Child = stack };
     }
 }
 
@@ -338,9 +396,13 @@ public class ResetPinDialog : Window
         };
         okBtn.Click += (_, _) =>
         {
-            if (string.IsNullOrEmpty(pin.Password) || pin.Password.Length < 4)
+            try
             {
-                MessageBox.Show("PIN must be at least 4 characters", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Data.DbSeeder.ValidatePin(pin.Password);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Invalid PIN", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             NewPin = pin.Password;

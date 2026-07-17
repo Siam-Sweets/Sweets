@@ -33,6 +33,8 @@ public class Customer
     /// <summary>Legacy earning rate; inactive while loyalty is disabled.</summary>
     public decimal LoyaltyRate { get; set; } = 0m;
 
+    public bool IsActive { get; set; } = true;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 

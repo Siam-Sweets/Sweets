@@ -1,11 +1,14 @@
 using System.Diagnostics;
 using System.Drawing.Printing;
 using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -29,7 +32,7 @@ public partial class SettingsView : UserControl, IRefreshable
         _updates = updates;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try { await LoadAsync(); }
@@ -46,13 +49,11 @@ public partial class SettingsView : UserControl, IRefreshable
             "tax" => 1,
             "products" => 2,
             "documents" => 3,
-            "scale" => 4,
-            "display" => 5,
-            "email" => 6,
-            "print" => 7,
-            "database" => 8,
-            "update" => 9,
-            "about" => 10,
+            "email" => 4,
+            "print" => 5,
+            "database" => 6,
+            "update" => 7,
+            "about" => 8,
             _ => 0
         };
     }
@@ -70,13 +71,11 @@ public partial class SettingsView : UserControl, IRefreshable
             AddressBox.Text = _current.Address;
             CurrencyBox.Text = _current.CurrencySymbol;
             CurrencyCodeBox.Text = _current.CurrencyCode;
+            CurrencyDecimalsBox.Text = Math.Clamp(_current.CurrencyDecimals, 0, 4).ToString();
             CountryBox.Text = _current.Country;
             FooterBox.Text = _current.FooterNote;
             ReceiptWidthBox.Text = Math.Clamp(_current.ReceiptWidth, 40, 120).ToString();
-            DrawerPortBox.Text = _current.CashDrawerPort;
-            ScalePortBox.Text = _current.ScalePort;
             AutoPrintCheckbox.IsChecked = _current.PrintReceiptAutomatically;
-            OpenDrawerCheckbox.IsChecked = _current.OpenDrawerOnCashSale;
             AutoBackupCheckbox.IsChecked = _current.AutomaticBackupEnabled;
             BackupStartupCheckbox.IsChecked = _current.BackupOnStartup;
             BackupExitCheckbox.IsChecked = _current.BackupOnExit;
@@ -98,8 +97,6 @@ public partial class SettingsView : UserControl, IRefreshable
             DefaultTaxBox.Text = _current.DefaultTaxRate.ToString("0.##");
             RequireOpenRegisterCheckbox.IsChecked = _current.RequireOpenRegisterForSales;
             ConfirmVoidCheckbox.IsChecked = _current.ConfirmBeforeVoidingOrder;
-            ShowCashInCheckbox.IsChecked = _current.ShowCashInOnStartup;
-            BusinessDayCheckbox.IsChecked = _current.SelectBusinessDayOnStartup;
             GridRowsBox.Text = Math.Clamp(_current.ProductGridRows, 2, 10).ToString();
             GridColumnsBox.Text = Math.Clamp(_current.ProductGridColumns, 2, 10).ToString();
             VirtualKeyboardCheckbox.IsChecked = _current.EnableVirtualKeyboard;
@@ -166,7 +163,7 @@ public partial class SettingsView : UserControl, IRefreshable
         try
         {
             await _settings.SetStoreSettingsAsync(_current);
-            App.StoreSettings = _current;
+            App.PublishSettings(await _settings.GetStoreSettingsAsync());
         }
         catch (Exception ex)
         {
@@ -191,63 +188,67 @@ public partial class SettingsView : UserControl, IRefreshable
         }
     }
 
-    private void UpdateCurrentFromForm()
+    private StoreSettings BuildSettingsFromForm()
     {
-        _current.StoreName = StoreNameBox.Text;
-        _current.Phone = PhoneBox.Text;
-        _current.Email = EmailBox.Text;
-        _current.TaxId = TaxIdBox.Text;
-        _current.Address = AddressBox.Text;
-        _current.CurrencySymbol = CurrencyBox.Text;
-        _current.CurrencyCode = string.IsNullOrWhiteSpace(CurrencyCodeBox.Text) ? "BDT" : CurrencyCodeBox.Text.Trim().ToUpperInvariant();
-        _current.Country = CountryBox.Text.Trim();
-        _current.FooterNote = FooterBox.Text;
-        if (!int.TryParse(ReceiptWidthBox.Text, out var receiptWidth) || receiptWidth < 40 || receiptWidth > 120)
+        var candidate = JsonSerializer.Deserialize<StoreSettings>(JsonSerializer.Serialize(_current)) ?? new StoreSettings();
+        candidate.StoreName = StoreNameBox.Text.Trim();
+        if (candidate.StoreName.Length == 0) throw new InvalidOperationException("Store name is required.");
+        candidate.Phone = PhoneBox.Text.Trim();
+        candidate.Email = EmailBox.Text.Trim();
+        candidate.TaxId = TaxIdBox.Text.Trim();
+        candidate.Address = AddressBox.Text.Trim();
+        candidate.CurrencySymbol = string.IsNullOrWhiteSpace(CurrencyBox.Text) ? "¤" : CurrencyBox.Text.Trim();
+        candidate.CurrencyCode = string.IsNullOrWhiteSpace(CurrencyCodeBox.Text) ? "BDT" : CurrencyCodeBox.Text.Trim().ToUpperInvariant();
+        candidate.Country = CountryBox.Text.Trim();
+        candidate.FooterNote = FooterBox.Text.Trim();
+        if (!int.TryParse(CurrencyDecimalsBox.Text, out var decimals) || decimals is < 0 or > 4)
+            throw new InvalidOperationException("Currency decimal places must be a whole number from 0 to 4.");
+        candidate.CurrencyDecimals = decimals;
+        if (!int.TryParse(ReceiptWidthBox.Text, out var receiptWidth) || receiptWidth is < 40 or > 120)
             throw new InvalidOperationException("Receipt width must be a whole number from 40 to 120 mm.");
-        _current.ReceiptWidth = receiptWidth;
-        _current.CashDrawerPort = DrawerPortBox.Text;
-        _current.ScalePort = ScalePortBox.Text.Trim();
-        _current.PrintReceiptAutomatically = AutoPrintCheckbox.IsChecked ?? true;
-        _current.OpenDrawerOnCashSale = OpenDrawerCheckbox.IsChecked ?? true;
-        _current.ReceiptPrinterName = PrinterCombo.SelectedItem as string == "(default)" ? "" : PrinterCombo.SelectedItem as string ?? "";
-        _current.Language = LangBn.IsChecked == true ? "bn" : "en";
-        _current.Theme = ThemeDark.IsChecked == true ? "Dark" : "Light";
-        _current.AutomaticBackupEnabled = AutoBackupCheckbox.IsChecked == true;
-        _current.BackupOnStartup = BackupStartupCheckbox.IsChecked == true;
-        _current.BackupOnExit = BackupExitCheckbox.IsChecked == true;
-        _current.DefaultServiceType = (DefaultServiceCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Retail";
-        if (!decimal.TryParse(DefaultTaxBox.Text, out var defaultTax) || defaultTax < 0m || defaultTax > 100m)
+        candidate.ReceiptWidth = receiptWidth;
+        candidate.PrintReceiptAutomatically = AutoPrintCheckbox.IsChecked != false;
+        candidate.ReceiptPrinterName = PrinterCombo.SelectedItem as string == "(default)" ? string.Empty : PrinterCombo.SelectedItem as string ?? string.Empty;
+        candidate.Language = LangBn.IsChecked == true ? "bn" : "en";
+        candidate.Theme = ThemeDark.IsChecked == true ? "Dark" : "Light";
+        candidate.AutomaticBackupEnabled = AutoBackupCheckbox.IsChecked == true;
+        candidate.BackupOnStartup = BackupStartupCheckbox.IsChecked == true;
+        candidate.BackupOnExit = BackupExitCheckbox.IsChecked == true;
+        candidate.DefaultServiceType = (DefaultServiceCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Retail";
+        if (!FormattingUtilities.TryParseDecimal(DefaultTaxBox.Text, out var defaultTax) || defaultTax is < 0m or > 100m)
             throw new InvalidOperationException("Default tax must be from 0 to 100.");
-        _current.DefaultTaxRate = defaultTax;
-        _current.RequireOpenRegisterForSales = RequireOpenRegisterCheckbox.IsChecked == true;
-        _current.ConfirmBeforeVoidingOrder = ConfirmVoidCheckbox.IsChecked != false;
-        _current.ShowCashInOnStartup = ShowCashInCheckbox.IsChecked == true;
-        _current.SelectBusinessDayOnStartup = BusinessDayCheckbox.IsChecked == true;
-        _current.EnableVirtualKeyboard = VirtualKeyboardCheckbox.IsChecked == true;
-        if (!int.TryParse(GridRowsBox.Text, out var productRows) || productRows < 2 || productRows > 10)
+        candidate.DefaultTaxRate = defaultTax;
+        candidate.RequireOpenRegisterForSales = RequireOpenRegisterCheckbox.IsChecked == true;
+        candidate.ConfirmBeforeVoidingOrder = ConfirmVoidCheckbox.IsChecked != false;
+        candidate.ShowCashInOnStartup = false;
+        candidate.SelectBusinessDayOnStartup = false;
+        candidate.EnableVirtualKeyboard = VirtualKeyboardCheckbox.IsChecked == true;
+        if (!int.TryParse(GridRowsBox.Text, out var rows) || rows is < 2 or > 10)
             throw new InvalidOperationException("Product rows must be a whole number from 2 to 10.");
-        if (!int.TryParse(GridColumnsBox.Text, out var productColumns) || productColumns < 2 || productColumns > 10)
+        if (!int.TryParse(GridColumnsBox.Text, out var columns) || columns is < 2 or > 10)
             throw new InvalidOperationException("Product columns must be a whole number from 2 to 10.");
-        if (!int.TryParse(MessageDurationBox.Text, out var messageSeconds) || messageSeconds < 1 || messageSeconds > 60)
+        if (!int.TryParse(MessageDurationBox.Text, out var seconds) || seconds is < 1 or > 60)
             throw new InvalidOperationException("Message duration must be a whole number from 1 to 60 seconds.");
-        _current.ProductGridRows = productRows;
-        _current.ProductGridColumns = productColumns;
-        _current.MessageDurationSeconds = messageSeconds;
+        candidate.ProductGridRows = rows;
+        candidate.ProductGridColumns = columns;
+        candidate.MessageDurationSeconds = seconds;
         var scaleText = (UiScaleCombo.SelectedItem as ComboBoxItem)?.Content?.ToString()?.TrimEnd('%');
-        _current.UiScalePercent = int.TryParse(scaleText, out var scale) ? scale : 100;
-        if (!int.TryParse(BackupRetentionBox.Text, out var retention) || retention < 1 || retention > 200)
+        candidate.UiScalePercent = int.TryParse(scaleText, out var scale) ? Math.Clamp(scale, 90, 125) : 100;
+        if (!int.TryParse(BackupRetentionBox.Text, out var retention) || retention is < 1 or > 200)
             throw new InvalidOperationException("Backup retention must be a whole number from 1 to 200.");
-        _current.BackupRetentionCount = retention;
+        candidate.BackupRetentionCount = retention;
+        return candidate;
     }
 
     private async Task SaveCurrentSettingsAsync()
     {
-        UpdateCurrentFromForm();
+        var candidate = BuildSettingsFromForm();
         await _appearanceSaveGate.WaitAsync();
         try
         {
-            await _settings.SetStoreSettingsAsync(_current);
-            App.StoreSettings = _current;
+            await _settings.SetStoreSettingsAsync(candidate);
+            _current = await _settings.GetStoreSettingsAsync();
+            App.PublishSettings(_current);
             App.ApplyLanguage(_current.Language);
             App.ApplyTheme(_current.Theme);
             (Application.Current.MainWindow as MainWindow)?.ApplyUiScale(_current.UiScalePercent);
@@ -271,56 +272,6 @@ public partial class SettingsView : UserControl, IRefreshable
         catch (Exception ex)
         {
             MessageBox.Show(ex.Message, "Test Print", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private async void TestDrawer_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await SaveCurrentSettingsAsync();
-            var ok = await _hardware.OpenCashDrawerAsync();
-            MessageBox.Show(ok ? "Drawer pulse sent." : "Drawer not available. Check the COM port and connection.",
-                "Test Drawer", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "Test Drawer", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private async void TestScale_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await SaveCurrentSettingsAsync();
-            var configuredPort = _current.ScalePort;
-            if (string.IsNullOrWhiteSpace(configuredPort))
-            {
-                MessageBox.Show("Enter the scale COM port before testing (for example, COM3).",
-                    "Test Scale", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var connected = await _hardware.IsScaleConnected();
-            if (!connected)
-            {
-                MessageBox.Show(
-                    $"Unable to open scale port {configuredPort}. Confirm the port in Windows Device Manager, close any other program using it, and check the cable and power.",
-                    "Test Scale", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var weight = await _hardware.ReadScaleAsync();
-            MessageBox.Show(weight.HasValue
-                    ? $"Scale connected on {configuredPort}. Current reading: {weight.Value:0.###} kg."
-                    : $"Scale port {configuredPort} opened, but no readable weight was received. Place an item on the scale and confirm that it uses 9600 baud, 8 data bits, no parity, one stop bit, and the R command protocol.",
-                "Test Scale", MessageBoxButton.OK,
-                weight.HasValue ? MessageBoxImage.Information : MessageBoxImage.Warning);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "Test Scale", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -349,7 +300,7 @@ public partial class SettingsView : UserControl, IRefreshable
         return new PosApp.Core.Entities.Sale
         {
             ReceiptNumber = "TEST-" + DateTime.Now.Ticks,
-            SaleDate = DateTime.Now,
+            SaleDate = DateTime.UtcNow,
             Subtotal = 100,
             DiscountTotal = 0,
             TaxTotal = 15,
@@ -449,7 +400,7 @@ public partial class SettingsView : UserControl, IRefreshable
             return;
         }
 
-        var completed = last.CompletedAtUtc?.ToLocalTime().ToString("g") ?? "unknown time";
+        var completed = last.CompletedAtUtc.HasValue ? DateTimeUtilities.ToLocal(last.CompletedAtUtc.Value).ToString("g") : "unknown time";
         UpdateStatusText.Text = last.State switch
         {
             "Completed" =>

@@ -5,6 +5,7 @@ using System.Text;
 using PosApp.Core.Entities;
 using PosApp.Core.Models;
 using PosApp.Core.Interfaces;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Hardware.Printers;
 
@@ -18,42 +19,30 @@ public class EscPosPrinter : IReceiptPrinter
     private readonly ISettingsService _settings;
     public EscPosPrinter(ISettingsService settings) => _settings = settings;
 
-    public bool IsConnected => !string.IsNullOrEmpty(GetPrinterName());
+    public bool IsConnected => PrinterSettings.InstalledPrinters.Count > 0;
 
-    private string GetPrinterName()
+    public async Task<bool> PrintAsync(Sale sale)
     {
-        var s = _settings.GetStoreSettingsAsync().GetAwaiter().GetResult();
-        if (!string.IsNullOrEmpty(s.ReceiptPrinterName)) return s.ReceiptPrinterName;
-        // Fall back to the OS default printer.
-        return PrinterSettings.InstalledPrinters.Count > 0
-            ? new PrinterSettings().PrinterName
-            : string.Empty;
+        var store = await _settings.GetStoreSettingsAsync();
+        return await SendAsync(BuildReceipt(sale, store), store.ReceiptPrinterName, "POS Receipt");
     }
 
-    public Task<bool> PrintAsync(Sale sale)
+    public async Task<bool> PrintTextAsync(string text)
     {
-        var store = _settings.GetStoreSettingsAsync().GetAwaiter().GetResult();
-        var doc = BuildReceipt(sale, store);
-        return PrintTextAsync(doc);
+        var store = await _settings.GetStoreSettingsAsync();
+        return await SendAsync(text, store.ReceiptPrinterName, "POS Text");
     }
 
-    public Task<bool> PrintTextAsync(string text)
-    {
-        return Task.Run(() =>
+    private static Task<bool> SendAsync(string text, string? configuredPrinter, string documentName)
+        => Task.Run(() =>
         {
-            var printerName = GetPrinterName();
-            if (string.IsNullOrEmpty(printerName)) return false;
-            try
-            {
-                var bytes = Encoding.UTF8.GetBytes(text);
-                return RawPrinterHelper.SendRawToPrinter(printerName, bytes, "POS Receipt");
-            }
-            catch
-            {
-                return false;
-            }
+            var printerName = string.IsNullOrWhiteSpace(configuredPrinter)
+                ? (PrinterSettings.InstalledPrinters.Count > 0 ? new PrinterSettings().PrinterName : string.Empty)
+                : configuredPrinter;
+            if (string.IsNullOrWhiteSpace(printerName)) return false;
+            try { return RawPrinterHelper.SendRawToPrinter(printerName, Encoding.UTF8.GetBytes(text), documentName); }
+            catch { return false; }
         });
-    }
 
     private static string BuildReceipt(Sale sale, StoreSettings store)
     {
@@ -69,7 +58,7 @@ public class EscPosPrinter : IReceiptPrinter
         sb.AppendLine(new string('-', 32));
         sb.Append(EscPosConst.AlignLeft);
         sb.AppendLine($"Receipt: {sale.ReceiptNumber}");
-        sb.AppendLine($"Date: {sale.SaleDate:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"Date: {DateTimeUtilities.ToLocal(sale.SaleDate):yyyy-MM-dd HH:mm}");
         sb.AppendLine($"Cashier: {sale.User?.FullName ?? sale.UserId.ToString()}");
         sb.AppendLine(new string('-', 32));
 
@@ -79,23 +68,23 @@ public class EscPosPrinter : IReceiptPrinter
             var line = $"{qty} x {item.ProductName}";
             sb.AppendLine(line);
             sb.Append(EscPosConst.AlignRight);
-            sb.AppendLine($"{item.LineTotal + item.LineTax:0.00}");
+            sb.AppendLine(FormattingUtilities.Money(item.LineTotal + item.LineTax, store));
             sb.Append(EscPosConst.AlignLeft);
         }
 
         sb.AppendLine(new string('-', 32));
         sb.Append(EscPosConst.AlignRight);
-        sb.AppendLine($"Subtotal:    {sale.Subtotal:0.00}");
-        if (sale.DiscountTotal > 0) sb.AppendLine($"Discount:    -{sale.DiscountTotal:0.00}");
-        if (sale.TaxTotal > 0) sb.AppendLine($"Tax:         {sale.TaxTotal:0.00}");
+        sb.AppendLine($"Subtotal:    {FormattingUtilities.Money(sale.Subtotal, store)}");
+        if (sale.DiscountTotal != 0m) sb.AppendLine($"Discount:    {FormattingUtilities.Money(-sale.DiscountTotal, store)}");
+        if (sale.TaxTotal != 0m) sb.AppendLine($"Tax:         {FormattingUtilities.Money(sale.TaxTotal, store)}");
         sb.Append(EscPosConst.DoubleOn);
-        sb.AppendLine($"TOTAL:       {sale.Total:0.00}");
+        sb.AppendLine($"TOTAL:       {FormattingUtilities.Money(sale.Total, store)}");
         sb.Append(EscPosConst.DoubleOff);
         sb.AppendLine();
 
         foreach (var payment in ReceiptPaymentSummary.Build(sale))
-            sb.AppendLine($"{payment.Label}: {payment.Amount:0.00}");
-        if (sale.Change > 0) sb.AppendLine($"Change: {sale.Change:0.00}");
+            sb.AppendLine($"{payment.Label}: {FormattingUtilities.Money(payment.Amount, store)}");
+        if (sale.Change > 0) sb.AppendLine($"Change: {FormattingUtilities.Money(sale.Change, store)}");
 
         sb.Append(EscPosConst.AlignCenter);
         sb.AppendLine();
@@ -249,10 +238,10 @@ public class WindowsPrinter : IReceiptPrinter
 
     public bool IsConnected => PrinterSettings.InstalledPrinters.Count > 0;
 
-    public Task<bool> PrintAsync(Sale sale)
+    public async Task<bool> PrintAsync(Sale sale)
     {
-        var store = _settings.GetStoreSettingsAsync().GetAwaiter().GetResult();
-        return Task.Run(() =>
+        var store = await _settings.GetStoreSettingsAsync();
+        return await Task.Run(() =>
         {
             try
             {
@@ -281,10 +270,10 @@ public class WindowsPrinter : IReceiptPrinter
         });
     }
 
-    public Task<bool> PrintTextAsync(string text)
+    public async Task<bool> PrintTextAsync(string text)
     {
-        var store = _settings.GetStoreSettingsAsync().GetAwaiter().GetResult();
-        return Task.Run(() =>
+        var store = await _settings.GetStoreSettingsAsync();
+        return await Task.Run(() =>
         {
             try
             {
@@ -322,22 +311,22 @@ public class WindowsPrinter : IReceiptPrinter
             string.IsNullOrEmpty(store.Phone) ? "" : $"Tel: {store.Phone}",
             new string('-', 40),
             $"Receipt: {sale.ReceiptNumber}",
-            $"Date: {sale.SaleDate:yyyy-MM-dd HH:mm}",
+            $"Date: {DateTimeUtilities.ToLocal(sale.SaleDate):yyyy-MM-dd HH:mm}",
             new string('-', 40)
         };
         foreach (var item in sale.Items)
         {
             lines.Add($"{item.Quantity:0.###} x {item.ProductName}");
-            lines.Add($"      {(item.LineTotal + item.LineTax):0.00}");
+            lines.Add($"      {FormattingUtilities.Money(item.LineTotal + item.LineTax, store)}");
         }
         lines.Add(new string('-', 40));
-        lines.Add($"Subtotal:    {sale.Subtotal:0.00}");
-        if (sale.DiscountTotal > 0) lines.Add($"Discount:    -{sale.DiscountTotal:0.00}");
-        if (sale.TaxTotal > 0) lines.Add($"Tax:         {sale.TaxTotal:0.00}");
-        lines.Add($"TOTAL:       {sale.Total:0.00}");
+        lines.Add($"Subtotal:    {FormattingUtilities.Money(sale.Subtotal, store)}");
+        if (sale.DiscountTotal != 0m) lines.Add($"Discount:    {FormattingUtilities.Money(-sale.DiscountTotal, store)}");
+        if (sale.TaxTotal != 0m) lines.Add($"Tax:         {FormattingUtilities.Money(sale.TaxTotal, store)}");
+        lines.Add($"TOTAL:       {FormattingUtilities.Money(sale.Total, store)}");
         foreach (var payment in ReceiptPaymentSummary.Build(sale))
-            lines.Add($"{payment.Label}: {payment.Amount:0.00}");
-        if (sale.Change > 0) lines.Add($"Change: {sale.Change:0.00}");
+            lines.Add($"{payment.Label}: {FormattingUtilities.Money(payment.Amount, store)}");
+        if (sale.Change > 0) lines.Add($"Change: {FormattingUtilities.Money(sale.Change, store)}");
         lines.Add("");
         lines.Add(store.FooterNote ?? "");
         return lines;

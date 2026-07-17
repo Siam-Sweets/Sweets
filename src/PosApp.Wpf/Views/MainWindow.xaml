@@ -88,7 +88,7 @@
                                 <TextBlock x:Name="UserName" Text="Administrator" Foreground="{DynamicResource SidebarTextBrush}" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
                                 <TextBlock x:Name="UserRoleLabel" Text="Admin" Foreground="{DynamicResource SidebarMutedBrush}" FontSize="11"/>
                             </StackPanel>
-                            <Button Grid.Column="2" Content="Exit" Foreground="{DynamicResource SidebarTextBrush}" Background="Transparent" BorderThickness="0" Click="Logout_Click"/>
+                            <Button Grid.Column="2" Content="{DynamicResource Login_Exit}" Foreground="{DynamicResource SidebarTextBrush}" Background="Transparent" BorderThickness="0" Click="Logout_Click"/>
                         </Grid>
                     </Border>
                 </Grid>
@@ -109,7 +109,7 @@
                             <TextBlock x:Name="DrawerTitle" Foreground="{DynamicResource DrawerTextBrush}" FontSize="22" FontWeight="SemiBold"/>
                             <TextBlock Text="{DynamicResource Shell_OfflineTerminal}" Foreground="{DynamicResource DrawerMutedBrush}" Margin="0,3,0,0"/>
                         </StackPanel>
-                        <Button Grid.Column="1" Content="Close" Style="{StaticResource DrawerAction}" Padding="12,8" Click="CloseManagementDrawer_Click"/>
+                        <Button Grid.Column="1" Content="{DynamicResource Common_Close}" Style="{StaticResource DrawerAction}" Padding="12,8" Click="CloseManagementDrawer_Click"/>
                     </Grid>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">

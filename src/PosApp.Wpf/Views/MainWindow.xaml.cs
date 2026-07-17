@@ -67,8 +67,7 @@ public partial class MainWindow : Window
         DrawerReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         DrawerSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
 
-        NavigateTo(App.StoreSettings.ShowCashInOnStartup || App.StoreSettings.SelectBusinessDayOnStartup
-            ? "register" : "pos");
+        NavigateTo("pos");
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -89,6 +88,13 @@ public partial class MainWindow : Window
             settingsSection = tag[(tag.IndexOf(':') + 1)..];
             tag = "settings";
         }
+        if (!IsAuthorized(tag))
+        {
+            MessageBox.Show("Your account does not have permission to open this page.",
+                "Access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         var view = tag switch
         {
             "pos" => (UserControl)_pos,
@@ -133,7 +139,36 @@ public partial class MainWindow : Window
             newActive.Style = (Style)FindResource("NavButtonActive");
 
         if (contentChanged && view.IsEnabled && view is IRefreshable refreshable)
-            refreshable.Refresh();
+            _ = RefreshSafelyAsync(refreshable);
+    }
+
+
+    private static async Task RefreshSafelyAsync(IRefreshable refreshable)
+    {
+        try
+        {
+            await refreshable.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            App.LogError("View refresh", ex);
+            MessageBox.Show(ex.GetBaseException().Message, "Unable to refresh page",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+
+    private static bool IsAuthorized(string tag)
+    {
+        var role = App.CurrentUser?.Role ?? UserRole.Cashier;
+        return tag.ToLowerInvariant() switch
+        {
+            "pos" or "register" => true,
+            "dashboard" or "products" or "promotions" or "inventory" or
+            "purchases" or "customers" or "sales" or "reports" => role >= UserRole.Manager,
+            "users" or "settings" => role >= UserRole.Admin,
+            _ => false
+        };
     }
 
     private void ResetNavigationStyles()
@@ -230,5 +265,5 @@ public partial class MainWindow : Window
 
 public interface IRefreshable
 {
-    void Refresh();
+    Task RefreshAsync();
 }

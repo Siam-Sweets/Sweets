@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using Microsoft.EntityFrameworkCore;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -18,7 +19,7 @@ public partial class InventoryView : UserControl, IRefreshable
         _db = db;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try
@@ -43,7 +44,9 @@ public partial class InventoryView : UserControl, IRefreshable
         TotalProductsText.Text = products.Count.ToString();
         var low = await _inventory.GetLowStockProductsAsync();
         LowStockText.Text = low.Count.ToString();
-        StockValueText.Text = $"{App.StoreSettings.CurrencySymbol} {products.Where(p => p.StockQuantity.HasValue).Sum(p => p.StockQuantity!.Value * p.CostPrice):0.00}";
+        StockValueText.Text = FormattingUtilities.Money(
+            products.Where(p => p.StockQuantity.HasValue).Sum(p => p.StockQuantity!.Value * p.CostPrice),
+            App.StoreSettings);
 
         var history = await _db.StockTransactions
             .AsNoTracking()
@@ -61,7 +64,7 @@ public partial class InventoryView : UserControl, IRefreshable
             var dlg = new StockAdjustDialog(p, _inventory, App.CurrentUser?.Id ?? 0) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true)
             {
-                Refresh();
+                _ = RefreshAsync();
             }
         }
     }
@@ -78,7 +81,7 @@ public partial class InventoryView : UserControl, IRefreshable
             {
                 Owner = Window.GetWindow(this)
             };
-            if (dialog.ShowDialog() == true) Refresh();
+            if (dialog.ShowDialog() == true) _ = RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -132,7 +135,7 @@ public class StockAdjustDialog : Window
         };
         saveBtn.Click += async (_, _) =>
         {
-            if (!decimal.TryParse(qtyBox.Text, out var qty) || qty <= 0)
+            if (!FormattingUtilities.TryParseDecimal(qtyBox.Text, out var qty) || qty <= 0)
             {
                 MessageBox.Show("Enter a valid positive quantity", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;

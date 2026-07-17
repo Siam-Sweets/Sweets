@@ -5,6 +5,7 @@
              Background="{DynamicResource BackgroundBrush}">
     <UserControl.Resources>
         <conv:MoneyConverter x:Key="Money"/>
+        <conv:ActiveActionConverter x:Key="ActiveAction"/>
     </UserControl.Resources>
     <Grid Margin="{StaticResource PagePadding}">
         <Grid.RowDefinitions>
@@ -20,12 +21,12 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
                 <TextBlock Text="{DynamicResource Prod_Title}" Style="{StaticResource Heading1}"/>
-                <TextBlock Text="Manage your product catalog, prices, and SKUs" Style="{StaticResource Muted}"/>
+                <TextBlock Text="{DynamicResource Prod_Subtitle}" Style="{StaticResource Muted}"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="Import CSV" Style="{StaticResource OutlineButton}"
+                <Button Content="{DynamicResource Prod_ImportCsv}" Style="{StaticResource OutlineButton}"
                         Click="ImportCsv_Click" Margin="0,0,8,0" Padding="16,10"/>
-                <Button Content="Export CSV" Style="{StaticResource OutlineButton}"
+                <Button Content="{DynamicResource Prod_ExportCsv}" Style="{StaticResource OutlineButton}"
                         Click="ExportCsv_Click" Margin="0,0,8,0" Padding="16,10"/>
                 <Button Content="{DynamicResource Prod_Add}" Style="{StaticResource PrimaryButton}"
                         Click="Add_Click" Padding="20,12"/>
@@ -48,30 +49,33 @@
                       AutoGenerateColumns="False" IsReadOnly="True"
                       HeadersVisibility="Column">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
-                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120"/>
-                    <DataGridTextColumn Header="Category" Binding="{Binding Category.Name}" Width="140"/>
-                    <DataGridTextColumn Header="Price" Binding="{Binding Price, StringFormat='৳ {0:0.00}'}" Width="100"/>
-                    <DataGridTextColumn Header="Cost" Binding="{Binding CostPrice, StringFormat='৳ {0:0.00}'}" Width="100"/>
-                    <DataGridTextColumn Header="Stock" Binding="{Binding StockQuantity, StringFormat=' {0:0.###}'}" Width="80"/>
-                    <DataGridTemplateColumn Header="Weighted" Width="80">
+                    <DataGridTextColumn Header="{DynamicResource Prod_Name}" Binding="{Binding Name}" Width="*"/>
+                    <DataGridTextColumn Header="{DynamicResource Prod_SkuOnly}" Binding="{Binding Sku}" Width="110"/>
+                    <DataGridTextColumn Header="{DynamicResource Prod_Barcode}" Binding="{Binding Barcode}" Width="130"/>
+                    <DataGridTextColumn Header="{DynamicResource Prod_Category}" Binding="{Binding Category.Name}" Width="140"/>
+                    <DataGridTextColumn Header="{DynamicResource Prod_Price}" Binding="{Binding Price, Converter={StaticResource Money}}" Width="100"/>
+                    <DataGridTextColumn Header="{DynamicResource Prod_Cost}" Binding="{Binding CostPrice, Converter={StaticResource Money}}" Width="100"/>
+                    <DataGridTextColumn Header="{DynamicResource Prod_Stock}" Binding="{Binding StockQuantity, StringFormat=' {0:0.###}'}" Width="80"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Prod_Weighted}" Width="80">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding IsWeighted, Mode=OneWay}"
                                           Tag="{Binding}" Click="Weighted_Click"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          ToolTip="Click to change whether this product is sold by weight"/>
+                                          Focusable="False" ToolTip="{DynamicResource Prod_WeightedHint}"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTemplateColumn Header="Actions" Width="160">
+                    <DataGridCheckBoxColumn Header="{DynamicResource Usr_Active}" Binding="{Binding IsActive, Mode=OneWay}" Width="65" IsReadOnly="True"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Common_Actions}" Width="175">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <Button Content="Edit" Style="{StaticResource OutlineButton}"
+                                    <Button Content="{DynamicResource Common_Edit}" Style="{StaticResource OutlineButton}"
                                             Padding="10,4" Margin="2" Click="Edit_Click" Tag="{Binding}"/>
-                                    <Button Content="Delete" Style="{StaticResource DangerButton}"
-                                            Padding="10,4" Margin="2" Click="Delete_Click" Tag="{Binding}"/>
+                                    <Button Content="{Binding IsActive, Converter={StaticResource ActiveAction}}"
+                                            Style="{StaticResource OutlineButton}" Padding="10,4" Margin="2"
+                                            Click="Delete_Click" Tag="{Binding}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>

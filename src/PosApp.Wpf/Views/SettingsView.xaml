@@ -75,7 +75,7 @@
                                 <TextBlock Text="{DynamicResource Set_Store}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                     <StackPanel Margin="0,0,8,12"><TextBlock Text="{DynamicResource Set_StoreName}" Style="{StaticResource Muted}"/><TextBox x:Name="StoreNameBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
                                     <StackPanel Grid.Column="1" Margin="8,0,0,12"><TextBlock Text="{DynamicResource Set_Phone}" Style="{StaticResource Muted}"/><TextBox x:Name="PhoneBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
                                     <StackPanel Grid.Row="1" Margin="0,0,8,12"><TextBlock Text="{DynamicResource Set_Email}" Style="{StaticResource Muted}"/><TextBox x:Name="EmailBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
@@ -84,6 +84,7 @@
                                     <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,12,0,0"><TextBlock Text="{DynamicResource Set_Currency}" Style="{StaticResource Muted}"/><TextBox x:Name="CurrencyBox" Width="180" HorizontalAlignment="Left" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
                                     <StackPanel Grid.Row="4" Margin="0,12,8,0"><TextBlock Text="{DynamicResource Set_Country}" Style="{StaticResource Muted}"/><TextBox x:Name="CountryBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
                                     <StackPanel Grid.Row="4" Grid.Column="1" Margin="8,12,0,0"><TextBlock Text="{DynamicResource Set_CurrencyCode}" Style="{StaticResource Muted}"/><TextBox x:Name="CurrencyCodeBox" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Margin="0,12,0,0"><TextBlock Text="{DynamicResource Set_CurrencyDecimals}" Style="{StaticResource Muted}"/><TextBox x:Name="CurrencyDecimalsBox" Width="180" HorizontalAlignment="Left" Padding="10,8" Margin="0,4,0,0"/></StackPanel>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -99,13 +100,11 @@
                                 <TextBlock Text="{DynamicResource Set_OrderWorkflow}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <StackPanel Margin="0,0,10,14"><TextBlock Text="{DynamicResource Set_DefaultService}" Style="{StaticResource Muted}"/><ComboBox x:Name="DefaultServiceCombo" Padding="10,7" Margin="0,5,0,0"><ComboBoxItem Content="Retail"/><ComboBoxItem Content="Takeaway"/><ComboBoxItem Content="Delivery"/><ComboBoxItem Content="Dine-in"/></ComboBox></StackPanel>
+                                    <StackPanel Margin="0,0,10,14"><TextBlock Text="{DynamicResource Set_DefaultService}" Style="{StaticResource Muted}"/><ComboBox x:Name="DefaultServiceCombo" Padding="10,7" Margin="0,5,0,0"><ComboBoxItem Content="{DynamicResource Service_Retail}" Tag="Retail"/><ComboBoxItem Content="{DynamicResource Service_Takeaway}" Tag="Takeaway"/><ComboBoxItem Content="{DynamicResource Service_Delivery}" Tag="Delivery"/><ComboBoxItem Content="{DynamicResource Service_DineIn}" Tag="Dine-in"/></ComboBox></StackPanel>
                                     <StackPanel Grid.Column="1" Margin="10,0,0,14"><TextBlock Text="{DynamicResource Set_DefaultTax}" Style="{StaticResource Muted}"/><TextBox x:Name="DefaultTaxBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
                                 </Grid>
                                 <CheckBox x:Name="RequireOpenRegisterCheckbox" Content="{DynamicResource Set_RequireRegister}" Margin="0,6"/>
                                 <CheckBox x:Name="ConfirmVoidCheckbox" Content="{DynamicResource Set_ConfirmVoid}" Margin="0,6"/>
-                                <CheckBox x:Name="ShowCashInCheckbox" Content="{DynamicResource Set_ShowCashStart}" Margin="0,6"/>
-                                <CheckBox x:Name="BusinessDayCheckbox" Content="{DynamicResource Set_SelectBusinessDay}" Margin="0,6"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource Card}" Margin="0,14,0,0">
@@ -161,16 +160,6 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="{DynamicResource Set_WeighingScale}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_WeighingScale}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/><TextBlock Text="{DynamicResource Set_ScalePort}" Style="{StaticResource Muted}"/><TextBox x:Name="ScalePortBox" Padding="10,8" Margin="0,5,0,14"/><Button Content="{DynamicResource Set_TestScale}" Style="{StaticResource OutlineButton}" Padding="18,9" HorizontalAlignment="Left" Click="TestScale_Click"/></StackPanel></Border></StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
-            <TabItem Header="{DynamicResource Set_CustomerDisplay}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_CustomerDisplay}" Style="{StaticResource Heading2}"/><TextBlock Text="{DynamicResource Set_CustomerDisplayHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
-            </TabItem>
-
             <TabItem Header="{DynamicResource Set_EmailSection}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_EmailSection}" Style="{StaticResource Heading2}"/><TextBlock Text="{DynamicResource Set_OfflineEmail}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
             </TabItem>
@@ -180,14 +169,10 @@
                     <StackPanel Margin="22">
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <TextBlock Text="{DynamicResource Set_Hardware}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
-                                <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <StackPanel Margin="0,0,10,12"><TextBlock Text="{DynamicResource Set_Printer}" Style="{StaticResource Muted}"/><ComboBox x:Name="PrinterCombo" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
-                                    <StackPanel Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="{DynamicResource Set_DrawerPort}" Style="{StaticResource Muted}"/><TextBox x:Name="DrawerPortBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
-                                </Grid>
-                                <CheckBox x:Name="OpenDrawerCheckbox" Content="{DynamicResource Set_OpenDrawer}" Margin="0,4,0,14"/>
-                                <StackPanel Orientation="Horizontal"><Button Content="{DynamicResource Set_TestPrint}" Style="{StaticResource OutlineButton}" Click="TestPrint_Click" Padding="18,9" Margin="0,0,8,0"/><Button Content="{DynamicResource Set_TestDrawer}" Style="{StaticResource OutlineButton}" Click="TestDrawer_Click" Padding="18,9"/></StackPanel>
+                                <TextBlock Text="{DynamicResource Set_Print}" Style="{StaticResource Heading2}" Margin="0,0,0,16"/>
+                                <TextBlock Text="{DynamicResource Set_Printer}" Style="{StaticResource Muted}"/>
+                                <ComboBox x:Name="PrinterCombo" Padding="10,8" Margin="0,5,0,14"/>
+                                <Button Content="{DynamicResource Set_TestPrint}" Style="{StaticResource OutlineButton}" Click="TestPrint_Click" Padding="18,9" HorizontalAlignment="Left"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

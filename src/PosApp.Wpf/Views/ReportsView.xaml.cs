@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using PosApp.Core.Interfaces;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -16,10 +17,10 @@ public partial class ReportsView : UserControl, IRefreshable
         InitializeComponent();
         _reports = reports;
         FromDate.SelectedDate = DateTime.Today.AddDays(-30);
-        ToDate.SelectedDate = DateTime.Today.AddDays(1);
+        ToDate.SelectedDate = DateTime.Today;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try { await LoadAsync(); }
@@ -41,9 +42,9 @@ public partial class ReportsView : UserControl, IRefreshable
             var pay = await _reports.GetPaymentBreakdownAsync(from, to);
             if (version != _loadVersion) return;
 
-            KpiGross.Text = $"৳ {range.GrossSales:0.00}";
-            KpiProfit.Text = $"৳ {range.GrossProfit:0.00}";
-            KpiTax.Text = $"৳ {range.TaxTotal:0.00}";
+            KpiGross.Text = FormattingUtilities.Money(range.GrossSales, App.StoreSettings);
+            KpiProfit.Text = FormattingUtilities.Money(range.GrossProfit, App.StoreSettings);
+            KpiTax.Text = FormattingUtilities.Money(range.TaxTotal, App.StoreSettings);
             KpiTxn.Text = range.TransactionCount.ToString();
             DailyTrendGrid.ItemsSource = range.Daily;
             TopProductsGrid.ItemsSource = top.ToList();
@@ -62,11 +63,13 @@ public partial class ReportsView : UserControl, IRefreshable
 
     private (DateTime from, DateTime to) GetRange()
     {
-        if (_activePeriod == "today") return (DateTime.Today, DateTime.Today.AddDays(1));
-        if (_activePeriod == "week") return (DateTime.Today.AddDays(-6), DateTime.Today.AddDays(1));
-        if (_activePeriod == "month") return (DateTime.Today.AddDays(-29), DateTime.Today.AddDays(1));
-        return (FromDate.SelectedDate ?? DateTime.Today.AddDays(-30),
-                ToDate.SelectedDate ?? DateTime.Today.AddDays(1));
+        if (_activePeriod == "today") return (DateTime.Today, DateTime.Today);
+        if (_activePeriod == "week") return (DateTime.Today.AddDays(-6), DateTime.Today);
+        if (_activePeriod == "month") return (DateTime.Today.AddDays(-29), DateTime.Today);
+        var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-30)).Date;
+        var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+        if (to < from) throw new InvalidOperationException("The To date cannot be earlier than the From date.");
+        return (from, to);
     }
 
     private void Period_Click(object sender, RoutedEventArgs e)
@@ -77,16 +80,24 @@ public partial class ReportsView : UserControl, IRefreshable
             BtnToday.Style = (Style)FindResource(tag == "today" ? "PrimaryButton" : "OutlineButton");
             BtnWeek.Style = (Style)FindResource(tag == "week" ? "PrimaryButton" : "OutlineButton");
             BtnMonth.Style = (Style)FindResource(tag == "month" ? "PrimaryButton" : "OutlineButton");
-            Refresh();
+            _ = RefreshAsync();
         }
     }
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
+        var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-30)).Date;
+        var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+        if (to < from)
+        {
+            MessageBox.Show("The To date cannot be earlier than the From date.", "Invalid date range",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         _activePeriod = "custom";
         BtnToday.Style = (Style)FindResource("OutlineButton");
         BtnWeek.Style = (Style)FindResource("OutlineButton");
         BtnMonth.Style = (Style)FindResource("OutlineButton");
-        Refresh();
+        _ = RefreshAsync();
     }
 }

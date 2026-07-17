@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
@@ -22,7 +23,7 @@ public partial class ProductsView : UserControl, IRefreshable
         _catalogTransfer = catalogTransfer;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try
@@ -41,7 +42,7 @@ public partial class ProductsView : UserControl, IRefreshable
 
     private async Task LoadAsync()
     {
-        var products = await _inventory.SearchProductsAsync(null);
+        var products = await _inventory.SearchProductsAsync(null, includeInactive: true);
         _all = new ObservableCollection<Product>(products);
         ProductsGrid.ItemsSource = _all;
 
@@ -89,7 +90,7 @@ public partial class ProductsView : UserControl, IRefreshable
         {
             var categories = await _inventory.ListCategoriesAsync();
             var dlg = new ProductEditDialog(_inventory, categories) { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true) Refresh();
+            if (dlg.ShowDialog() == true) await RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -105,7 +106,7 @@ public partial class ProductsView : UserControl, IRefreshable
             {
                 var categories = await _inventory.ListCategoriesAsync();
                 var dlg = new ProductEditDialog(_inventory, categories, p) { Owner = Window.GetWindow(this) };
-                if (dlg.ShowDialog() == true) Refresh();
+                if (dlg.ShowDialog() == true) await RefreshAsync();
             }
             catch (Exception ex)
             {
@@ -118,19 +119,22 @@ public partial class ProductsView : UserControl, IRefreshable
     {
         if (sender is Button btn && btn.Tag is Product p)
         {
-            var confirm = MessageBox.Show($"Delete product '{p.Name}'?", "Confirm",
+            var activating = !p.IsActive;
+            var action = activating ? "restore" : "deactivate";
+            var confirm = MessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} product '{p.Name}'?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm != MessageBoxResult.Yes) return;
+            var previous = p.IsActive;
             try
             {
-                p.IsActive = false;
-                await _inventory.CreateOrUpdateProductAsync(p);
-                Refresh();
+                p.IsActive = activating;
+                await _inventory.CreateOrUpdateProductAsync(p, App.CurrentUser?.Id);
+                await RefreshAsync();
             }
             catch (Exception ex)
             {
-                p.IsActive = true;
-                MessageBox.Show(ex.Message, "Unable to delete product", MessageBoxButton.OK, MessageBoxImage.Error);
+                p.IsActive = previous;
+                MessageBox.Show(ex.Message, $"Unable to {action} product", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -307,6 +311,18 @@ public class ProductEditDialog : Window
     private readonly IInventoryService _svc;
     private readonly Product _product;
     private readonly bool _isNew;
+    private readonly TextBox _nameBox = new();
+    private readonly TextBox _skuBox = new();
+    private readonly TextBox _barcodeBox = new();
+    private readonly TextBox _priceBox = new();
+    private readonly TextBox _costBox = new();
+    private readonly TextBox _stockBox = new();
+    private readonly TextBox _thresholdBox = new();
+    private readonly TextBox _taxBox = new();
+    private readonly ComboBox _categoryBox = new();
+    private readonly ComboBox _unitBox = new();
+    private readonly CheckBox _weightedBox = new() { Content = "Weighted (sold by kg/liter)" };
+    private readonly CheckBox _allowDiscountBox = new() { Content = "Allow discounts" };
 
     public ProductEditDialog(IInventoryService svc, IReadOnlyList<Category> categories, Product? existing = null)
     {
@@ -317,136 +333,167 @@ public class ProductEditDialog : Window
             : CopyProduct(existing);
 
         Title = _isNew ? "Add Product" : "Edit Product";
-        Width = 520; Height = 620;
+        Width = 540;
+        Height = 720;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("BackgroundBrush");
+        Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
 
-        var panel = new StackPanel { Margin = new Thickness(24) };
+        _nameBox.Text = _product.Name;
+        _skuBox.Text = _product.Sku ?? string.Empty;
+        _barcodeBox.Text = _product.Barcode ?? string.Empty;
+        _priceBox.Text = _product.Price.ToString("0.00", CultureInfo.CurrentCulture);
+        _costBox.Text = _product.CostPrice.ToString("0.00", CultureInfo.CurrentCulture);
+        _stockBox.Text = _product.StockQuantity?.ToString("0.###", CultureInfo.CurrentCulture) ?? string.Empty;
+        _thresholdBox.Text = _product.LowStockThreshold?.ToString("0.###", CultureInfo.CurrentCulture) ?? string.Empty;
+        _taxBox.Text = _product.TaxRate.ToString("0.###", CultureInfo.CurrentCulture);
+        _weightedBox.IsChecked = _product.IsWeighted;
+        _allowDiscountBox.IsChecked = _product.AllowDiscount;
 
-        panel.Children.Add(MakeRow("Name", () =>
+        foreach (var category in categories)
+            _categoryBox.Items.Add(new ComboBoxItem { Content = category.Name, Tag = category });
+        for (var index = 0; index < _categoryBox.Items.Count; index++)
         {
-            var tb = new TextBox { Text = _product.Name };
-            tb.TextChanged += (_, _) => _product.Name = tb.Text;
-            return tb;
-        }));
-
-        panel.Children.Add(MakeRow("SKU / Barcode", () =>
-        {
-            var tb = new TextBox { Text = _product.Sku ?? "" };
-            tb.TextChanged += (_, _) => _product.Sku = tb.Text;
-            return tb;
-        }));
-
-        // Category picker
-        var catCombo = new ComboBox { Margin = new Thickness(0, 4, 0, 12) };
-        foreach (var c in categories) catCombo.Items.Add(new ComboBoxItem { Content = c.Name, Tag = c });
-        catCombo.SelectionChanged += (_, _) =>
-        {
-            if (catCombo.SelectedItem is ComboBoxItem ci && ci.Tag is Category c)
+            if (_categoryBox.Items[index] is ComboBoxItem item && item.Tag is Category category && category.Id == _product.CategoryId)
             {
-                _product.CategoryId = c.Id;
-                _product.Category = null;
-            }
-        };
-        if (_product.CategoryId > 0)
-        {
-            for (int i = 0; i < catCombo.Items.Count; i++)
-            {
-                if (catCombo.Items[i] is ComboBoxItem ci && ci.Tag is Category c && c.Id == _product.CategoryId)
-                {
-                    catCombo.SelectedIndex = i; break;
-                }
+                _categoryBox.SelectedIndex = index;
+                break;
             }
         }
-        else if (catCombo.Items.Count > 0) catCombo.SelectedIndex = 0;
-        panel.Children.Add(MakeRow("Category", () => catCombo));
+        if (_categoryBox.SelectedIndex < 0 && _categoryBox.Items.Count > 0)
+            _categoryBox.SelectedIndex = 0;
 
-        panel.Children.Add(MakeRow("Price", () =>
+        foreach (var unit in Enum.GetValues<UnitOfMeasure>())
+            _unitBox.Items.Add(unit);
+        _unitBox.SelectedItem = _product.Unit;
+
+        var panel = new StackPanel { Margin = new Thickness(24) };
+        panel.Children.Add(MakeRow("Name", _nameBox));
+        panel.Children.Add(MakeRow("SKU", _skuBox));
+        panel.Children.Add(MakeRow("Barcode", _barcodeBox));
+        panel.Children.Add(MakeRow("Category", _categoryBox));
+        panel.Children.Add(MakeRow("Unit", _unitBox));
+        panel.Children.Add(MakeRow("Price", _priceBox));
+        panel.Children.Add(MakeRow("Cost Price", _costBox));
+        panel.Children.Add(MakeRow("Stock Quantity (blank = untracked)", _stockBox));
+        panel.Children.Add(MakeRow("Low Stock Threshold (blank = none)", _thresholdBox));
+        panel.Children.Add(MakeRow("Tax Rate %", _taxBox));
+        _weightedBox.Margin = new Thickness(0, 4, 0, 10);
+        _allowDiscountBox.Margin = new Thickness(0, 0, 0, 16);
+        panel.Children.Add(_weightedBox);
+        panel.Children.Add(_allowDiscountBox);
+
+        var buttons = new StackPanel
         {
-            var tb = new TextBox { Text = _product.Price.ToString("0.00") };
-            tb.TextChanged += (_, _) => { if (decimal.TryParse(tb.Text, out var v)) _product.Price = v; };
-            return tb;
-        }));
-
-        panel.Children.Add(MakeRow("Cost Price", () =>
-        {
-            var tb = new TextBox { Text = _product.CostPrice.ToString("0.00") };
-            tb.TextChanged += (_, _) => { if (decimal.TryParse(tb.Text, out var v)) _product.CostPrice = v; };
-            return tb;
-        }));
-
-        panel.Children.Add(MakeRow("Stock Quantity", () =>
-        {
-            var tb = new TextBox { Text = _product.StockQuantity?.ToString() ?? "" };
-            tb.TextChanged += (_, _) => { if (decimal.TryParse(tb.Text, out var v)) _product.StockQuantity = v; };
-            return tb;
-        }));
-
-        panel.Children.Add(MakeRow("Low Stock Threshold", () =>
-        {
-            var tb = new TextBox { Text = _product.LowStockThreshold?.ToString() ?? "" };
-            tb.TextChanged += (_, _) => { if (decimal.TryParse(tb.Text, out var v)) _product.LowStockThreshold = v; };
-            return tb;
-        }));
-
-        panel.Children.Add(MakeRow("Tax Rate %", () =>
-        {
-            var tb = new TextBox { Text = _product.TaxRate.ToString("0.###") };
-            tb.TextChanged += (_, _) => { if (decimal.TryParse(tb.Text, out var v)) _product.TaxRate = v; };
-            return tb;
-        }));
-
-        var weightedCheckbox = new CheckBox { Content = "Weighted (sold by kg/liter)", IsChecked = _product.IsWeighted, Margin = new Thickness(0, 8, 0, 16) };
-        weightedCheckbox.Checked += (_, _) => _product.IsWeighted = true;
-        weightedCheckbox.Unchecked += (_, _) => _product.IsWeighted = false;
-        panel.Children.Add(weightedCheckbox);
-
-        var btnRow = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        var cancelBtn = new Button
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0)
+        };
+        var cancel = new Button
         {
             Content = "Cancel",
-            Style = (Style)System.Windows.Application.Current.FindResource("OutlineButton"),
+            Style = (Style)Application.Current.FindResource("OutlineButton"),
             Padding = new Thickness(20, 10, 20, 10),
             Margin = new Thickness(0, 0, 8, 0)
         };
-        cancelBtn.Click += (_, _) => { DialogResult = false; Close(); };
-        btnRow.Children.Add(cancelBtn);
-
-        var saveBtn = new Button
+        cancel.Click += (_, _) => { DialogResult = false; Close(); };
+        var save = new Button
         {
             Content = "Save",
-            Style = (Style)System.Windows.Application.Current.FindResource("PrimaryButton"),
+            Style = (Style)Application.Current.FindResource("PrimaryButton"),
             Padding = new Thickness(20, 10, 20, 10)
         };
-        saveBtn.Click += async (_, _) =>
-        {
-            if (string.IsNullOrWhiteSpace(_product.Name))
-            {
-                MessageBox.Show("Name is required", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (_product.CategoryId <= 0)
-            {
-                MessageBox.Show("Select a category", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            try
-            {
-                await _svc.CreateOrUpdateProductAsync(_product);
-                DialogResult = true;
-                Close();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Unable to save product", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        };
-        btnRow.Children.Add(saveBtn);
-        panel.Children.Add(btnRow);
-
-        var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        Content = scroll;
+        save.Click += Save_Click;
+        buttons.Children.Add(cancel);
+        buttons.Children.Add(save);
+        panel.Children.Add(buttons);
+        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
+
+    private async void Save_Click(object sender, RoutedEventArgs e)
+    {
+        var name = _nameBox.Text.Trim();
+        if (name.Length == 0)
+        {
+            MessageBox.Show("Name is required.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _nameBox.Focus();
+            return;
+        }
+        if (_categoryBox.SelectedItem is not ComboBoxItem categoryItem || categoryItem.Tag is not Category category)
+        {
+            MessageBox.Show("Select a category.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _categoryBox.Focus();
+            return;
+        }
+        if (!TryRequiredDecimal(_priceBox, "Price", out var price) || price < 0m) return;
+        if (!TryRequiredDecimal(_costBox, "Cost price", out var cost) || cost < 0m) return;
+        if (!TryOptionalDecimal(_stockBox, "Stock quantity", out var stock) || stock < 0m) return;
+        if (!TryOptionalDecimal(_thresholdBox, "Low stock threshold", out var threshold) || threshold < 0m) return;
+        if (!TryRequiredDecimal(_taxBox, "Tax rate", out var tax) || tax is < 0m or > 100m)
+        {
+            MessageBox.Show("Tax rate must be between 0 and 100.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _taxBox.Focus();
+            return;
+        }
+
+        _product.Name = name;
+        _product.Sku = NormalizeOptional(_skuBox.Text);
+        _product.Barcode = NormalizeOptional(_barcodeBox.Text);
+        _product.CategoryId = category.Id;
+        _product.Category = null;
+        _product.Unit = _unitBox.SelectedItem is UnitOfMeasure unit ? unit : UnitOfMeasure.Piece;
+        _product.Price = price;
+        _product.CostPrice = cost;
+        _product.StockQuantity = stock;
+        _product.LowStockThreshold = threshold;
+        _product.TaxRate = tax;
+        _product.IsWeighted = _weightedBox.IsChecked == true;
+        _product.AllowDiscount = _allowDiscountBox.IsChecked == true;
+
+        try
+        {
+            IsEnabled = false;
+            await _svc.CreateOrUpdateProductAsync(_product, App.CurrentUser?.Id);
+            DialogResult = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.GetBaseException().Message, "Unable to save product", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
+    }
+
+    private static bool TryRequiredDecimal(TextBox box, string label, out decimal value)
+    {
+        if (decimal.TryParse(box.Text.Trim(), NumberStyles.Number, CultureInfo.CurrentCulture, out value) ||
+            decimal.TryParse(box.Text.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out value))
+            return true;
+        MessageBox.Show($"{label} must be a valid number.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+        box.Focus();
+        return false;
+    }
+
+    private static bool TryOptionalDecimal(TextBox box, string label, out decimal? value)
+    {
+        if (string.IsNullOrWhiteSpace(box.Text))
+        {
+            value = null;
+            return true;
+        }
+        if (TryRequiredDecimal(box, label, out var parsed))
+        {
+            value = parsed;
+            return true;
+        }
+        value = null;
+        return false;
+    }
+
+    private static string? NormalizeOptional(string value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static Product CopyProduct(Product source) => new()
     {
@@ -470,13 +517,19 @@ public class ProductEditDialog : Window
         UpdatedAt = source.UpdatedAt
     };
 
-    private static System.Windows.Controls.Border MakeRow(string label, Func<FrameworkElement> makeControl)
+    private static Border MakeRow(string label, FrameworkElement control)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock { Text = label, FontSize = 12, Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextMutedBrush"), Margin = new Thickness(0, 0, 0, 4) });
-        var ctrl = makeControl();
-        ctrl.Margin = new Thickness(0, 0, 0, 12);
-        stack.Children.Add(ctrl);
-        return new System.Windows.Controls.Border { Child = stack };
+        stack.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 12,
+            Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush"),
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+        control.Margin = new Thickness(0, 0, 0, 12);
+        stack.Children.Add(control);
+        return new Border { Child = stack };
     }
 }
+

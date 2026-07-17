@@ -30,6 +30,9 @@ public class SaleItem
     /// <summary>Unit price at sale time.</summary>
     public decimal UnitPrice { get; set; }
 
+    /// <summary>Cost price snapshot at sale time.</summary>
+    public decimal CostPrice { get; set; }
+
     /// <summary>Effective tax rate at sale time (percentage).</summary>
     public decimal TaxRate { get; set; }
 
@@ -38,6 +41,8 @@ public class SaleItem
 
     [MaxLength(200)]
     public string? DiscountReason { get; set; }
+
+    public int? PromotionId { get; set; }
 
     public decimal LineTotal => (UnitPrice * Quantity) - DiscountAmount;
 

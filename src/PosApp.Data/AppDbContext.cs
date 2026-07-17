@@ -55,12 +55,15 @@ public class AppDbContext : DbContext
         {
             b.HasKey(p => p.Id);
             b.Property(p => p.Name).IsRequired();
+            b.Property(p => p.Sku).UseCollation("NOCASE");
+            b.Property(p => p.Barcode).UseCollation("NOCASE");
             b.Property(p => p.Price).HasColumnType("decimal(18,4)");
             b.Property(p => p.CostPrice).HasColumnType("decimal(18,4)");
             b.Property(p => p.TaxRate).HasColumnType("decimal(6,3)");
             b.Property(p => p.StockQuantity).HasColumnType("decimal(18,4)");
             b.Property(p => p.LowStockThreshold).HasColumnType("decimal(18,4)");
             b.HasIndex(p => p.Sku).IsUnique();
+            b.HasIndex(p => p.Barcode).IsUnique();
             b.HasOne(p => p.Category)
                 .WithMany(c => c.Products)
                 .HasForeignKey(p => p.CategoryId)
@@ -89,7 +92,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<User>(b =>
         {
             b.HasKey(u => u.Id);
-            b.Property(u => u.Username).IsRequired();
+            b.Property(u => u.Username).IsRequired().UseCollation("NOCASE");
             b.HasIndex(u => u.Username).IsUnique();
         });
 
@@ -113,6 +116,7 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(s => s.ReceiptNumber).IsUnique();
             b.HasIndex(s => s.SaleDate);
+            b.HasIndex(s => s.RefundedSaleId).IsUnique();
         });
 
         // SaleItem
@@ -120,6 +124,7 @@ public class AppDbContext : DbContext
         {
             b.HasKey(i => i.Id);
             b.Property(i => i.UnitPrice).HasColumnType("decimal(18,4)");
+            b.Property(i => i.CostPrice).HasColumnType("decimal(18,4)");
             b.Property(i => i.TaxRate).HasColumnType("decimal(6,3)");
             b.Property(i => i.DiscountAmount).HasColumnType("decimal(18,4)");
             b.Property(i => i.Quantity).HasColumnType("decimal(18,4)");
@@ -156,6 +161,10 @@ public class AppDbContext : DbContext
                 .HasForeignKey(t => t.ProductId)
                 .OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(t => t.CreatedAt);
+            b.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Tax
@@ -170,6 +179,8 @@ public class AppDbContext : DbContext
         {
             b.HasKey(d => d.Id);
             b.Property(d => d.Value).HasColumnType("decimal(18,4)");
+            b.Property(d => d.Code).UseCollation("NOCASE");
+            b.HasIndex(d => d.Code).IsUnique();
         });
 
         // Setting

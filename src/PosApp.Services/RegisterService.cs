@@ -46,8 +46,18 @@ public class RegisterService : IRegisterService
             Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
         };
         _db.CashSessions.Add(session);
-        await _db.SaveChangesAsync();
-        return session;
+        try
+        {
+            await _db.SaveChangesAsync();
+            return session;
+        }
+        catch (DbUpdateException ex)
+        {
+            _db.ChangeTracker.Clear();
+            if (await _db.CashSessions.AsNoTracking().AnyAsync(item => item.ClosedAt == null))
+                throw new InvalidOperationException("A register session is already open.", ex);
+            throw;
+        }
     }
 
     public async Task<CashMovement> AddMovementAsync(

@@ -73,6 +73,10 @@
                     <TextBox x:Name="TenderedBox" FontSize="24" FontWeight="Bold" Margin="0,4,0,0"
                              TextChanged="TenderedBox_TextChanged"
                              PreviewTextInput="TenderedBox_PreviewTextInput"/>
+                    <StackPanel x:Name="ReferencePanel" Visibility="Collapsed" Margin="0,8,0,0">
+                        <TextBlock Text="{DynamicResource Pay_Reference}" Style="{StaticResource Muted}"/>
+                        <TextBox x:Name="ReferenceBox" Margin="0,4,0,0" Padding="8,6"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
             <Border Grid.Column="1" Style="{StaticResource Card}" Margin="6,0,0,0" Padding="14"

@@ -1,9 +1,11 @@
 <UserControl x:Class="PosApp.Wpf.Views.PosView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:PosApp.Wpf.Converters"
              Background="{DynamicResource BackgroundBrush}"
              PreviewKeyDown="PosView_PreviewKeyDown">
     <UserControl.Resources>
+        <conv:MoneyConverter x:Key="Money"/>
         <Style x:Key="CommandTile" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource CommandTileBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource CommandTextBrush}"/>
@@ -196,9 +198,9 @@
                         <DataGridTextColumn Header="{DynamicResource POS_Quantity}"
                                             Binding="{Binding Quantity, Mode=OneWay, StringFormat=0.###}" Width="120"/>
                         <DataGridTextColumn Header="{DynamicResource POS_Price}"
-                                            Binding="{Binding UnitPrice, Mode=OneWay, StringFormat={}{0:0.00}}" Width="135"/>
+                                            Binding="{Binding UnitPrice, Mode=OneWay, Converter={StaticResource Money}}" Width="135"/>
                         <DataGridTextColumn Header="{DynamicResource POS_Amount}"
-                                            Binding="{Binding LineTotal, Mode=OneWay, StringFormat={}{0:0.00}}" Width="150"/>
+                                            Binding="{Binding LineTotal, Mode=OneWay, Converter={StaticResource Money}}" Width="150"/>
                     </DataGrid.Columns>
                 </DataGrid>
 
@@ -248,17 +250,17 @@
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="{DynamicResource POS_Subtotal}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,2"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Subtotal, Mode=OneWay, StringFormat={}{0:0.00}}"
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Subtotal, Mode=OneWay, Converter={StaticResource Money}}"
                                    Foreground="{DynamicResource TextDarkBrush}" Margin="20,2,0,2"/>
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="{DynamicResource POS_TaxDiscount}"
                                    Foreground="{DynamicResource TextMutedBrush}" Margin="0,2"/>
                         <TextBlock Grid.Row="1" Grid.Column="1" Margin="20,2,0,2"
                                    Foreground="{DynamicResource TextDarkBrush}">
-                            <Run Text="{Binding TaxTotal, Mode=OneWay, StringFormat={}{0:0.00}}"/><Run Text=" / -"/><Run Text="{Binding DiscountTotal, Mode=OneWay, StringFormat={}{0:0.00}}"/>
+                            <Run Text="{Binding TaxTotal, Mode=OneWay, Converter={StaticResource Money}}"/><Run Text=" / -"/><Run Text="{Binding DiscountTotal, Mode=OneWay, Converter={StaticResource Money}}"/>
                         </TextBlock>
                         <TextBlock Grid.Row="2" Grid.Column="0" Text="{DynamicResource POS_Total}"
                                    FontSize="21" FontWeight="Bold" Foreground="{DynamicResource TextDarkBrush}" Margin="0,8,0,0"/>
-                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Total, Mode=OneWay, StringFormat={}{0:0.00}}"
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Total, Mode=OneWay, Converter={StaticResource Money}}"
                                    FontSize="24" FontWeight="Bold" Foreground="{DynamicResource PrimaryBrush}"
                                    Margin="20,8,0,0"/>
                     </Grid>
@@ -296,12 +298,10 @@
 
 
                 <UniformGrid Grid.Row="2" Columns="4" Rows="3">
-                    <Button Style="{StaticResource CommandTile}" Click="CashDrawer_Click"><TextBlock Text="{DynamicResource POS_CashDrawer}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="ServiceType_Click"><TextBlock Text="{DynamicResource POS_ServiceType}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Discount_Click"><StackPanel><TextBlock Text="F2" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Discount}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Comment_Click"><TextBlock Text="{DynamicResource POS_Comment}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="CustomerButton_Click"><TextBlock Text="{DynamicResource POS_Customer}" Style="{StaticResource CommandCaption}"/></Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Weigh_Click"><TextBlock Text="{DynamicResource POS_Weigh}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Suspend_Click"><StackPanel><TextBlock Text="F9" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_SaveSale}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Refund_Click"><TextBlock Text="{DynamicResource Sales_Refund}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource PaymentTile}" Click="Checkout_Click"><StackPanel><TextBlock Text="F10" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Payment}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
@@ -433,7 +433,7 @@
                                             </StackPanel>
                                             <Grid Grid.Row="1" Margin="0,8,0,0">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding Price, StringFormat={}{0:0.00}}" Foreground="{DynamicResource PrimaryBrush}" FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding Price, Converter={StaticResource Money}}" Foreground="{DynamicResource PrimaryBrush}" FontWeight="Bold"/>
                                                 <TextBlock Grid.Column="1" Text="{Binding StockQuantity, StringFormat='Stock {0:0.###}'}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
                                             </Grid>
                                         </Grid>

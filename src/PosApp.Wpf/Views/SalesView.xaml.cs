@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -28,7 +29,7 @@ public partial class SalesView : UserControl, IRefreshable
         ToDate.SelectedDate = DateTime.Today;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try { await LoadAsync(); }
@@ -61,10 +62,11 @@ public partial class SalesView : UserControl, IRefreshable
 
             _all = sales;
             SalesGrid.ItemsSource = _all;
-            TxnCountText.Text = _all.Count.ToString();
-            GrossText.Text = $"৳ {_all.Sum(x => x.Subtotal):0.00}";
-            DiscountText.Text = $"৳ {_all.Sum(x => x.DiscountTotal):0.00}";
-            TaxText.Text = $"৳ {_all.Sum(x => x.TaxTotal):0.00}";
+            var financial = _all.Where(x => x.Status is SaleStatus.Completed or SaleStatus.Refunded).ToList();
+            TxnCountText.Text = financial.Count(x => x.Status == SaleStatus.Completed).ToString();
+            GrossText.Text = FormattingUtilities.Money(financial.Sum(x => x.Subtotal), App.StoreSettings);
+            DiscountText.Text = FormattingUtilities.Money(financial.Sum(x => x.DiscountTotal), App.StoreSettings);
+            TaxText.Text = FormattingUtilities.Money(financial.Sum(x => x.TaxTotal), App.StoreSettings);
         }
         catch (Exception ex)
         {
@@ -76,7 +78,7 @@ public partial class SalesView : UserControl, IRefreshable
         }
     }
 
-    private void Filter_Click(object sender, RoutedEventArgs e) => Refresh();
+    private void Filter_Click(object sender, RoutedEventArgs e) => _ = RefreshAsync();
 
     private async void SalesGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
@@ -129,14 +131,14 @@ public partial class SalesView : UserControl, IRefreshable
                 MessageBox.Show("Only completed sales can be refunded.", "Refund", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var confirm = MessageBox.Show($"Refund sale {s.ReceiptNumber} for ৳ {s.Total:0.00}?",
+            var confirm = MessageBox.Show($"Refund sale {s.ReceiptNumber} for {FormattingUtilities.Money(s.Total, App.StoreSettings)}?",
                 "Confirm Refund", MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm != MessageBoxResult.Yes) return;
             try
             {
                 await _sales.RefundSaleAsync(s.Id, App.CurrentUser?.Id ?? 0);
                 MessageBox.Show("Refund processed.", "Refund", MessageBoxButton.OK, MessageBoxImage.Information);
-                Refresh();
+                _ = RefreshAsync();
             }
             catch (Exception ex)
             {
@@ -150,14 +152,17 @@ public partial class SalesView : UserControl, IRefreshable
         if (sender is Button btn && btn.Tag is Sale s)
         {
             if (s.Status != SaleStatus.Completed) return;
-            var confirm = MessageBox.Show($"Void sale {s.ReceiptNumber}? Stock will be returned.",
-                "Confirm Void", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.Yes) return;
+            if (App.StoreSettings.ConfirmBeforeVoidingOrder)
+            {
+                var confirm = MessageBox.Show($"Void sale {s.ReceiptNumber}? Stock will be returned.",
+                    "Confirm Void", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes) return;
+            }
             try
             {
                 await _sales.VoidSaleAsync(s.Id, App.CurrentUser?.Id ?? 0);
                 MessageBox.Show("Sale voided.", "Void", MessageBoxButton.OK, MessageBoxImage.Information);
-                Refresh();
+                _ = RefreshAsync();
             }
             catch (Exception ex)
             {
@@ -176,19 +181,23 @@ public partial class SalesView : UserControl, IRefreshable
         if (dlg.ShowDialog() != true) return;
         var sb = new StringBuilder();
         sb.AppendLine("Receipt,Date,Customer,Cashier,Items,Subtotal,Discount,Tax,Total,Status");
-        foreach (var s in _all)
+        foreach (var sale in _all)
         {
-            sb.AppendLine(string.Join(",",
-                s.ReceiptNumber,
-                s.SaleDate.ToString("yyyy-MM-dd HH:mm"),
-                $"\"{s.Customer?.Name ?? ""}\"",
-                $"\"{s.User?.FullName ?? ""}\"",
-                s.Items.Count.ToString(),
-                s.Subtotal.ToString("0.00"),
-                s.DiscountTotal.ToString("0.00"),
-                s.TaxTotal.ToString("0.00"),
-                s.Total.ToString("0.00"),
-                s.Status));
+            var localDate = DateTimeUtilities.ToLocal(sale.SaleDate);
+            var values = new[]
+            {
+                FormattingUtilities.CsvField(sale.ReceiptNumber),
+                FormattingUtilities.CsvField(localDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)),
+                FormattingUtilities.CsvField(sale.Customer?.Name),
+                FormattingUtilities.CsvField(sale.User?.FullName),
+                sale.Items.Sum(item => item.Quantity).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                FormattingUtilities.CsvDecimal(sale.Subtotal),
+                FormattingUtilities.CsvDecimal(sale.DiscountTotal),
+                FormattingUtilities.CsvDecimal(sale.TaxTotal),
+                FormattingUtilities.CsvDecimal(sale.Total),
+                FormattingUtilities.CsvField(sale.Status.ToString())
+            };
+            sb.AppendLine(string.Join(',', values));
         }
         File.WriteAllText(dlg.FileName, sb.ToString());
         MessageBox.Show($"Exported {_all.Count} sales to:\n{dlg.FileName}", "Export",
@@ -213,7 +222,7 @@ public class SaleDetailDialog : Window
 
         var info = new TextBlock
         {
-            Text = $"Date: {sale.SaleDate:yyyy-MM-dd HH:mm}\nCustomer: {sale.Customer?.Name ?? "Walk-in"}\nCashier: {sale.User?.FullName ?? sale.UserId.ToString()}\nStatus: {sale.Status}",
+            Text = $"Date: {DateTimeUtilities.ToLocal(sale.SaleDate):yyyy-MM-dd HH:mm}\nCustomer: {sale.Customer?.Name ?? "Walk-in"}\nCashier: {sale.User?.FullName ?? sale.UserId.ToString()}\nStatus: {sale.Status}",
             FontSize = 13,
             Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("TextMutedBrush"),
             Margin = new Thickness(0, 0, 0, 16)
@@ -230,9 +239,9 @@ public class SaleDetailDialog : Window
         };
         dg.Columns.Add(new DataGridTextColumn { Header = "Product", Binding = new System.Windows.Data.Binding("ProductName"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         dg.Columns.Add(new DataGridTextColumn { Header = "Qty", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "0.###" }, Width = 70 });
-        dg.Columns.Add(new DataGridTextColumn { Header = "Price", Binding = new System.Windows.Data.Binding("UnitPrice") { StringFormat = "৳ {0:0.00}" }, Width = 80 });
-        dg.Columns.Add(new DataGridTextColumn { Header = "Disc", Binding = new System.Windows.Data.Binding("DiscountAmount") { StringFormat = "৳ {0:0.00}" }, Width = 80 });
-        dg.Columns.Add(new DataGridTextColumn { Header = "Total", Binding = new System.Windows.Data.Binding("LineTotal") { StringFormat = "৳ {0:0.00}" }, Width = 100 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "Price", Binding = new System.Windows.Data.Binding("UnitPrice") { Converter = new PosApp.Wpf.Converters.MoneyConverter() }, Width = 80 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "Disc", Binding = new System.Windows.Data.Binding("DiscountAmount") { Converter = new PosApp.Wpf.Converters.MoneyConverter() }, Width = 80 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "Total", Binding = new System.Windows.Data.Binding("LineTotal") { Converter = new PosApp.Wpf.Converters.MoneyConverter() }, Width = 100 });
         panel.Children.Add(dg);
 
         var totals = new Grid { Margin = new Thickness(0, 8, 0, 0) };
@@ -240,17 +249,17 @@ public class SaleDetailDialog : Window
         totals.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(260) });
         for (int i = 0; i < 7; i++) totals.RowDefinitions.Add(new RowDefinition());
 
-        AddRow(totals, 0, "Subtotal", $"৳ {sale.Subtotal:0.00}");
-        AddRow(totals, 1, "Discount", $"- ৳ {sale.DiscountTotal:0.00}");
-        AddRow(totals, 2, "Tax", $"৳ {sale.TaxTotal:0.00}");
-        AddRow(totals, 3, "TOTAL", $"৳ {sale.Total:0.00}", bold: true);
+        AddRow(totals, 0, "Subtotal", FormattingUtilities.Money(sale.Subtotal, App.StoreSettings));
+        AddRow(totals, 1, "Discount", FormattingUtilities.Money(-sale.DiscountTotal, App.StoreSettings));
+        AddRow(totals, 2, "Tax", FormattingUtilities.Money(sale.TaxTotal, App.StoreSettings));
+        AddRow(totals, 3, "TOTAL", FormattingUtilities.Money(sale.Total, App.StoreSettings), bold: true);
         var paymentSummary = sale.Payments.Count == 0
             ? "-"
             : string.Join(" + ", sale.Payments.Select(payment =>
-                $"{PaymentName(payment.Method)} ৳ {payment.Amount:0.00}"));
+                $"{PaymentName(payment.Method)} {FormattingUtilities.Money(payment.Amount, App.StoreSettings)}"));
         AddRow(totals, 4, "Payments applied", paymentSummary);
-        AddRow(totals, 5, "Received", $"৳ {sale.AmountPaid:0.00}");
-        AddRow(totals, 6, "Change", $"৳ {sale.Change:0.00}");
+        AddRow(totals, 5, "Received", FormattingUtilities.Money(sale.AmountPaid, App.StoreSettings));
+        AddRow(totals, 6, "Change", FormattingUtilities.Money(sale.Change, App.StoreSettings));
 
         panel.Children.Add(totals);
 

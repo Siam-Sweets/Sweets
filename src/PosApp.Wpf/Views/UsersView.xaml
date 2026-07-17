@@ -5,6 +5,7 @@
              Background="{DynamicResource BackgroundBrush}">
     <UserControl.Resources>
         <conv:UserRoleToStringConverter x:Key="RoleStr"/>
+        <conv:UtcToLocalConverter x:Key="UtcToLocal"/>
     </UserControl.Resources>
     <Grid Margin="{StaticResource PagePadding}">
         <Grid.RowDefinitions>
@@ -19,7 +20,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
                 <TextBlock Text="{DynamicResource Usr_Title}" Style="{StaticResource Heading1}"/>
-                <TextBlock Text="Manage cashier, manager, and admin accounts with role-based permissions" Style="{StaticResource Muted}"/>
+                <TextBlock Text="{DynamicResource Usr_Subtitle}" Style="{StaticResource Muted}"/>
             </StackPanel>
             <Button Grid.Column="1" Content="{DynamicResource Usr_Add}" Style="{StaticResource PrimaryButton}"
                     Click="Add_Click" Padding="20,12"/>
@@ -28,30 +29,31 @@
         <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0">
             <DataGrid x:Name="UsersGrid" AutoGenerateColumns="False" IsReadOnly="True">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="160"/>
-                    <DataGridTextColumn Header="Full Name" Binding="{Binding FullName}" Width="200"/>
-                    <DataGridTextColumn Header="Role" Binding="{Binding Role, Converter={StaticResource RoleStr}}" Width="120"/>
-                    <DataGridTemplateColumn Header="Active" Width="80">
+                    <DataGridTextColumn Header="{DynamicResource Usr_Username}" Binding="{Binding Username}" Width="160"/>
+                    <DataGridTextColumn Header="{DynamicResource Usr_FullName}" Binding="{Binding FullName}" Width="200"/>
+                    <DataGridTextColumn Header="{DynamicResource Usr_Role}" Binding="{Binding Role, Converter={StaticResource RoleStr}}" Width="120"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Usr_Active}" Width="80">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding IsActive, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           Tag="{Binding}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
+                                          Focusable="False"
                                           Click="Active_Click"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Last Login" Binding="{Binding LastLoginAt, StringFormat='yyyy-MM-dd HH:mm'}" Width="160"/>
-                    <DataGridTemplateColumn Header="Actions" Width="220">
+                    <DataGridTextColumn Header="{DynamicResource Usr_LastLogin}" Binding="{Binding LastLoginAt, Converter={StaticResource UtcToLocal}, ConverterParameter=yyyy-MM-dd HH:mm}" Width="160"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Common_Actions}" Width="220">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <Button Content="Edit" Style="{StaticResource OutlineButton}"
+                                    <Button Content="{DynamicResource Usr_Edit}" Style="{StaticResource OutlineButton}"
                                             Padding="8,4" Margin="2" Click="Edit_Click" Tag="{Binding}"/>
-                                    <Button Content="Reset PIN" Style="{StaticResource OutlineButton}"
+                                    <Button Content="{DynamicResource Usr_ResetPin}" Style="{StaticResource OutlineButton}"
                                             Padding="8,4" Margin="2" Click="ResetPin_Click" Tag="{Binding}"/>
-                                    <Button Content="Delete" Style="{StaticResource DangerButton}"
+                                    <Button Content="{DynamicResource Usr_Delete}" Style="{StaticResource DangerButton}"
                                             Padding="8,4" Margin="2" Click="Delete_Click" Tag="{Binding}"/>
                                 </StackPanel>
                             </DataTemplate>

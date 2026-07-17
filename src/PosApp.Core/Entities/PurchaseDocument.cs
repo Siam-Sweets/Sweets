@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Core.Entities;
 
@@ -20,7 +21,7 @@ public class PurchaseDocument
     public int UserId { get; set; }
     public DateTime DocumentDate { get; set; } = DateTime.UtcNow;
     [NotMapped]
-    public DateTime DocumentDateLocal => DocumentDate.ToLocalTime();
+    public DateTime DocumentDateLocal => DateTimeUtilities.ToLocal(DocumentDate);
     public DateTime StockDate { get; set; } = DateTime.UtcNow;
     public PurchaseStatus Status { get; set; } = PurchaseStatus.Posted;
 

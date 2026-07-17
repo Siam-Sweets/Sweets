@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Controls.Primitives;
+using PosApp.Core.Utilities;
 using PosApp.Core.Entities;
 using PosApp.Core.Models;
 
@@ -20,14 +22,13 @@ public partial class PaymentDialog : Window
         {
             Method = entry.Method,
             Amount = entry.AppliedAmount,
-            Reference = entry.Method == PaymentMethod.Card ? "card" : null
+            Reference = entry.Reference
         })
         .ToList();
     public decimal TenderedAmount => _entries.Sum(entry => entry.TenderedAmount);
 
     private decimal AppliedTotal => _entries.Sum(entry => entry.AppliedAmount);
     private decimal Remaining => Math.Max(0m, (_draft?.Total ?? 0m) - AppliedTotal);
-    private string CurrencySymbol => App.StoreSettings.CurrencySymbol;
 
     public PaymentDialog()
     {
@@ -41,6 +42,8 @@ public partial class PaymentDialog : Window
         _entries.Clear();
         SelectedMethod = PaymentMethod.Cash;
         SetAmountText("");
+        ReferenceBox.Clear();
+        ReferencePanel.Visibility = Visibility.Collapsed;
         AmountDueText.Text = Money(draft.Total);
         ConfigureQuickCash(draft.Total);
         UpdateMethodButtons();
@@ -59,7 +62,9 @@ public partial class PaymentDialog : Window
             return;
         }
 
-        if (e.Key != Key.Enter) return;
+        var effectiveKey = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (effectiveKey != Key.Enter) return;
+        if (Keyboard.FocusedElement is ButtonBase or ComboBox or ListBoxItem) return;
 
         if (Remaining <= 0m)
         {
@@ -89,6 +94,9 @@ public partial class PaymentDialog : Window
         if (SelectedMethod != PaymentMethod.Cash && Remaining > 0m)
             SetAmountText(Remaining.ToString("0.00", CultureInfo.CurrentCulture));
 
+        ReferencePanel.Visibility = SelectedMethod == PaymentMethod.Cash
+            ? Visibility.Collapsed : Visibility.Visible;
+        if (SelectedMethod == PaymentMethod.Cash) ReferenceBox.Clear();
         UpdateSummary();
         FocusAmount(selectAll: true);
     }
@@ -221,9 +229,18 @@ public partial class PaymentDialog : Window
             return false;
         }
 
+        var reference = string.IsNullOrWhiteSpace(ReferenceBox.Text) ? null : ReferenceBox.Text.Trim();
+        if (SelectedMethod != PaymentMethod.Cash && reference == null)
+        {
+            if (showError) ShowWarning("Pay_ReferenceRequired", "Enter the card, wallet, or bank transaction reference.");
+            ReferenceBox.Focus();
+            return false;
+        }
+
         var applied = Math.Min(entered, remaining);
         var tendered = SelectedMethod == PaymentMethod.Cash ? entered : applied;
-        _entries.Add(new PaymentEntryView(SelectedMethod, applied, tendered, CurrencySymbol));
+        _entries.Add(new PaymentEntryView(SelectedMethod, applied, tendered, reference));
+        ReferenceBox.Clear();
         SetAmountText("");
         UpdateSummary();
         return true;
@@ -252,7 +269,7 @@ public partial class PaymentDialog : Window
 
     private void Finish()
     {
-        if (_draft == null || Remaining > 0m || _entries.Count == 0) return;
+        if (_draft == null || Remaining > 0m || (_draft.Total > 0m && _entries.Count == 0)) return;
         DialogResult = true;
         Close();
     }
@@ -310,13 +327,13 @@ public partial class PaymentDialog : Window
             MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
-    private string Money(decimal amount) => $"{CurrencySymbol} {amount:0.00}";
+    private string Money(decimal amount) => FormattingUtilities.Money(amount, App.StoreSettings);
 }
 
 public sealed class PaymentEntryView
 {
     public PaymentEntryView(PaymentMethod method, decimal appliedAmount,
-        decimal tenderedAmount, string currencySymbol)
+        decimal tenderedAmount, string? reference)
     {
         Method = method;
         AppliedAmount = appliedAmount;
@@ -329,14 +346,19 @@ public sealed class PaymentEntryView
             PaymentMethod.BankTransfer => "Pay_Bank",
             _ => "Pay_Title"
         }) as string ?? method.ToString();
+        Reference = reference;
+        var appliedText = FormattingUtilities.Money(appliedAmount, App.StoreSettings);
+        var tenderedText = FormattingUtilities.Money(tenderedAmount, App.StoreSettings);
         Detail = tenderedAmount > appliedAmount
-            ? $"{currencySymbol} {appliedAmount:0.00} - {Application.Current.TryFindResource("Pay_Received") as string ?? "Received"} {currencySymbol} {tenderedAmount:0.00}"
-            : $"{currencySymbol} {appliedAmount:0.00}";
+            ? $"{appliedText} - {Application.Current.TryFindResource("Pay_Received") as string ?? "Received"} {tenderedText}"
+            : appliedText;
+        if (!string.IsNullOrWhiteSpace(reference)) Detail += $" • {reference}";
     }
 
     public PaymentMethod Method { get; }
     public decimal AppliedAmount { get; }
     public decimal TenderedAmount { get; }
     public string MethodName { get; }
+    public string? Reference { get; }
     public string Detail { get; }
 }

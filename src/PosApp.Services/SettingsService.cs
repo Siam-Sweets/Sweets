@@ -10,56 +10,79 @@ namespace PosApp.Services;
 public class SettingsService : ISettingsService
 {
     private readonly AppDbContext _db;
-    private static StoreSettings? _cache;
+    private static readonly SemaphoreSlim CacheGate = new(1, 1);
+    private static string? _cachedJson;
 
     public SettingsService(AppDbContext db) => _db = db;
 
     public async Task<string?> GetAsync(string key)
     {
-        var s = await _db.Settings.AsNoTracking().FirstOrDefaultAsync(x => x.Key == key);
-        return s?.Value;
+        var setting = await _db.Settings.AsNoTracking().FirstOrDefaultAsync(x => x.Key == key);
+        return setting?.Value;
     }
 
     public async Task SetAsync(string key, string? value)
     {
-        var s = await _db.Settings.FirstOrDefaultAsync(x => x.Key == key);
-        if (s == null)
+        var setting = await _db.Settings.FirstOrDefaultAsync(x => x.Key == key);
+        if (setting == null)
         {
-            s = new Setting { Key = key, Value = value };
-            _db.Settings.Add(s);
+            setting = new Setting { Key = key, Value = value };
+            _db.Settings.Add(setting);
         }
         else
         {
-            s.Value = value;
-            s.UpdatedAt = DateTime.UtcNow;
+            setting.Value = value;
+            setting.UpdatedAt = DateTime.UtcNow;
         }
         await _db.SaveChangesAsync();
-        _cache = null;
+        if (key == "store:config")
+        {
+            await CacheGate.WaitAsync();
+            try { _cachedJson = value; }
+            finally { CacheGate.Release(); }
+        }
     }
 
     public async Task<StoreSettings> GetStoreSettingsAsync()
     {
-        if (_cache != null) return _cache;
-        var raw = await GetAsync("store:config");
-        if (string.IsNullOrEmpty(raw))
-        {
-            _cache = new StoreSettings();
-            return _cache;
-        }
+        await CacheGate.WaitAsync();
         try
         {
-            _cache = JsonSerializer.Deserialize<StoreSettings>(raw) ?? new StoreSettings();
+            _cachedJson ??= await GetAsync("store:config") ?? JsonSerializer.Serialize(new StoreSettings());
+            return DeserializeClone(_cachedJson);
         }
-        catch
+        finally
         {
-            _cache = new StoreSettings();
+            CacheGate.Release();
         }
-        return _cache;
     }
 
     public async Task SetStoreSettingsAsync(StoreSettings settings)
     {
-        await SetAsync("store:config", JsonSerializer.Serialize(settings));
-        _cache = settings;
+        ArgumentNullException.ThrowIfNull(settings);
+        var normalized = DeserializeClone(JsonSerializer.Serialize(settings));
+        normalized.StoreName = normalized.StoreName?.Trim() ?? string.Empty;
+        normalized.CurrencySymbol = normalized.CurrencySymbol?.Trim() ?? string.Empty;
+        normalized.CurrencyCode = normalized.CurrencyCode?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (normalized.StoreName.Length == 0)
+            throw new InvalidOperationException("Store name is required.");
+        if (normalized.CurrencySymbol.Length is < 1 or > 8)
+            throw new InvalidOperationException("Currency symbol must contain 1 to 8 characters.");
+        if (normalized.CurrencyCode.Length is < 3 or > 8)
+            throw new InvalidOperationException("Currency code must contain 3 to 8 characters.");
+        normalized.CurrencyDecimals = Math.Clamp(normalized.CurrencyDecimals, 0, 4);
+        normalized.ProductGridRows = Math.Clamp(normalized.ProductGridRows, 2, 10);
+        normalized.ProductGridColumns = Math.Clamp(normalized.ProductGridColumns, 2, 10);
+        normalized.UiScalePercent = Math.Clamp(normalized.UiScalePercent, 90, 125);
+        normalized.MessageDurationSeconds = Math.Clamp(normalized.MessageDurationSeconds, 1, 60);
+        normalized.BackupRetentionCount = Math.Clamp(normalized.BackupRetentionCount, 1, 365);
+        var json = JsonSerializer.Serialize(normalized);
+        await SetAsync("store:config", json);
+    }
+
+    private static StoreSettings DeserializeClone(string json)
+    {
+        try { return JsonSerializer.Deserialize<StoreSettings>(json) ?? new StoreSettings(); }
+        catch { return new StoreSettings(); }
     }
 }

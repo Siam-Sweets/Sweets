@@ -4,7 +4,7 @@ A feature-rich, **local-only** Point of Sale desktop application for Windows, bu
 
 ## Offline Boundary
 
-Version 1.3.28 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, safe updates, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
+Version 1.4.0 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, safe updates, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
 
 This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
 
@@ -12,7 +12,7 @@ This is an original POS implementation inspired by the publicly known feature se
 
 | Module              | Highlights |
 |---------------------|------------|
-| **POS / Checkout**  | Full-screen receipt-first register, stable F3 product search panel, barcode/SKU scan, F2 line discount and saved promotions, F4 quantity, F7 open sales, F9 save sale, F10 payment workflow with cash/card/bank-transfer options, customer, service type, comments, weighted-product scale capture (including recalled sales), cash drawer, refund navigation, lock, and void order |
+| **POS / Checkout**  | Full-screen receipt-first register, stable F3 product search panel, barcode/SKU scan, F2 line discount and saved promotions, F4 quantity, F7 open sales, F9 save sale, F10 payment workflow with cash/card/bank-transfer options, customer, service type, comments, decimal quantities for weighted products, refund navigation, lock, and void order |
 | **Products & Inventory** | Full CRUD for products and categories, SKU/barcode tracking, stock levels, low-stock alerts, stock adjustments, physical inventory counts, stock movement history, stock valuation at cost, CSV catalog import/export |
 | **Purchases & Suppliers** | Supplier directory, posted purchase documents, supplier invoice references, multi-line receiving, tax totals, automatic stock increases, moving-average cost, and purchase history |
 | **Cash Register** | Opening float, paid-in / paid-out movements with reasons, live expected cash, payment breakdown, printable X reports, manager-only close, counted cash, variance, and final Z reports |
@@ -22,17 +22,18 @@ This is an original POS implementation inspired by the publicly known feature se
 | **Reports & Dashboard** | Management dashboard with monthly/today KPIs, daily sales, top products, hourly activity, payment breakdown, plus detailed date-range reports |
 | **Taxes & Discounts** | Per-product tax rate, reusable offline promotions with codes/dates/use limits, and percentage or fixed line discounts at the register |
 | **Management workspace** | Slide-over terminal menu, role-aware back-office navigation, documents/sales, products, stock, purchases, customers/suppliers, reporting, promotions, users/security, payment/tax/company settings |
-| **Settings** | Sectioned General, Order & Payment, Products, Documents, Weighing Scale, Customer Display, Email/offline boundary, Print, Database, Update & Recovery, and About workflow; live English/বাংলা and Light/Dark switching |
+| **Settings** | Sectioned General, Order & Payment, Products, Documents, Email/offline boundary, Print, Database, Update & Recovery, and About workflow; live English/বাংলা and Light/Dark switching |
 | **Keyboard workflow** | Global Enter-to-next-field navigation for single-line text, password/PIN, date, and selection fields; existing scanner/search/payment Enter actions and multiline editors retain their specialized behavior |
+| **Reliable checkboxes** | User activation, product weighted status, promotion activation, setup, and settings checkboxes use consistent two-state controls; grid changes persist immediately |
 | **Receipt Printer** | ESC/POS thermal printer via raw spooler (58/80mm) AND fallback Windows PrintDocument path for any printer |
-| **Hardware**        | Barcode scanner (HID keyboard + serial), cash drawer (serial DTR pulse + printer DK port), weighing scale (serial) — all gracefully degrade to "no-op" if absent |
+| **Hardware**        | Barcode scanner (HID keyboard + serial) and receipt printer — both degrade safely when unavailable |
 | **Data Safety**     | Consistent SQLite backups on startup/exit, manual backup, retention control, validated staged restore, automatic pre-restore safety copy, and pre-migration safe-update snapshots |
 
 ## Tech Stack
 
 - **.NET 8 (LTS)** + **WPF** (XAML and code-behind)
 - **EF Core 8** + **SQLite** (single-file local DB at `%LOCALAPPDATA%\PosApp\posapp.db`)
-- **System.IO.Ports** for serial hardware (drawer, scale, serial scanner)
+- **System.IO.Ports** for serial barcode scanners
 - **HidSharp** for HID scanner discovery
 - Original UI styling (flat, modern, Material-inspired) with EN + BN bilingual support
 
@@ -48,7 +49,7 @@ posapp/
 │   ├── PosApp.Core/                # Entities, enums, interfaces, DTOs
 │   ├── PosApp.Data/                # AppDbContext, EF Core, seeder, repositories
 │   ├── PosApp.Services/            # Business logic (Auth, Inventory, Sales, Customers, Reports, Settings)
-│   ├── PosApp.Hardware/            # Printer, scanner, drawer, scale drivers + HardwareService
+│   ├── PosApp.Hardware/            # Receipt-printer and barcode-scanner integrations
 │   ├── PosApp.Localization/        # Strings.en.xaml + Strings.bn.xaml + LocalizationManager
 │   └── PosApp.Wpf/                 # App, MainWindow, all views, styles, converters
 └── README.md
@@ -103,7 +104,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-1.3.28-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-1.4.0-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -130,33 +131,32 @@ This protection also runs before database migration when a newer installer is la
 The workflow at `.github/workflows/build.yml` triggers on:
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v1.3.28`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v1.4.0`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.3.28
-git push origin v1.3.28
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.3.28`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.4.0`.
 
 ## Configuration
 
 All settings persist in the SQLite database and are editable from the in-app **Settings** screen:
 
 - **General and store**: name, address, phone, email, tax ID, currency symbol, language, theme, interface scale, and message duration
-- **Order and payment**: default service type/tax, optional open-register requirement, void confirmation, and startup register/business-day behavior
+- **Order and payment**: default service type/tax, optional open-register requirement, and void confirmation
 - **Product search and documents**: touch-grid preferences, virtual-keyboard preference, receipt footer/width, and automatic printing
-- **Hardware**: receipt printer name (dropdown of installed Windows printers), cash drawer COM port, scale COM port, immediate scale-port switching, Test Scale connection/current-weight diagnostics, auto-print receipt, and auto-open drawer on cash sale
+- **Hardware**: receipt printer name (dropdown of installed Windows printers) and automatic receipt printing
 - **Language**: English (default) or বাংলা (Bengali) — switches live
 - **Theme**: Light / Dark
 - **Data safety**: automatic backups on startup and/or exit, retention count, manual backup, validated restore, and backup-folder access
 - **Update and recovery**: newer local installer selection, version/hash validation, pre-update database verification, recovery backup location, and last-update status
 
-You can also edit hardware defaults by deleting the `store:config` row in the `Settings` table (the app re-creates it with defaults on next run).
 
 ## Hardware Wiring Notes
 
@@ -164,19 +164,17 @@ You can also edit hardware defaults by deleting the `store:config` row in the `S
 |--------|------------|-------|
 | Barcode scanner | USB (HID keyboard mode) | Most USB scanners work out of the box — they "type" the code + Enter. The app detects fast key sequences and fires the onScan callback. |
 | Receipt printer | USB (Windows printer driver) | Set the printer name in Settings. Raw ESC/POS bytes are sent via the Windows spooler (Winspool `WritePrinter`). Falls back to GDI printing if the printer is not ESC/POS-compatible. |
-| Cash drawer | Either (a) RJ11 wired to printer's DK port, or (b) direct COM port | For (a), use the printer-kick ESC/POS command. For (b), set the COM port in Settings — the app pulses DTR. |
-| Weighing scale | Serial COM port (RS232) | Settings changes take effect immediately. **Test scale** opens the selected port and attempts a current reading. Default protocol: 9600 baud, 8-N-1; send `R`, read a response like `S+0001.235kg`. Override `SerialWeighingScale.ParseWeight` for a different protocol. |
 
-When any device is missing, the app silently degrades to a no-op so checkout never blocks.
+When an optional scanner or printer is missing, PosApp degrades safely so the register remains usable.
 
 ## Security Notes
 
-- Passwords are hashed with SHA-256 + 16-byte random salt (PINs are short, so consider migrating to PBKDF2/Argon2 for production use with stronger passwords).
+- PINs are hashed with PBKDF2-SHA256 using a random salt and 120,000 iterations. Existing legacy SHA-256 hashes are transparently upgraded after a successful login.
 - The SQLite database lives under `%LOCALAPPDATA%\PosApp\` — back it up regularly. There is no cloud sync.
 - Role-based access:
-- **Cashier**: POS, Register, and Sales
-- **Manager**: + Products, Inventory, Purchases, Customers, Reports, and register close/Z report
-  - **Admin**: + Users, Settings
+  - **Cashier**: POS, Register, and Sales
+  - **Manager**: + Products, Inventory, Purchases, Customers, Reports, and register close/Z report
+  - **Admin**: + Users and Settings
 
 ## Future Roadmap
 
@@ -200,5 +198,3 @@ This project is provided as-is for your personal/commercial use. The architectur
 **Receipt doesn't print** — in Settings, ensure the printer name matches exactly what's shown in `Control Panel → Devices and Printers`. Try the **Test Print** button.
 
 **Barcode scanner doesn't fire** — most USB HID scanners work without configuration. If yours is serial-based, switch to the `SerialBarcodeScanner` driver in `App.xaml.cs`.
-
-**Cash drawer won't open** — confirm the COM port in Settings matches Device Manager. If the drawer is wired to the printer's DK port, replace `NullCashDrawer` with `PrinterCashDrawer` in `App.xaml.cs`.

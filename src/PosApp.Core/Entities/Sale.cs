@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace PosApp.Core.Entities;
 
@@ -47,6 +48,9 @@ public class Sale
     public ICollection<SaleItem> Items { get; set; } = new List<SaleItem>();
     public ICollection<SalePayment> Payments { get; set; } = new List<SalePayment>();
 
+    [MaxLength(32)]
+    public string ServiceType { get; set; } = "Retail";
+
     [MaxLength(500)]
     public string? Note { get; set; }
 
@@ -55,6 +59,16 @@ public class Sale
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>True when this completed sale already has a linked refund transaction.</summary>
+    [NotMapped]
+    public bool HasRefund { get; set; }
+
+    [NotMapped]
+    public bool CanRefund => Status == SaleStatus.Completed && !HasRefund;
+
+    [NotMapped]
+    public bool CanVoid => Status == SaleStatus.Completed && !HasRefund;
 }
 
 public enum SaleStatus

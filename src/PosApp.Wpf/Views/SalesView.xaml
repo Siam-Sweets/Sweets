@@ -6,6 +6,7 @@
     <UserControl.Resources>
         <conv:SaleStatusToStringConverter x:Key="StatusStr"/>
         <conv:MoneyConverter x:Key="Money"/>
+        <conv:UtcToLocalConverter x:Key="UtcToLocal"/>
     </UserControl.Resources>
     <Grid Margin="{StaticResource PagePadding}">
         <Grid.RowDefinitions>
@@ -17,7 +18,7 @@
 
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
             <TextBlock Text="{DynamicResource Sales_Title}" Style="{StaticResource Heading1}"/>
-            <TextBlock Text="Browse, filter, refund, void, and reprint past transactions" Style="{StaticResource Muted}"/>
+            <TextBlock Text="{DynamicResource Sales_Subtitle}" Style="{StaticResource Muted}"/>
         </StackPanel>
 
         <!-- Filters -->
@@ -40,11 +41,11 @@
                 <DatePicker Grid.Column="3" x:Name="ToDate"/>
                 <TextBlock Grid.Column="4" Text="{DynamicResource Sales_Status}" VerticalAlignment="Center" Margin="16,0,8,0"/>
                 <ComboBox Grid.Column="5" x:Name="StatusFilter" SelectedIndex="0">
-                    <ComboBoxItem Content="All" Tag=""/>
-                    <ComboBoxItem Content="Completed" Tag="Completed"/>
-                    <ComboBoxItem Content="Suspended" Tag="Suspended"/>
-                    <ComboBoxItem Content="Voided" Tag="Voided"/>
-                    <ComboBoxItem Content="Refunded" Tag="Refunded"/>
+                    <ComboBoxItem Content="{DynamicResource Common_All}" Tag=""/>
+                    <ComboBoxItem Content="{DynamicResource Sales_StatusCompleted}" Tag="Completed"/>
+                    <ComboBoxItem Content="{DynamicResource Sales_StatusSuspended}" Tag="Suspended"/>
+                    <ComboBoxItem Content="{DynamicResource Sales_StatusVoided}" Tag="Voided"/>
+                    <ComboBoxItem Content="{DynamicResource Sales_StatusRefunded}" Tag="Refunded"/>
                 </ComboBox>
                 <Button Grid.Column="6" Content="{DynamicResource Sales_Filter}" Style="{StaticResource PrimaryButton}"
                         Click="Filter_Click" Margin="16,0,0,0" Padding="16,8"/>
@@ -85,28 +86,28 @@
             <DataGrid x:Name="SalesGrid" AutoGenerateColumns="False" IsReadOnly="True"
                       MouseDoubleClick="SalesGrid_MouseDoubleClick">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Receipt" Binding="{Binding ReceiptNumber}" Width="140"/>
-                    <DataGridTextColumn Header="Date" Binding="{Binding SaleDate, StringFormat='yyyy-MM-dd HH:mm'}" Width="140"/>
-                    <DataGridTextColumn Header="Customer" Binding="{Binding Customer.Name}" Width="140"/>
-                    <DataGridTextColumn Header="Cashier" Binding="{Binding User.FullName}" Width="120"/>
-                    <DataGridTextColumn Header="Items" Binding="{Binding Items.Count}" Width="60"/>
-                    <DataGridTextColumn Header="Subtotal" Binding="{Binding Subtotal, StringFormat='৳ {0:0.00}'}" Width="100"/>
-                    <DataGridTextColumn Header="Discount" Binding="{Binding DiscountTotal, StringFormat='- ৳ {0:0.00}'}" Width="100"/>
-                    <DataGridTextColumn Header="Tax" Binding="{Binding TaxTotal, StringFormat='৳ {0:0.00}'}" Width="90"/>
-                    <DataGridTextColumn Header="Total" Binding="{Binding Total, StringFormat='৳ {0:0.00}'}" Width="100"/>
-                    <DataGridTextColumn Header="Status" Binding="{Binding Status, Converter={StaticResource StatusStr}}" Width="100"/>
-                    <DataGridTemplateColumn Header="Actions" Width="280">
+                    <DataGridTextColumn Header="{DynamicResource Sales_Receipt}" Binding="{Binding ReceiptNumber}" Width="140"/>
+                    <DataGridTextColumn Header="{DynamicResource Sales_Date}" Binding="{Binding SaleDate, Converter={StaticResource UtcToLocal}, ConverterParameter=yyyy-MM-dd HH:mm}" Width="140"/>
+                    <DataGridTextColumn Header="{DynamicResource Sales_Customer}" Binding="{Binding Customer.Name}" Width="140"/>
+                    <DataGridTextColumn Header="{DynamicResource Sales_Cashier}" Binding="{Binding User.FullName}" Width="120"/>
+                    <DataGridTextColumn Header="{DynamicResource Rpt_Items}" Binding="{Binding Items.Count}" Width="60"/>
+                    <DataGridTextColumn Header="{DynamicResource Sales_Subtotal}" Binding="{Binding Subtotal, Converter={StaticResource Money}}" Width="100"/>
+                    <DataGridTextColumn Header="{DynamicResource Sales_Discount}" Binding="{Binding DiscountTotal, Converter={StaticResource Money}}" Width="100"/>
+                    <DataGridTextColumn Header="{DynamicResource Sales_Tax}" Binding="{Binding TaxTotal, Converter={StaticResource Money}}" Width="90"/>
+                    <DataGridTextColumn Header="{DynamicResource Rpt_Total}" Binding="{Binding Total, Converter={StaticResource Money}}" Width="100"/>
+                    <DataGridTextColumn Header="{DynamicResource Sales_Status}" Binding="{Binding Status, Converter={StaticResource StatusStr}}" Width="100"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Sales_Actions}" Width="280">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <Button Content="View" Style="{StaticResource OutlineButton}"
+                                    <Button Content="{DynamicResource Common_View}" Style="{StaticResource OutlineButton}"
                                             Padding="8,4" Margin="2" Click="View_Click" Tag="{Binding}"/>
-                                    <Button Content="Print" Style="{StaticResource OutlineButton}"
+                                    <Button Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
                                             Padding="8,4" Margin="2" Click="Print_Click" Tag="{Binding}"/>
-                                    <Button Content="Refund" Style="{StaticResource OutlineButton}"
-                                            Padding="8,4" Margin="2" Click="Refund_Click" Tag="{Binding}"/>
-                                    <Button Content="Void" Style="{StaticResource DangerButton}"
-                                            Padding="8,4" Margin="2" Click="Void_Click" Tag="{Binding}"/>
+                                    <Button Content="{DynamicResource Sales_Refund}" Style="{StaticResource OutlineButton}"
+                                            Padding="8,4" Margin="2" Click="Refund_Click" Tag="{Binding}" IsEnabled="{Binding CanRefund}"/>
+                                    <Button Content="{DynamicResource Sales_Void}" Style="{StaticResource DangerButton}"
+                                            Padding="8,4" Margin="2" Click="Void_Click" Tag="{Binding}" IsEnabled="{Binding CanVoid}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>

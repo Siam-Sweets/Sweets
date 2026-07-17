@@ -15,7 +15,8 @@ public class InventoryService : IInventoryService
     public async Task<IReadOnlyList<Product>> SearchProductsAsync(
         string? query,
         int? categoryId = null,
-        ProductSearchField searchField = ProductSearchField.All)
+        ProductSearchField searchField = ProductSearchField.All,
+        bool includeInactive = false)
     {
         var q = _db.Products.AsNoTracking().Include(p => p.Category).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
@@ -39,7 +40,7 @@ public class InventoryService : IInventoryService
             };
         }
         if (categoryId.HasValue) q = q.Where(p => p.CategoryId == categoryId.Value);
-        q = q.Where(p => p.IsActive);
+        if (!includeInactive) q = q.Where(p => p.IsActive);
         return await q.OrderBy(p => p.Name).ToListAsync();
     }
 
@@ -55,9 +56,11 @@ public class InventoryService : IInventoryService
                  (p.Barcode != null && p.Barcode.ToLower() == term)));
     }
 
-    public async Task<Product> CreateOrUpdateProductAsync(Product product)
+    public async Task<Product> CreateOrUpdateProductAsync(Product product, int? userId = null)
     {
         ArgumentNullException.ThrowIfNull(product);
+        NormalizeAndValidateProduct(product);
+        await EnsureIdentifiersUniqueAsync(product);
 
         if (product.Id == 0)
         {
@@ -82,7 +85,8 @@ public class InventoryService : IInventoryService
                     Quantity = created.StockQuantity.Value,
                     BalanceAfter = created.StockQuantity.Value,
                     UnitCost = created.CostPrice,
-                    Note = "Initial stock on product create"
+                    Note = "Initial stock on product create",
+                    UserId = userId
                 });
             }
 
@@ -104,8 +108,27 @@ public class InventoryService : IInventoryService
         if (tracked.Category?.Id != product.CategoryId)
             tracked.Category = null;
 
+        var previousStock = tracked.StockQuantity;
         CopyEditableProductValues(product, tracked);
         tracked.UpdatedAt = DateTime.UtcNow;
+
+        if (previousStock != tracked.StockQuantity)
+        {
+            var previousBalance = previousStock ?? 0m;
+            var newBalance = tracked.StockQuantity ?? 0m;
+            _db.StockTransactions.Add(new StockTransaction
+            {
+                ProductId = tracked.Id,
+                Type = StockTransactionType.Adjustment,
+                Quantity = newBalance - previousBalance,
+                BalanceAfter = newBalance,
+                UnitCost = tracked.CostPrice,
+                UserId = userId,
+                Note = tracked.StockQuantity.HasValue
+                    ? "Stock changed in product editor"
+                    : "Stock tracking disabled in product editor"
+            });
+        }
 
         await _db.SaveChangesAsync();
         product.UpdatedAt = tracked.UpdatedAt;
@@ -141,6 +164,35 @@ public class InventoryService : IInventoryService
         target.IsWeighted = source.IsWeighted;
         target.IsActive = source.IsActive;
         target.AllowDiscount = source.AllowDiscount;
+    }
+
+    private async Task EnsureIdentifiersUniqueAsync(Product product)
+    {
+        if (!string.IsNullOrWhiteSpace(product.Sku) && await _db.Products.AnyAsync(p =>
+                p.Id != product.Id && p.Sku != null && p.Sku.ToLower() == product.Sku.ToLower()))
+            throw new InvalidOperationException("SKU is already used by another product.");
+        if (!string.IsNullOrWhiteSpace(product.Barcode) && await _db.Products.AnyAsync(p =>
+                p.Id != product.Id && p.Barcode != null && p.Barcode.ToLower() == product.Barcode.ToLower()))
+            throw new InvalidOperationException("Barcode is already used by another product.");
+    }
+
+    private static void NormalizeAndValidateProduct(Product product)
+    {
+        product.Name = product.Name?.Trim() ?? string.Empty;
+        product.Sku = string.IsNullOrWhiteSpace(product.Sku) ? null : product.Sku.Trim();
+        product.Barcode = string.IsNullOrWhiteSpace(product.Barcode) ? null : product.Barcode.Trim();
+        product.Description = string.IsNullOrWhiteSpace(product.Description) ? null : product.Description.Trim();
+        if (product.Name.Length is < 1 or > 100)
+            throw new InvalidOperationException("Product name is required and cannot exceed 100 characters.");
+        if (product.CategoryId <= 0) throw new InvalidOperationException("Select a category.");
+        if (product.Price < 0m || product.CostPrice < 0m)
+            throw new InvalidOperationException("Price and cost cannot be negative.");
+        if (product.TaxRate is < 0m or > 100m)
+            throw new InvalidOperationException("Tax must be between 0 and 100.");
+        if (product.StockQuantity < 0m || product.LowStockThreshold < 0m)
+            throw new InvalidOperationException("Stock and low-stock threshold cannot be negative.");
+        if (product.Sku?.Length > 64 || product.Barcode?.Length > 64)
+            throw new InvalidOperationException("SKU and barcode cannot exceed 64 characters.");
     }
 
     public async Task AdjustStockAsync(int productId, decimal delta, StockTransactionType type,
@@ -205,17 +257,53 @@ public class InventoryService : IInventoryService
 
     public async Task<Category> CreateOrUpdateCategoryAsync(Category category)
     {
+        ArgumentNullException.ThrowIfNull(category);
+        var name = category.Name?.Trim() ?? string.Empty;
+        if (name.Length is < 1 or > 100)
+            throw new InvalidOperationException("Category name is required and cannot exceed 100 characters.");
+        if (await _db.Categories.AsNoTracking().AnyAsync(c =>
+                c.Id != category.Id && c.Name.ToLower() == name.ToLower()))
+            throw new InvalidOperationException("Another category already uses this name.");
+
+        var description = string.IsNullOrWhiteSpace(category.Description) ? null : category.Description.Trim();
+        var color = string.IsNullOrWhiteSpace(category.Color) ? "#64748B" : category.Color.Trim();
+        if (color.Length != 7 || color[0] != '#' || !color[1..].All(Uri.IsHexDigit))
+            throw new InvalidOperationException("Category color must use #RRGGBB format.");
+
         if (category.Id == 0)
         {
-            category.CreatedAt = DateTime.UtcNow;
-            _db.Categories.Add(category);
+            var created = new Category
+            {
+                Name = name,
+                Description = description,
+                Color = color.ToUpperInvariant(),
+                SortOrder = category.SortOrder,
+                IsActive = category.IsActive,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.Categories.Add(created);
+            await _db.SaveChangesAsync();
+            category.Id = created.Id;
+            category.Name = created.Name;
+            category.Description = created.Description;
+            category.Color = created.Color;
+            category.CreatedAt = created.CreatedAt;
+            return category;
         }
-        else
-        {
-            category.UpdatedAt = DateTime.UtcNow;
-            _db.Categories.Update(category);
-        }
+
+        var tracked = await _db.Categories.FindAsync(category.Id)
+            ?? throw new InvalidOperationException("Category not found");
+        tracked.Name = name;
+        tracked.Description = description;
+        tracked.Color = color.ToUpperInvariant();
+        tracked.SortOrder = category.SortOrder;
+        tracked.IsActive = category.IsActive;
+        tracked.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        category.Name = tracked.Name;
+        category.Description = tracked.Description;
+        category.Color = tracked.Color;
+        category.UpdatedAt = tracked.UpdatedAt;
         return category;
     }
 

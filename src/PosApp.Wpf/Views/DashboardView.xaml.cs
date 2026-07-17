@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using PosApp.Core.Interfaces;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -15,7 +16,7 @@ public partial class DashboardView : UserControl, IRefreshable
         _reports = reports;
     }
 
-    public async void Refresh() => await LoadAsync();
+    public async Task RefreshAsync() => await LoadAsync();
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadAsync();
 
@@ -37,10 +38,10 @@ public partial class DashboardView : UserControl, IRefreshable
             var hourly = await _reports.GetSalesByHourAsync(now.Date);
             var payments = await _reports.GetPaymentBreakdownAsync(from, to);
             PeriodText.Text = $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
-            SalesText.Text = $"{App.StoreSettings.CurrencySymbol} {range.NetSales:0.00}";
+            SalesText.Text = FormattingUtilities.Money(range.NetSales, App.StoreSettings);
             TransactionsText.Text = range.TransactionCount.ToString();
-            ProfitText.Text = $"{App.StoreSettings.CurrencySymbol} {range.GrossProfit:0.00}";
-            TodayText.Text = $"{App.StoreSettings.CurrencySymbol} {today.NetSales:0.00}";
+            ProfitText.Text = FormattingUtilities.Money(range.GrossProfit, App.StoreSettings);
+            TodayText.Text = FormattingUtilities.Money(today.NetSales, App.StoreSettings);
             DailyGrid.ItemsSource = range.Daily.OrderByDescending(row => row.Date).ToList();
             TopProductsGrid.ItemsSource = top;
             PaymentGrid.ItemsSource = payments;

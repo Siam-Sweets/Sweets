@@ -23,7 +23,14 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
     public static User? CurrentUser { get; set; }
-    public static StoreSettings StoreSettings { get; set; } = new();
+    public static StoreSettings StoreSettings { get; private set; } = new();
+    public static event EventHandler? SettingsChanged;
+
+    public static void PublishSettings(StoreSettings settings)
+    {
+        StoreSettings = settings;
+        SettingsChanged?.Invoke(null, EventArgs.Empty);
+    }
     public static string? StartupError { get; private set; }
     private bool _startupCompleted;
 
@@ -153,7 +160,7 @@ public partial class App : Application
             // Load settings
             Log("Loading store settings...");
             var settingsService = Services.GetRequiredService<ISettingsService>();
-            StoreSettings = await settingsService.GetStoreSettingsAsync();
+            PublishSettings(await settingsService.GetStoreSettingsAsync());
             Log($"Settings loaded. Store: {StoreSettings.StoreName}");
             ApplyTheme(StoreSettings.Theme);
 
@@ -177,7 +184,7 @@ public partial class App : Application
                     return;
                 }
 
-                StoreSettings = await settingsService.GetStoreSettingsAsync();
+                PublishSettings(await settingsService.GetStoreSettingsAsync());
                 ApplyTheme(StoreSettings.Theme);
                 ApplyLanguage(StoreSettings.Language);
                 Log($"First-run setup completed. Store: {StoreSettings.StoreName}");
@@ -287,11 +294,7 @@ public partial class App : Application
             var settings = sp.GetRequiredService<ISettingsService>();
             return new WindowsPrinter(settings);
         });
-        services.AddSingleton<ICashDrawer, SerialCashDrawer>();
         services.AddSingleton<IBarcodeScanner, NullBarcodeScanner>();
-        services.AddSingleton<IWeighingScale>(_ =>
-            new ConfigurableWeighingScale(() =>
-                Task.FromResult<string?>(StoreSettings.ScalePort)));
         services.AddSingleton<IHardwareService, HardwareService>();
 
         // Views

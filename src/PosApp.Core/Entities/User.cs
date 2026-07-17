@@ -15,7 +15,7 @@ public class User
     [MaxLength(100)]
     public string FullName { get; set; } = string.Empty;
 
-    /// <summary>SHA256 hash + salt. PIN or password.</summary>
+    /// <summary>PBKDF2 hash and per-user salt. Legacy SHA-256 hashes are upgraded at login.</summary>
     [MaxLength(128)]
     public string PasswordHash { get; set; } = string.Empty;
 

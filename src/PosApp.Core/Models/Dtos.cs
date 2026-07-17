@@ -13,18 +13,14 @@ public class SaleDraft
     public int? CustomerId { get; set; }
     public int UserId { get; set; }
     public List<SaleDraftLine> Lines { get; set; } = new();
-    public List<Discount> CartDiscounts { get; set; } = new();
     public List<SalePayment> Payments { get; set; } = new();
     public decimal AmountTendered { get; set; }
     public string? Note { get; set; }
+    public string ServiceType { get; set; } = "Retail";
     public int? SuspendedSaleId { get; set; }
 
     public decimal Subtotal => Lines.Sum(l => l.UnitPrice * l.Quantity);
-    public decimal DiscountTotal =>
-        Lines.Sum(l => l.DiscountAmount) +
-        CartDiscounts.Sum(d => d.Type == DiscountType.Percentage
-            ? (Subtotal - Lines.Sum(l => l.DiscountAmount)) * d.Value / 100m
-            : d.Value);
+    public decimal DiscountTotal => Lines.Sum(l => l.DiscountAmount);
     public decimal TaxTotal => Lines.Sum(l =>
         ((l.UnitPrice * l.Quantity) - l.DiscountAmount) * l.TaxRate / 100m);
     public decimal Total => Subtotal - DiscountTotal + TaxTotal;
@@ -63,6 +59,9 @@ public class SaleDraftLine : INotifyPropertyChanged
         }
     }
     public string? DiscountReason { get; set; }
+    public int? PromotionId { get; set; }
+    public decimal CostPrice { get; set; }
+    public bool AllowDiscount { get; set; } = true;
     public bool IsWeighted { get; set; }
     public decimal LineTotal => (UnitPrice * Quantity) - DiscountAmount;
 
@@ -85,10 +84,7 @@ public class StoreSettings
     public int CurrencyDecimals { get; set; } = 2;
     public string FooterNote { get; set; } = "Thank you for your business!";
     public bool PrintReceiptAutomatically { get; set; } = true;
-    public bool OpenDrawerOnCashSale { get; set; } = true;
     public string ReceiptPrinterName { get; set; } = "";
-    public string CashDrawerPort { get; set; } = "COM1";
-    public string ScalePort { get; set; } = "COM3";
     // Retained for backward-compatible settings deserialization. Loyalty is
     // intentionally disabled until the feature is reintroduced end-to-end.
     public bool EnableLoyalty { get; set; } = false;
@@ -231,7 +227,7 @@ public class DailySalesReport
 {
     public DateTime Date { get; set; }
     public int TransactionCount { get; set; }
-    public int ItemCount { get; set; }
+    public decimal ItemCount { get; set; }
     public decimal GrossSales { get; set; }
     public decimal DiscountTotal { get; set; }
     public decimal TaxTotal { get; set; }
@@ -248,7 +244,7 @@ public class DateRangeReport
     public DateTime From { get; set; }
     public DateTime To { get; set; }
     public int TransactionCount { get; set; }
-    public int ItemCount { get; set; }
+    public decimal ItemCount { get; set; }
     public decimal GrossSales { get; set; }
     public decimal DiscountTotal { get; set; }
     public decimal TaxTotal { get; set; }
@@ -263,7 +259,7 @@ public class TopProductRow
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string? Sku { get; set; }
-    public int QuantitySold { get; set; }
+    public decimal QuantitySold { get; set; }
     public decimal Revenue { get; set; }
     public decimal Profit { get; set; }
 }
@@ -278,7 +274,7 @@ public class SalesByHourRow
 public class SalesByCategoryRow
 {
     public string CategoryName { get; set; } = string.Empty;
-    public int QuantitySold { get; set; }
+    public decimal QuantitySold { get; set; }
     public decimal Revenue { get; set; }
 }
 

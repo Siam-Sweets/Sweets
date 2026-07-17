@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.4.0 — Comprehensive reliability, accounting, and data-integrity repair
+
+- Removed the remaining build-breaking weighted-product recall reference and completed the suspended-sale hydration path.
+- Reworked refunds into a single signed reversal transaction with reverse payments, stock audit links, promotion-use rollback, and consistent cash-register/report treatment.
+- Corrected local-date boundaries, inclusive end dates, local hourly grouping, decimal weighted quantities, historical cost snapshots, and distinct payment transaction counts across reports.
+- Added collision-resistant sale and purchase document numbering plus database protections for duplicate refunds, case-insensitive identifiers, and multiple open register sessions.
+- Hardened users and authentication with PBKDF2-SHA256, legacy-hash upgrades, consistent PIN rules, case-insensitive login, last-admin/self-protection, safer deletion, and route authorization.
+- Fixed detached EF Core tracking conflicts in users, promotions, products, categories, customers, and suppliers.
+- Added strict product, category, supplier, customer, purchase, tax, promotion, and CSV-import validation; stock changes now create auditable ledger entries.
+- Preserved SKU and barcode separately, enforced case-insensitive uniqueness, added inactive product/customer/supplier recovery, and made promotion limits and product discount permissions effective.
+- Corrected zero-total checkout, payment references, Enter-key payment behavior, receipt print failure reporting, local timestamps, currency precision, and RFC-compatible CSV escaping.
+- Made Settings updates transactional and thread-safe, removed fake startup actions, eliminated receipt-printer sync-over-async behavior, and converted refresh workflows to awaitable tasks.
+- Expanded English/Bengali localization across management views and standardized status/action labels.
+- Added schema-upgrade repair logic for legacy duplicate identifiers, refund links, open sessions, and missing historical sale-item cost data.
+
+## 1.3.29 — Simplified hardware controls and reliable checkboxes
+
+- Removed the **Cash drawer** command tile, COM-port settings, automatic drawer opening, test controls, hardware drivers, service interfaces, and dependency registration.
+- Removed the placeholder **Customer display** section from Settings.
+- Removed the **Weigh** command from the register and the entire weighing-scale settings/hardware path. Weighted products remain available and accept decimal quantities through the normal Quantity workflow.
+- Made every grid checkbox a true single-click control: user Active, product Weighted, and promotion Active states now persist immediately and restore their previous state when saving fails.
+- Standardized every application checkbox as a two-state control with a consistent clickable area and visible theme-aware mark.
+- Simplified Print settings to receipt-printer selection and test printing only.
+- Removed obsolete English and Bengali localization resources and updated documentation.
+
 ## 1.3.28 — Customer and supplier contact type selection
 
 - Added a **Customer / Supplier** selector when creating a new contact.

@@ -128,9 +128,187 @@ public static class DbSchemaUpgrader
             "\"DiscountReason\" TEXT NULL");
         await EnsureColumnAsync(db, "StockTransactions", "SaleItemId",
             "\"SaleItemId\" INTEGER NULL");
+        var costPriceColumnAdded = await EnsureColumnAsync(db, "SaleItems", "CostPrice",
+            "\"CostPrice\" decimal(18,4) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "SaleItems", "PromotionId",
+            "\"PromotionId\" INTEGER NULL");
+        await EnsureColumnAsync(db, "Sales", "ServiceType",
+            "\"ServiceType\" TEXT NOT NULL DEFAULT 'Retail'");
+        await EnsureColumnAsync(db, "Customers", "IsActive",
+            "\"IsActive\" INTEGER NOT NULL DEFAULT 1");
+
+        // Existing sale rows predate cost snapshots. Backfill once from the current
+        // catalog so later product-cost edits no longer change those reports.
+        if (costPriceColumnAdded)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE SaleItems SET CostPrice = COALESCE((SELECT CostPrice FROM Products WHERE Products.Id = SaleItems.ProductId), 0);");
+        }
+
+        // Older databases could contain identifiers that differ only by letter case.
+        // Keep the oldest record authoritative and make later duplicates unambiguous
+        // before publishing case-insensitive unique indexes.
+        await ResolveLegacyDuplicatesAsync(db);
+
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Users_Username_NOCASE", "Users", "Username");
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Sku_NOCASE", "Products", "Sku");
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Barcode_NOCASE", "Products", "Barcode");
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Discounts_Code_NOCASE", "Discounts", "Code");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_Sales_RefundedSaleId\" ON \"Sales\" (\"RefundedSaleId\") WHERE \"RefundedSaleId\" IS NOT NULL;");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_CashSessions_OneOpen\" ON \"CashSessions\" ((1)) WHERE \"ClosedAt\" IS NULL;");
     }
 
-    private static async Task EnsureColumnAsync(
+
+    private static async Task ResolveLegacyDuplicatesAsync(AppDbContext db)
+    {
+        var commands = new[]
+        {
+            // Usernames cannot be empty; retain the original text and append a stable suffix.
+            """
+            WITH ranked AS (
+                SELECT "Id", ROW_NUMBER() OVER (
+                    PARTITION BY LOWER(TRIM("Username")) ORDER BY "Id") AS rn
+                FROM "Users" WHERE TRIM("Username") <> ''
+            )
+            UPDATE "Users"
+            SET "Username" = "Username" || '-dup-' || "Id"
+            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
+            """,
+            // Duplicate catalog identifiers were already ambiguous. Preserve the first
+            // product and clear later copies so they can be assigned deliberately.
+            """
+            WITH ranked AS (
+                SELECT "Id", ROW_NUMBER() OVER (
+                    PARTITION BY LOWER(TRIM("Sku")) ORDER BY "Id") AS rn
+                FROM "Products" WHERE "Sku" IS NOT NULL AND TRIM("Sku") <> ''
+            )
+            UPDATE "Products" SET "Sku" = NULL
+            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
+            """,
+            """
+            WITH ranked AS (
+                SELECT "Id", ROW_NUMBER() OVER (
+                    PARTITION BY LOWER(TRIM("Barcode")) ORDER BY "Id") AS rn
+                FROM "Products" WHERE "Barcode" IS NOT NULL AND TRIM("Barcode") <> ''
+            )
+            UPDATE "Products" SET "Barcode" = NULL
+            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
+            """,
+            """
+            WITH ranked AS (
+                SELECT "Id", ROW_NUMBER() OVER (
+                    PARTITION BY LOWER(TRIM("Code")) ORDER BY "Id") AS rn
+                FROM "Discounts" WHERE "Code" IS NOT NULL AND TRIM("Code") <> ''
+            )
+            UPDATE "Discounts" SET "Code" = NULL
+            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
+            """,
+            // If an older race created multiple open sessions, retain the newest one
+            // and close the rest before adding the one-open-session constraint.
+            """
+            UPDATE "CashSessions"
+            SET "ClosedAt" = COALESCE("ClosedAt", CURRENT_TIMESTAMP),
+                "ExpectedCash" = COALESCE("ExpectedCash", "OpeningFloat"),
+                "CountedCash" = COALESCE("CountedCash", "OpeningFloat"),
+                "Variance" = COALESCE("Variance", 0),
+                "Note" = CASE WHEN "Note" IS NULL OR TRIM("Note") = ''
+                    THEN 'Automatically closed during database upgrade'
+                    ELSE "Note" || CHAR(10) || 'Automatically closed during database upgrade' END
+            WHERE "ClosedAt" IS NULL
+              AND "Id" <> (SELECT "Id" FROM "CashSessions" WHERE "ClosedAt" IS NULL ORDER BY "OpenedAt" DESC, "Id" DESC LIMIT 1);
+            """,
+            // Preserve extra legacy refund rows but detach duplicate links so the
+            // authoritative first refund can be protected by a unique index.
+            """
+            WITH ranked AS (
+                SELECT "Id", ROW_NUMBER() OVER (
+                    PARTITION BY "RefundedSaleId" ORDER BY "Id") AS rn
+                FROM "Sales" WHERE "RefundedSaleId" IS NOT NULL
+            )
+            UPDATE "Sales" SET "RefundedSaleId" = NULL
+            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
+            """,
+            // Older versions marked both the original sale and its signed reversal
+            // as Refunded. Restore the original to Completed so financial reports
+            // include one positive sale and one negative refund transaction.
+            """
+            UPDATE "Sales"
+            SET "Status" = 0,
+                "UpdatedAt" = COALESCE("UpdatedAt", CURRENT_TIMESTAMP)
+            WHERE "Status" = 3
+              AND "Id" IN (
+                  SELECT "RefundedSaleId" FROM "Sales"
+                  WHERE "RefundedSaleId" IS NOT NULL AND "Subtotal" < 0
+              );
+            """,
+            // Normalize signed legacy reversal amounts to the current refund model.
+            """
+            UPDATE "Sales"
+            SET "Subtotal" = -ABS("Subtotal"),
+                "DiscountTotal" = -ABS("DiscountTotal"),
+                "TaxTotal" = -ABS("TaxTotal"),
+                "Rounding" = -ABS("Rounding"),
+                "AmountPaid" = -ABS(
+                    (SELECT original."Subtotal" - original."DiscountTotal" + original."TaxTotal" + original."Rounding"
+                     FROM "Sales" AS original WHERE original."Id" = "Sales"."RefundedSaleId")
+                ),
+                "Change" = 0
+            WHERE "Status" = 3 AND "RefundedSaleId" IS NOT NULL;
+            """,
+            // Legacy refunds did not create reverse tender rows, leaving register
+            // cash and payment reports overstated. Add them only when the reversal
+            // currently has no payment rows.
+            """
+            INSERT INTO "SalePayments" ("SaleId", "Method", "Amount", "Reference", "CreatedAt")
+            SELECT refund."Id", originalPayment."Method", -ABS(originalPayment."Amount"),
+                   'Legacy refund ' || original."ReceiptNumber",
+                   COALESCE(refund."SaleDate", CURRENT_TIMESTAMP)
+            FROM "Sales" AS refund
+            JOIN "Sales" AS original ON original."Id" = refund."RefundedSaleId"
+            JOIN "SalePayments" AS originalPayment ON originalPayment."SaleId" = original."Id"
+            WHERE refund."Status" = 3
+              AND refund."RefundedSaleId" IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM "SalePayments" AS existing WHERE existing."SaleId" = refund."Id"
+              );
+            """
+        };
+
+        foreach (var command in commands)
+            await db.Database.ExecuteSqlRawAsync(command);
+    }
+
+    private static async Task CreateNoCaseUniqueIndexIfSafeAsync(
+        AppDbContext db, string indexName, string tableName, string columnName)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync();
+        try
+        {
+            await using var duplicate = connection.CreateCommand();
+            duplicate.CommandText =
+                $"SELECT COUNT(*) FROM (SELECT \"{columnName}\" COLLATE NOCASE FROM \"{tableName}\" " +
+                $"WHERE \"{columnName}\" IS NOT NULL AND TRIM(\"{columnName}\") <> '' " +
+                $"GROUP BY \"{columnName}\" COLLATE NOCASE HAVING COUNT(*) > 1);";
+            var duplicateGroups = Convert.ToInt32(await duplicate.ExecuteScalarAsync());
+            if (duplicateGroups > 0) return;
+
+            await using var create = connection.CreateCommand();
+            create.CommandText =
+                $"CREATE UNIQUE INDEX IF NOT EXISTS \"{indexName}\" ON \"{tableName}\" (\"{columnName}\" COLLATE NOCASE) " +
+                $"WHERE \"{columnName}\" IS NOT NULL AND TRIM(\"{columnName}\") <> '';";
+            await create.ExecuteNonQueryAsync();
+        }
+        finally
+        {
+            if (shouldClose) await connection.CloseAsync();
+        }
+    }
+
+    private static async Task<bool> EnsureColumnAsync(
         AppDbContext db,
         string tableName,
         string columnName,
@@ -159,11 +337,12 @@ public static class DbSchemaUpgrader
                 }
             }
 
-            if (exists) return;
+            if (exists) return false;
 
             await using var alter = connection.CreateCommand();
             alter.CommandText = $"ALTER TABLE \"{quotedTable}\" ADD COLUMN {columnDeclaration};";
             await alter.ExecuteNonQueryAsync();
+            return true;
         }
         finally
         {

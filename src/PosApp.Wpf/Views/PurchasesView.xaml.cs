@@ -5,6 +5,7 @@ using System.Windows.Input;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Views;
 
@@ -22,7 +23,7 @@ public partial class PurchasesView : UserControl, IRefreshable
         _inventory = inventory;
     }
 
-    public async void Refresh()
+    public async Task RefreshAsync()
     {
         IsEnabled = false;
         try
@@ -49,21 +50,19 @@ public partial class PurchasesView : UserControl, IRefreshable
     {
         var fromLocal = (FromPicker.SelectedDate ?? DateTime.Today).Date;
         var toLocal = (ToPicker.SelectedDate ?? DateTime.Today).Date;
-        var from = fromLocal.ToUniversalTime();
-        var to = toLocal.AddDays(1).ToUniversalTime().AddTicks(-1);
-        if (to < from) throw new InvalidOperationException("The To date cannot be before the From date.");
+        if (toLocal < fromLocal) throw new InvalidOperationException("The To date cannot be before the From date.");
 
-        var documents = await _purchases.GetPurchasesAsync(from, to);
+        var documents = await _purchases.GetPurchasesAsync(fromLocal, toLocal);
         _suppliers = await _purchases.SearchSuppliersAsync();
         PurchasesGrid.ItemsSource = documents;
         SuppliersGrid.ItemsSource = _suppliers;
         DocumentCountText.Text = documents.Count.ToString();
-        PurchaseTotalText.Text = $"{App.StoreSettings.CurrencySymbol} {documents.Sum(item => item.Total):0.00}";
+        PurchaseTotalText.Text = FormattingUtilities.Money(documents.Sum(item => item.Total), App.StoreSettings);
         SupplierCountText.Text = _suppliers.Count.ToString();
         ApplySupplierFilter();
     }
 
-    private void Refresh_Click(object sender, RoutedEventArgs e) => Refresh();
+    private void Refresh_Click(object sender, RoutedEventArgs e) => _ = RefreshAsync();
 
     private async void NewPurchase_Click(object sender, RoutedEventArgs e)
     {
@@ -77,7 +76,7 @@ public partial class PurchasesView : UserControl, IRefreshable
             {
                 Owner = Window.GetWindow(this)
             };
-            if (dialog.ShowDialog() == true) Refresh();
+            if (dialog.ShowDialog() == true) _ = RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -88,14 +87,14 @@ public partial class PurchasesView : UserControl, IRefreshable
     private void AddSupplier_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SupplierEditDialog(_purchases) { Owner = Window.GetWindow(this) };
-        if (dialog.ShowDialog() == true) Refresh();
+        if (dialog.ShowDialog() == true) _ = RefreshAsync();
     }
 
     private void EditSupplier_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: Supplier supplier }) return;
         var dialog = new SupplierEditDialog(_purchases, supplier) { Owner = Window.GetWindow(this) };
-        if (dialog.ShowDialog() == true) Refresh();
+        if (dialog.ShowDialog() == true) _ = RefreshAsync();
     }
 
     private void SupplierSearch_TextChanged(object sender, TextChangedEventArgs e) => ApplySupplierFilter();
@@ -321,9 +320,9 @@ public sealed class PurchaseEditDialog : Window
             MessageBox.Show("Select a product.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (!decimal.TryParse(_quantityBox.Text, out var quantity) || quantity <= 0m ||
-            !decimal.TryParse(_costBox.Text, out var cost) || cost < 0m ||
-            !decimal.TryParse(_taxBox.Text, out var tax) || tax < 0m)
+        if (!FormattingUtilities.TryParseDecimal(_quantityBox.Text, out var quantity) || quantity <= 0m ||
+            !FormattingUtilities.TryParseDecimal(_costBox.Text, out var cost) || cost < 0m ||
+            !FormattingUtilities.TryParseDecimal(_taxBox.Text, out var tax) || tax is < 0m or > 100m)
         {
             MessageBox.Show("Enter a positive quantity and valid cost/tax values.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -364,7 +363,9 @@ public sealed class PurchaseEditDialog : Window
     {
         var subtotal = _lines.Sum(line => line.LineSubtotal);
         var tax = _lines.Sum(line => line.LineTax);
-        _totalsText.Text = $"Subtotal {App.StoreSettings.CurrencySymbol} {subtotal:0.00}   ·   Tax {tax:0.00}   ·   Total {subtotal + tax:0.00}";
+        _totalsText.Text = $"Subtotal {FormattingUtilities.Money(subtotal, App.StoreSettings)}   ·   " +
+                           $"Tax {FormattingUtilities.Money(tax, App.StoreSettings)}   ·   " +
+                           $"Total {FormattingUtilities.Money(subtotal + tax, App.StoreSettings)}";
     }
 
     private async void Post_Click(object sender, RoutedEventArgs e)
@@ -516,7 +517,7 @@ public sealed class SupplierEditDialog : Window
                 "Supplier", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         try
         {
-            await _service.DeactivateSupplierAsync(_supplier.Id);
+            await _service.SetSupplierActiveAsync(_supplier.Id, false);
             DialogResult = true;
             Close();
         }
@@ -544,9 +545,11 @@ public sealed class PurchaseDetailsDialog : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var summary = new TextBlock
         {
-            Text = $"{purchase.DocumentNumber}   ·   {purchase.DocumentDate.ToLocalTime():dd MMM yyyy HH:mm}\n" +
+            Text = $"{purchase.DocumentNumber}   ·   {DateTimeUtilities.ToLocal(purchase.DocumentDate):dd MMM yyyy HH:mm}\n" +
                    $"Supplier: {purchase.Supplier?.Name ?? "(none)"}   ·   Reference: {purchase.ExternalReference ?? "—"}\n" +
-                   $"Subtotal: {App.StoreSettings.CurrencySymbol} {purchase.Subtotal:0.00}   ·   Tax: {purchase.TaxTotal:0.00}   ·   Total: {purchase.Total:0.00}",
+                   $"Subtotal: {FormattingUtilities.Money(purchase.Subtotal, App.StoreSettings)}   ·   " +
+                   $"Tax: {FormattingUtilities.Money(purchase.TaxTotal, App.StoreSettings)}   ·   " +
+                   $"Total: {FormattingUtilities.Money(purchase.Total, App.StoreSettings)}",
             Margin = new Thickness(0, 0, 0, 14),
             FontSize = 14
         };

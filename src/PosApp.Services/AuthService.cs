@@ -12,10 +12,19 @@ public class AuthService : IAuthService
 
     public async Task<User?> LoginAsync(string username, string password)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == username && u.IsActive);
-        if (user == null) return null;
-        if (!DbSeeder.VerifyPin(password, user.PasswordHash, user.PasswordSalt))
+        var normalized = username.Trim();
+        var user = await _db.Users.FirstOrDefaultAsync(u =>
+            u.Username.ToLower() == normalized.ToLower() && u.IsActive);
+        if (user == null || !DbSeeder.VerifyPin(password, user.PasswordHash, user.PasswordSalt))
             return null;
+
+        if (DbSeeder.IsLegacyHash(user.PasswordHash))
+        {
+            var (newHash, newSalt) = DbSeeder.HashPin(password);
+            user.PasswordHash = newHash;
+            user.PasswordSalt = newSalt;
+            user.UpdatedAt = DateTime.UtcNow;
+        }
         user.LastLoginAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
         return user;
@@ -23,9 +32,10 @@ public class AuthService : IAuthService
 
     public async Task<bool> ChangePasswordAsync(int userId, string newPassword)
     {
-        var (hash, salt) = DbSeeder.HashPin(newPassword);
+        DbSeeder.ValidatePin(newPassword);
         var user = await _db.Users.FindAsync(userId);
         if (user == null) return false;
+        var (hash, salt) = DbSeeder.HashPin(newPassword);
         user.PasswordHash = hash;
         user.PasswordSalt = salt;
         user.UpdatedAt = DateTime.UtcNow;
@@ -34,8 +44,8 @@ public class AuthService : IAuthService
 
     public string HashPassword(string password, out string salt)
     {
-        var (hash, s) = DbSeeder.HashPin(password);
-        salt = s;
+        var (hash, generatedSalt) = DbSeeder.HashPin(password);
+        salt = generatedSalt;
         return hash;
     }
 
