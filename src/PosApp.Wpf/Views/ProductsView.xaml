@@ -54,7 +54,16 @@
                     <DataGridTextColumn Header="Price" Binding="{Binding Price, StringFormat='৳ {0:0.00}'}" Width="100"/>
                     <DataGridTextColumn Header="Cost" Binding="{Binding CostPrice, StringFormat='৳ {0:0.00}'}" Width="100"/>
                     <DataGridTextColumn Header="Stock" Binding="{Binding StockQuantity, StringFormat=' {0:0.###}'}" Width="80"/>
-                    <DataGridCheckBoxColumn Header="Weighted" Binding="{Binding IsWeighted}" Width="80"/>
+                    <DataGridTemplateColumn Header="Weighted" Width="80">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsWeighted, Mode=OneWay}"
+                                          Tag="{Binding}" Click="Weighted_Click"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          ToolTip="Click to change whether this product is sold by weight"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="Actions" Width="160">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>

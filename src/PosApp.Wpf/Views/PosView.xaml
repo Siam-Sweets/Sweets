@@ -5,9 +5,9 @@
              PreviewKeyDown="PosView_PreviewKeyDown">
     <UserControl.Resources>
         <Style x:Key="CommandTile" TargetType="Button">
-            <Setter Property="Background" Value="#243247"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="#475569"/>
+            <Setter Property="Background" Value="{DynamicResource CommandTileBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource CommandTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource CommandBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8"/>
             <Setter Property="Margin" Value="3"/>
@@ -27,11 +27,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TileBorder" Property="Background" Value="#334155"/>
-                                <Setter TargetName="TileBorder" Property="BorderBrush" Value="#60A5FA"/>
+                                <Setter TargetName="TileBorder" Property="Background" Value="{DynamicResource CommandTileHoverBrush}"/>
+                                <Setter TargetName="TileBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="TileBorder" Property="Background" Value="#1E40AF"/>
+                                <Setter TargetName="TileBorder" Property="Background" Value="{DynamicResource SelectionBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="TileBorder" Property="Opacity" Value="0.45"/>
@@ -43,17 +43,19 @@
         </Style>
 
         <Style x:Key="PaymentTile" TargetType="Button" BasedOn="{StaticResource CommandTile}">
-            <Setter Property="Background" Value="#166534"/>
-            <Setter Property="BorderBrush" Value="#22C55E"/>
+            <Setter Property="Background" Value="{DynamicResource SuccessSurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource SuccessTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}"/>
         </Style>
 
         <Style x:Key="DangerTile" TargetType="Button" BasedOn="{StaticResource CommandTile}">
-            <Setter Property="Background" Value="#991B1B"/>
-            <Setter Property="BorderBrush" Value="#F87171"/>
+            <Setter Property="Background" Value="{DynamicResource DangerSurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource DangerTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}"/>
         </Style>
 
         <Style x:Key="CommandCaption" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="TextAlignment" Value="Center"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -62,7 +64,7 @@
         </Style>
 
         <Style x:Key="ShortcutLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#93C5FD"/>
+            <Setter Property="Foreground" Value="{DynamicResource InfoTextBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -93,6 +95,47 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ResultBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
                                 <Setter TargetName="ResultBorder" Property="Background" Value="{DynamicResource SurfaceMutedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SearchFilterChip" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="3,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="FilterBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="FilterBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="FilterBorder" Property="Background" Value="{DynamicResource PrimaryBrush}"/>
+                                <Setter TargetName="FilterBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FilterBorder" Property="BorderThickness" Value="2"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -224,7 +267,8 @@
         </Grid>
 
         <!-- Fast command rail -->
-        <Border Grid.Column="1" Background="#182235" BorderBrush="#334155" BorderThickness="1,0,0,0">
+        <Border Grid.Column="1" Background="{DynamicResource CommandPanelBrush}"
+                BorderBrush="{DynamicResource CommandBorderBrush}" BorderThickness="1,0,0,0">
             <Grid Margin="8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -240,9 +284,9 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel>
-                        <TextBlock Text="{DynamicResource POS_Receipt}" Foreground="White"
+                        <TextBlock Text="{DynamicResource POS_Receipt}" Foreground="{DynamicResource CommandTextBrush}"
                                    FontSize="23" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding CustomerDisplay, Mode=OneWay}" Foreground="#CBD5E1" Margin="0,4,0,0"/>
+                        <TextBlock Text="{Binding CustomerDisplay, Mode=OneWay}" Foreground="{DynamicResource CommandMutedBrush}" Margin="0,4,0,0"/>
                     </StackPanel>
                     <Button Grid.Column="1" Content="{DynamicResource POS_Menu}" Style="{StaticResource CommandTile}"
                             Width="76" Height="48" Click="Management_Click"/>
@@ -295,10 +339,11 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="68"/>
                     </Grid.RowDefinitions>
-                    <Border Grid.Row="0" Margin="3" Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="12">
+                    <Border Grid.Row="0" Margin="3" Background="{DynamicResource CommandStatusBrush}"
+                            BorderBrush="{DynamicResource CommandBorderBrush}" BorderThickness="1" CornerRadius="4" Padding="12">
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="{Binding ServiceTypeDisplay, Mode=OneWay}" Foreground="White" FontWeight="SemiBold" FontSize="15"/>
-                            <TextBlock Text="{Binding ActiveSaleDisplay, Mode=OneWay}" Foreground="#94A3B8" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding ServiceTypeDisplay, Mode=OneWay}" Foreground="{DynamicResource CommandTextBrush}" FontWeight="SemiBold" FontSize="15"/>
+                            <TextBlock Text="{Binding ActiveSaleDisplay, Mode=OneWay}" Foreground="{DynamicResource CommandMutedBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                     <Button Grid.Row="1" Style="{StaticResource DangerTile}" Click="VoidOrder_Click">
@@ -310,12 +355,13 @@
 
         <!-- Product search panel. It is an overlay so result cards keep a stable size. -->
         <Grid x:Name="SearchOverlay" Grid.ColumnSpan="2" Visibility="Collapsed" Panel.ZIndex="20">
-            <Border Background="#B30F172A" MouseLeftButtonDown="SearchScrim_MouseLeftButtonDown"/>
+            <Border Background="{DynamicResource OverlayScrimBrush}" MouseLeftButtonDown="SearchScrim_MouseLeftButtonDown"/>
             <Border Width="940" Height="650" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource PrimaryBrush}"
                     BorderThickness="1" CornerRadius="8" Padding="18">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -334,10 +380,42 @@
                         <Button Grid.Column="1" Content="{DynamicResource Common_Close}" Style="{StaticResource OutlineButton}"
                                 Padding="18,9" Click="CloseSearch_Click"/>
                     </Grid>
-                    <TextBox x:Name="ProductSearchBox" Grid.Row="1" Margin="0,16,0,10" Padding="14,11"
-                             FontSize="17" TextChanged="ProductSearchBox_TextChanged"
-                             KeyDown="ProductSearchBox_KeyDown"/>
-                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+
+                    <Grid Grid.Row="1" Margin="0,14,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{DynamicResource POS_SearchField}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontWeight="SemiBold" Margin="0,0,10,0"/>
+                        <UniformGrid Grid.Column="1" Columns="4">
+                            <RadioButton x:Name="SearchAllFilter" GroupName="ProductSearchField" Tag="All"
+                                         Content="{DynamicResource POS_SearchAllFields}" IsChecked="True"
+                                         Style="{StaticResource SearchFilterChip}" Checked="SearchField_Checked"/>
+                            <RadioButton GroupName="ProductSearchField" Tag="Name"
+                                         Content="{DynamicResource POS_SearchProductName}"
+                                         Style="{StaticResource SearchFilterChip}" Checked="SearchField_Checked"/>
+                            <RadioButton GroupName="ProductSearchField" Tag="Code"
+                                         Content="{DynamicResource POS_SearchProductCode}"
+                                         Style="{StaticResource SearchFilterChip}" Checked="SearchField_Checked"/>
+                            <RadioButton GroupName="ProductSearchField" Tag="Barcode"
+                                         Content="{DynamicResource POS_SearchBarcode}"
+                                         Style="{StaticResource SearchFilterChip}" Checked="SearchField_Checked"/>
+                        </UniformGrid>
+                    </Grid>
+
+                    <Grid Grid.Row="2" Margin="0,0,0,10">
+                        <TextBox x:Name="ProductSearchBox" Padding="14,11"
+                                 FontSize="17" TextChanged="ProductSearchBox_TextChanged"
+                                 KeyDown="ProductSearchBox_KeyDown"/>
+                        <TextBlock Text="{DynamicResource POS_SearchFilterHint}"
+                                   Margin="16,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextMutedBrush}" FontSize="15"
+                                   IsHitTestVisible="False"
+                                   Visibility="{Binding SearchPlaceholderVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <ItemsControl ItemsSource="{Binding Products}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
@@ -354,7 +432,14 @@
                                             </Grid.RowDefinitions>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" MaxHeight="42"/>
-                                                <TextBlock Text="{Binding Sku}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,3,0,0"/>
+                                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,3,0,0"
+                                                           TextTrimming="CharacterEllipsis">
+                                                    <Run Text="{DynamicResource POS_CodeLabel}"/><Run Text=": "/><Run Text="{Binding Sku, Mode=OneWay}"/>
+                                                </TextBlock>
+                                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
+                                                           TextTrimming="CharacterEllipsis">
+                                                    <Run Text="{DynamicResource POS_BarcodeLabel}"/><Run Text=": "/><Run Text="{Binding Barcode, Mode=OneWay}"/>
+                                                </TextBlock>
                                             </StackPanel>
                                             <Grid Grid.Row="1" Margin="0,8,0,0">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -367,7 +452,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
-                    <ItemsControl Grid.Row="3" ItemsSource="{Binding VirtualKeys}" Margin="0,8,0,0">
+                    <ItemsControl Grid.Row="4" ItemsSource="{Binding VirtualKeys}" Margin="0,8,0,0">
                         <ItemsControl.Style>
                             <Style TargetType="ItemsControl">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -379,7 +464,7 @@
                             <DataTemplate><Button Content="{Binding}" Tag="{Binding}" Click="VirtualKey_Click" Style="{StaticResource OutlineButton}" MinWidth="38" Padding="8,5" Margin="2"/></DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <ItemsControl Grid.Row="4" ItemsSource="{Binding Categories}" Margin="0,10,0,0">
+                    <ItemsControl Grid.Row="5" ItemsSource="{Binding Categories}" Margin="0,10,0,0">
                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

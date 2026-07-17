@@ -10,8 +10,26 @@
     <Color x:Key="DangerColor">#EF4444</Color>
     <Color x:Key="WarningColor">#F59E0B</Color>
     <Color x:Key="InfoColor">#3B82F6</Color>
-    <Color x:Key="SidebarColor">#1E293B</Color>
-    <Color x:Key="SidebarActiveColor">#0F172A</Color>
+    <Color x:Key="SidebarColor">#FFFFFF</Color>
+    <Color x:Key="SidebarActiveColor">#DBEAFE</Color>
+    <Color x:Key="SidebarTextColor">#0F172A</Color>
+    <Color x:Key="SidebarMutedColor">#64748B</Color>
+    <Color x:Key="SidebarHoverColor">#F1F5F9</Color>
+    <Color x:Key="SidebarCardColor">#F8FAFC</Color>
+    <Color x:Key="SidebarBorderColor">#E2E8F0</Color>
+    <Color x:Key="CommandPanelColor">#F8FAFC</Color>
+    <Color x:Key="CommandTileColor">#FFFFFF</Color>
+    <Color x:Key="CommandTileHoverColor">#EFF6FF</Color>
+    <Color x:Key="CommandTextColor">#0F172A</Color>
+    <Color x:Key="CommandMutedColor">#64748B</Color>
+    <Color x:Key="CommandBorderColor">#CBD5E1</Color>
+    <Color x:Key="CommandStatusColor">#FFFFFF</Color>
+    <Color x:Key="OverlayScrimColor">#140F172A</Color>
+    <Color x:Key="DrawerPanelColor">#FFFFFF</Color>
+    <Color x:Key="DrawerTextColor">#0F172A</Color>
+    <Color x:Key="DrawerMutedColor">#64748B</Color>
+    <Color x:Key="DrawerBorderColor">#E2E8F0</Color>
+    <Color x:Key="DrawerHoverColor">#F1F5F9</Color>
     <Color x:Key="CardColor">#FFFFFF</Color>
     <Color x:Key="BackgroundLight">#F1F5F9</Color>
     <Color x:Key="TextDark">#0F172A</Color>
@@ -38,6 +56,24 @@
     <SolidColorBrush x:Key="InfoBrush" Color="{StaticResource InfoColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="SidebarActiveBrush" Color="{StaticResource SidebarActiveColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="SidebarTextBrush" Color="{StaticResource SidebarTextColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="SidebarMutedBrush" Color="{StaticResource SidebarMutedColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="SidebarHoverBrush" Color="{StaticResource SidebarHoverColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="SidebarCardBrush" Color="{StaticResource SidebarCardColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="SidebarBorderBrush" Color="{StaticResource SidebarBorderColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="CommandPanelBrush" Color="{StaticResource CommandPanelColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="CommandTileBrush" Color="{StaticResource CommandTileColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="CommandTileHoverBrush" Color="{StaticResource CommandTileHoverColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="CommandTextBrush" Color="{StaticResource CommandTextColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="CommandMutedBrush" Color="{StaticResource CommandMutedColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="CommandBorderBrush" Color="{StaticResource CommandBorderColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="CommandStatusBrush" Color="{StaticResource CommandStatusColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="OverlayScrimBrush" Color="{StaticResource OverlayScrimColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="DrawerPanelBrush" Color="{StaticResource DrawerPanelColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="DrawerTextBrush" Color="{StaticResource DrawerTextColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="DrawerMutedBrush" Color="{StaticResource DrawerMutedColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="DrawerBorderBrush" Color="{StaticResource DrawerBorderColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="DrawerHoverBrush" Color="{StaticResource DrawerHoverColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundLight}" options:Freeze="False"/>
     <SolidColorBrush x:Key="TextDarkBrush" Color="{StaticResource TextDark}" options:Freeze="False"/>

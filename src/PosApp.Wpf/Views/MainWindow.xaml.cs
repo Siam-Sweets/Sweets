@@ -151,6 +151,9 @@ public partial class MainWindow : Window
 
     public void ToggleManagementDrawer()
     {
+        // Re-publish the active palette before revealing the drawer so an
+        // appearance change can never leave a stale dark panel in Light mode.
+        App.ApplyTheme(App.StoreSettings.Theme);
         DrawerDate.Text = DateTime.Now.ToString("D");
         ManagementOverlay.Visibility = ManagementOverlay.Visibility == Visibility.Visible
             ? Visibility.Collapsed : Visibility.Visible;

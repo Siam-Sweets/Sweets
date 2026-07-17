@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace PosApp.Data;
@@ -89,6 +90,17 @@ public static class DbSchemaUpgrader
                 CONSTRAINT "FK_CashMovements_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE RESTRICT
             );
             """,
+            """
+            CREATE TABLE IF NOT EXISTS "SalePayments" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_SalePayments" PRIMARY KEY AUTOINCREMENT,
+                "SaleId" INTEGER NOT NULL,
+                "Method" INTEGER NOT NULL,
+                "Amount" decimal(18,4) NOT NULL,
+                "Reference" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_SalePayments_Sales_SaleId" FOREIGN KEY ("SaleId") REFERENCES "Sales" ("Id") ON DELETE CASCADE
+            );
+            """,
             "CREATE INDEX IF NOT EXISTS \"IX_Suppliers_Name\" ON \"Suppliers\" (\"Name\");",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PurchaseDocuments_DocumentNumber\" ON \"PurchaseDocuments\" (\"DocumentNumber\");",
             "CREATE INDEX IF NOT EXISTS \"IX_PurchaseDocuments_DocumentDate\" ON \"PurchaseDocuments\" (\"DocumentDate\");",
@@ -100,10 +112,62 @@ public static class DbSchemaUpgrader
             "CREATE INDEX IF NOT EXISTS \"IX_CashSessions_ClosedByUserId\" ON \"CashSessions\" (\"ClosedByUserId\");",
             "CREATE INDEX IF NOT EXISTS \"IX_CashMovements_CashSessionId\" ON \"CashMovements\" (\"CashSessionId\");",
             "CREATE INDEX IF NOT EXISTS \"IX_CashMovements_CreatedAt\" ON \"CashMovements\" (\"CreatedAt\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_CashMovements_UserId\" ON \"CashMovements\" (\"UserId\");"
+            "CREATE INDEX IF NOT EXISTS \"IX_CashMovements_UserId\" ON \"CashMovements\" (\"UserId\");",
+            "CREATE INDEX IF NOT EXISTS \"IX_SalePayments_SaleId\" ON \"SalePayments\" (\"SaleId\");"
         };
 
         foreach (var command in commands)
             await db.Database.ExecuteSqlRawAsync(command);
+
+        // EnsureCreated only creates a brand-new database; it does not add later
+        // model columns to an existing store. These upgrades keep installed data
+        // intact while bringing older databases up to the current checkout schema.
+        await EnsureColumnAsync(db, "Sales", "Change",
+            "\"Change\" decimal(18,4) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "SaleItems", "DiscountReason",
+            "\"DiscountReason\" TEXT NULL");
+        await EnsureColumnAsync(db, "StockTransactions", "SaleItemId",
+            "\"SaleItemId\" INTEGER NULL");
+    }
+
+    private static async Task EnsureColumnAsync(
+        AppDbContext db,
+        string tableName,
+        string columnName,
+        string columnDeclaration)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync();
+
+        try
+        {
+            var quotedTable = tableName.Replace("\"", "\"\"");
+            var exists = false;
+
+            await using (var info = connection.CreateCommand())
+            {
+                info.CommandText = $"PRAGMA table_info(\"{quotedTable}\");";
+                await using var reader = await info.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        exists = true;
+                        break;
+                    }
+                }
+            }
+
+            if (exists) return;
+
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE \"{quotedTable}\" ADD COLUMN {columnDeclaration};";
+            await alter.ExecuteNonQueryAsync();
+        }
+        finally
+        {
+            if (shouldClose) await connection.CloseAsync();
+        }
     }
 }

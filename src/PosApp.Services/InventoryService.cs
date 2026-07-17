@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
+using PosApp.Core.Enums;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
 using PosApp.Data;
@@ -11,16 +12,27 @@ public class InventoryService : IInventoryService
     private readonly AppDbContext _db;
     public InventoryService(AppDbContext db) => _db = db;
 
-    public async Task<IReadOnlyList<Product>> SearchProductsAsync(string? query, int? categoryId = null)
+    public async Task<IReadOnlyList<Product>> SearchProductsAsync(
+        string? query,
+        int? categoryId = null,
+        ProductSearchField searchField = ProductSearchField.All)
     {
         var q = _db.Products.AsNoTracking().Include(p => p.Category).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
         {
             var term = query.Trim();
-            q = q.Where(p =>
-                p.Name.Contains(term) ||
-                (p.Sku != null && p.Sku.Contains(term)) ||
-                (p.Barcode != null && p.Barcode.Contains(term)));
+            q = searchField switch
+            {
+                ProductSearchField.Name => q.Where(p => p.Name.Contains(term)),
+                ProductSearchField.Code => q.Where(p =>
+                    p.Sku != null && p.Sku.Contains(term)),
+                ProductSearchField.Barcode => q.Where(p =>
+                    p.Barcode != null && p.Barcode.Contains(term)),
+                _ => q.Where(p =>
+                    p.Name.Contains(term) ||
+                    (p.Sku != null && p.Sku.Contains(term)) ||
+                    (p.Barcode != null && p.Barcode.Contains(term)))
+            };
         }
         if (categoryId.HasValue) q = q.Where(p => p.CategoryId == categoryId.Value);
         q = q.Where(p => p.IsActive);

@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using PosApp.Core.Entities;
+using PosApp.Core.Enums;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
 using PosApp.Wpf.Helpers;
@@ -65,7 +66,7 @@ public partial class PosView : UserControl, IRefreshable
         try
         {
             vm.SearchText = BarcodeBox.Text;
-            await vm.SearchBySkuOrTextAsync();
+            await vm.SearchBySkuOrTextAsync(identifierOnly: true);
             if (string.IsNullOrWhiteSpace(vm.SearchText))
             {
                 BarcodeBox.Clear();
@@ -90,6 +91,11 @@ public partial class PosView : UserControl, IRefreshable
         vm.SearchText = BarcodeBox.Text;
         if (!string.IsNullOrWhiteSpace(BarcodeBox.Text))
         {
+            // The always-visible receipt input doubles as the scanner target.
+            // Scanner/code entry must search every identifier regardless of the
+            // field filter last selected inside the F3 search panel.
+            if (SearchAllFilter.IsChecked != true)
+                SearchAllFilter.IsChecked = true;
             if (!string.Equals(ProductSearchBox.Text, BarcodeBox.Text, StringComparison.Ordinal))
                 ProductSearchBox.Text = BarcodeBox.Text;
             OpenSearch(focusSearchBox: false);
@@ -102,6 +108,21 @@ public partial class PosView : UserControl, IRefreshable
         if (DataContext is not PosViewModel vm || !IsLoaded) return;
         vm.SearchText = ProductSearchBox.Text;
         RestartSearchTimer();
+    }
+
+    private void SearchField_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: string fieldName } ||
+            DataContext is not PosViewModel vm ||
+            !Enum.TryParse<ProductSearchField>(fieldName, out var field)) return;
+
+        vm.SearchField = field;
+        RestartSearchTimer();
+        if (SearchOverlay.Visibility == Visibility.Visible)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Input,
+                new Action(() => ProductSearchBox.Focus()));
+        }
     }
 
     private async void ProductSearchBox_KeyDown(object sender, KeyEventArgs e)
@@ -419,6 +440,17 @@ public class PosViewModel : ViewModelBase
     }
     public bool SearchPlaceholderVisible => string.IsNullOrEmpty(SearchText);
 
+    private ProductSearchField _searchField = ProductSearchField.All;
+    public ProductSearchField SearchField
+    {
+        get => _searchField;
+        set
+        {
+            if (!Set(ref _searchField, value)) return;
+            Interlocked.Increment(ref _productLoadVersion);
+        }
+    }
+
     private int? _selectedCategoryId;
     private Customer? _selectedCustomer;
     public string CustomerDisplay => _selectedCustomer == null
@@ -467,7 +499,7 @@ public class PosViewModel : ViewModelBase
         (900d - Math.Clamp(App.StoreSettings.ProductGridColumns, 2, 10) * 10d) /
         Math.Clamp(App.StoreSettings.ProductGridColumns, 2, 10), 120d, 280d);
     public double ProductCardHeight => Math.Clamp(
-        470d / Math.Clamp(App.StoreSettings.ProductGridRows, 2, 10), 78d, 150d);
+        470d / Math.Clamp(App.StoreSettings.ProductGridRows, 2, 10), 126d, 150d);
 
     public PosViewModel(IInventoryService inventory, ISaleService sales,
         ICustomerService customers, IHardwareService hardware, IRegisterService register,
@@ -512,15 +544,17 @@ public class PosViewModel : ViewModelBase
     {
         var version = Interlocked.Increment(ref _productLoadVersion);
         var searchText = SearchText;
+        var searchField = SearchField;
         var categoryId = _selectedCategoryId == 0 ? null : _selectedCategoryId;
 
         await _productLoadGate.WaitAsync();
         try
         {
             if (version != _productLoadVersion) return;
-            var products = await _inventory.SearchProductsAsync(searchText, categoryId);
+            var products = await _inventory.SearchProductsAsync(searchText, categoryId, searchField);
             if (version != _productLoadVersion ||
-                !string.Equals(searchText, SearchText, StringComparison.Ordinal)) return;
+                !string.Equals(searchText, SearchText, StringComparison.Ordinal) ||
+                searchField != SearchField) return;
 
             Products.Clear();
             foreach (var p in products) Products.Add(p);
@@ -539,27 +573,42 @@ public class PosViewModel : ViewModelBase
 
     public Task FilterProductsAsync() => LoadProductsAsync();
 
-    public async Task SearchBySkuOrTextAsync()
+    public async Task SearchBySkuOrTextAsync(bool identifierOnly = false)
     {
         var term = SearchText?.Trim() ?? "";
         if (string.IsNullOrEmpty(term)) { await LoadProductsAsync(); return; }
 
-        // Try exact SKU/barcode match first - this is the scanner case.
-        Product? p;
-        await _productLoadGate.WaitAsync();
-        try
+        // Scanner entry always tries both identifiers. Inside F3 search, exact
+        // auto-add respects the selected Code/Barcode filter; Name filtering
+        // only narrows the results and never auto-adds a similarly named item.
+        Product? p = null;
+        var exactField = identifierOnly ? ProductSearchField.All : SearchField;
+        if (exactField != ProductSearchField.Name)
         {
-            p = await _inventory.GetProductBySkuAsync(term);
-        }
-        finally
-        {
-            _productLoadGate.Release();
-        }
-        if (p != null)
-        {
-            await AddToCartAsync(p);
-            SearchText = "";
-            return;
+            await _productLoadGate.WaitAsync();
+            try
+            {
+                p = await _inventory.GetProductBySkuAsync(term);
+            }
+            finally
+            {
+                _productLoadGate.Release();
+            }
+
+            var matchesSelectedField = p != null && (exactField switch
+            {
+                ProductSearchField.Code => string.Equals(p.Sku, term,
+                    StringComparison.OrdinalIgnoreCase),
+                ProductSearchField.Barcode => string.Equals(p.Barcode, term,
+                    StringComparison.OrdinalIgnoreCase),
+                _ => true
+            });
+            if (p != null && matchesSelectedField)
+            {
+                await AddToCartAsync(p);
+                SearchText = "";
+                return;
+            }
         }
 
         await LoadProductsAsync();
@@ -787,7 +836,12 @@ public class PosViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Checkout failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            App.LogError("CHECKOUT FAILED", ex);
+            MessageBox.Show(
+                "Checkout could not be saved. No sale or stock changes were committed.\n\n" +
+                $"{ex.GetBaseException().Message}\n\n" +
+                $"Technical details were written to:\n{App.LogFilePath}",
+                "Checkout failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -1161,16 +1215,16 @@ public class DiscountEntryDialog : Window
     public DiscountEntryDialog(SaleDraftLine line, IReadOnlyList<Discount>? promotions = null)
     {
         _line = line;
-        Title = "Line Discount";
-        Width = 470;
-        Height = 360;
+        Title = DialogLayout.Text("POS_LineDiscount", "Line discount");
+        Width = 520;
+        Height = 510;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
 
         var root = DialogLayout.CreateRoot();
         for (var i = 0; i < 6; i++)
-            root.RowDefinitions.Add(new RowDefinition { Height = i == 4 ? GridLength.Auto : GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var lineLabel = new TextBlock
         {
@@ -1182,7 +1236,14 @@ public class DiscountEntryDialog : Window
         };
         root.Children.Add(lineLabel);
 
-        _promotionBox = new ComboBox { Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 0, 0, 10) };
+        var promotionPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+        promotionPanel.Children.Add(DialogLayout.CreateFieldLabel(
+            "POS_DiscountPromotion", "Promotion (optional)"));
+        _promotionBox = new ComboBox
+        {
+            Padding = new Thickness(10, 8, 10, 8),
+            MinHeight = 42
+        };
         _promotionBox.Items.Add(new PromotionChoice(null));
         if (promotions != null)
         {
@@ -1190,24 +1251,56 @@ public class DiscountEntryDialog : Window
         }
         _promotionBox.SelectedIndex = 0;
         _promotionBox.SelectionChanged += (_, _) => ApplyPromotionChoice();
-        Grid.SetRow(_promotionBox, 1);
-        root.Children.Add(_promotionBox);
+        promotionPanel.Children.Add(_promotionBox);
+        Grid.SetRow(promotionPanel, 1);
+        root.Children.Add(promotionPanel);
 
-        var typePanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
-        _percentage = new RadioButton { Content = "Percentage", IsChecked = true, Margin = new Thickness(0, 0, 20, 0) };
-        typePanel.Children.Add(_percentage);
-        typePanel.Children.Add(new RadioButton { Content = "Fixed amount", GroupName = "DiscountType" });
+        var typeSection = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+        typeSection.Children.Add(DialogLayout.CreateFieldLabel(
+            "POS_DiscountType", "Discount type"));
+        var typePanel = new StackPanel { Orientation = Orientation.Horizontal };
+        _percentage = new RadioButton
+        {
+            Content = DialogLayout.Text("POS_DiscountPercentage", "Percentage"),
+            IsChecked = true,
+            Margin = new Thickness(0, 0, 24, 0)
+        };
         _percentage.GroupName = "DiscountType";
-        Grid.SetRow(typePanel, 2);
-        root.Children.Add(typePanel);
+        typePanel.Children.Add(_percentage);
+        typePanel.Children.Add(new RadioButton
+        {
+            Content = DialogLayout.Text("POS_DiscountFixed", "Fixed amount"),
+            GroupName = "DiscountType"
+        });
+        typeSection.Children.Add(typePanel);
+        Grid.SetRow(typeSection, 2);
+        root.Children.Add(typeSection);
 
-        _valueBox = new TextBox { Padding = new Thickness(10, 8, 10, 8), FontSize = 18, Margin = new Thickness(0, 0, 0, 10) };
-        Grid.SetRow(_valueBox, 3);
-        root.Children.Add(_valueBox);
+        var valuePanel = new StackPanel { Margin = new Thickness(0, 0, 0, 12) };
+        valuePanel.Children.Add(DialogLayout.CreateFieldLabel(
+            "POS_DiscountValue", "Discount value"));
+        _valueBox = new TextBox
+        {
+            Padding = new Thickness(10, 8, 10, 8),
+            FontSize = 18,
+            MinHeight = 44
+        };
+        valuePanel.Children.Add(_valueBox);
+        Grid.SetRow(valuePanel, 3);
+        root.Children.Add(valuePanel);
 
-        _reasonBox = new TextBox { Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 0, 0, 12), Text = line.DiscountReason ?? string.Empty };
-        Grid.SetRow(_reasonBox, 4);
-        root.Children.Add(_reasonBox);
+        var reasonPanel = new StackPanel();
+        reasonPanel.Children.Add(DialogLayout.CreateFieldLabel(
+            "POS_DiscountReason", "Reason (optional)"));
+        _reasonBox = new TextBox
+        {
+            Padding = new Thickness(10, 8, 10, 8),
+            MinHeight = 40,
+            Text = line.DiscountReason ?? string.Empty
+        };
+        reasonPanel.Children.Add(_reasonBox);
+        Grid.SetRow(reasonPanel, 4);
+        root.Children.Add(reasonPanel);
         root.Children.Add(DialogLayout.CreateButtons(5, Accept, () => Close()));
         Content = root;
         Loaded += (_, _) => _valueBox.Focus();
@@ -1225,21 +1318,21 @@ public class DiscountEntryDialog : Window
     {
         if (!DialogLayout.TryParseDecimal(_valueBox.Text, out var value) || value < 0m)
         {
-            MessageBox.Show("Enter a valid non-negative discount.", Title,
+            MessageBox.Show(DialogLayout.Text("POS_DiscountInvalid", "Enter a valid non-negative discount."), Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         var gross = _line.UnitPrice * _line.Quantity;
         if (_percentage.IsChecked == true && value > 100m)
         {
-            MessageBox.Show("Percentage cannot exceed 100.", Title,
+            MessageBox.Show(DialogLayout.Text("POS_DiscountPercentLimit", "Percentage cannot exceed 100."), Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         DiscountAmount = _percentage.IsChecked == true ? gross * value / 100m : value;
         if (DiscountAmount > gross)
         {
-            MessageBox.Show("Discount cannot exceed the line amount.", Title,
+            MessageBox.Show(DialogLayout.Text("POS_DiscountAmountLimit", "Discount cannot exceed the line amount."), Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -1253,7 +1346,8 @@ public sealed class PromotionChoice
 {
     public PromotionChoice(Discount? discount) => Discount = discount;
     public Discount? Discount { get; }
-    public override string ToString() => Discount == null ? "Custom discount" :
+    public override string ToString() => Discount == null
+        ? DialogLayout.Text("POS_CustomDiscount", "Custom discount") :
         string.IsNullOrWhiteSpace(Discount.Code) ? Discount.Name : $"{Discount.Name} ({Discount.Code})";
 }
 
@@ -1265,6 +1359,17 @@ internal static class DialogLayout
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush")
     };
 
+    public static string Text(string key, string fallback)
+        => Application.Current.TryFindResource(key) as string ?? fallback;
+
+    public static TextBlock CreateFieldLabel(string key, string fallback) => new()
+    {
+        Text = Text(key, fallback),
+        Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush"),
+        FontWeight = FontWeights.SemiBold,
+        Margin = new Thickness(0, 0, 0, 6)
+    };
+
     public static FrameworkElement CreateButtons(int row, Action accept, Action cancel)
     {
         var panel = new Grid { Margin = new Thickness(0, 14, 0, 0) };
@@ -1272,18 +1377,20 @@ internal static class DialogLayout
         panel.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var cancelButton = new Button
         {
-            Content = "Cancel",
+            Content = Text("Common_Cancel", "Cancel"),
             Style = (Style)Application.Current.FindResource("OutlineButton"),
             Margin = new Thickness(0, 0, 5, 0),
-            Padding = new Thickness(0, 10, 0, 10)
+            Padding = new Thickness(0, 10, 0, 10),
+            IsCancel = true
         };
         cancelButton.Click += (_, _) => cancel();
         var acceptButton = new Button
         {
-            Content = "Confirm",
+            Content = Text("Common_Confirm", "Confirm"),
             Style = (Style)Application.Current.FindResource("PrimaryButton"),
             Margin = new Thickness(5, 0, 0, 0),
-            Padding = new Thickness(0, 10, 0, 10)
+            Padding = new Thickness(0, 10, 0, 10),
+            IsDefault = true
         };
         acceptButton.Click += (_, _) => accept();
         panel.Children.Add(cancelButton);

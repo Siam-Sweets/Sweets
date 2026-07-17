@@ -61,6 +61,9 @@ public partial class App : Application
         catch { /* logging must never throw */ }
     }
 
+    public static void LogError(string context, Exception exception)
+        => Log($"{context}: {exception}");
+
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         try
@@ -345,8 +348,26 @@ public partial class App : Application
         SetThemeBrush("DangerTextBrush", dark ? "#FCA5A5" : "#DC2626");
         SetThemeBrush("InfoSurfaceBrush", dark ? "#172554" : "#EFF6FF");
         SetThemeBrush("InfoTextBrush", dark ? "#93C5FD" : "#2563EB");
-        SetThemeBrush("SidebarBrush", dark ? "#020617" : "#1E293B");
-        SetThemeBrush("SidebarActiveBrush", dark ? "#000000" : "#0F172A");
+        SetThemeBrush("SidebarBrush", dark ? "#020617" : "#FFFFFF");
+        SetThemeBrush("SidebarActiveBrush", dark ? "#000000" : "#DBEAFE");
+        SetThemeBrush("SidebarTextBrush", dark ? "#E2E8F0" : "#0F172A");
+        SetThemeBrush("SidebarMutedBrush", dark ? "#94A3B8" : "#64748B");
+        SetThemeBrush("SidebarHoverBrush", dark ? "#334155" : "#F1F5F9");
+        SetThemeBrush("SidebarCardBrush", dark ? "#0F172A" : "#F8FAFC");
+        SetThemeBrush("SidebarBorderBrush", dark ? "#334155" : "#E2E8F0");
+        SetThemeBrush("CommandPanelBrush", dark ? "#182235" : "#F8FAFC");
+        SetThemeBrush("CommandTileBrush", dark ? "#243247" : "#FFFFFF");
+        SetThemeBrush("CommandTileHoverBrush", dark ? "#334155" : "#EFF6FF");
+        SetThemeBrush("CommandTextBrush", dark ? "#F8FAFC" : "#0F172A");
+        SetThemeBrush("CommandMutedBrush", dark ? "#94A3B8" : "#64748B");
+        SetThemeBrush("CommandBorderBrush", dark ? "#475569" : "#CBD5E1");
+        SetThemeBrush("CommandStatusBrush", dark ? "#111827" : "#FFFFFF");
+        SetThemeBrush("OverlayScrimBrush", dark ? "#B3000000" : "#140F172A");
+        SetThemeBrush("DrawerPanelBrush", dark ? "#111827" : "#FFFFFF");
+        SetThemeBrush("DrawerTextBrush", dark ? "#F8FAFC" : "#0F172A");
+        SetThemeBrush("DrawerMutedBrush", dark ? "#94A3B8" : "#64748B");
+        SetThemeBrush("DrawerBorderBrush", dark ? "#334155" : "#E2E8F0");
+        SetThemeBrush("DrawerHoverBrush", dark ? "#334155" : "#F1F5F9");
     }
 
     public static void ApplyLanguage(string? language)
@@ -372,12 +393,8 @@ public partial class App : Application
     private static void SetThemeBrush(string key, string hex)
     {
         var color = (Color)ColorConverter.ConvertFromString(hex)!;
-        if (Current.TryFindResource(key) is SolidColorBrush brush && !brush.IsFrozen)
-        {
-            brush.Color = color;
-            return;
-        }
-
+        // Publish a new application-level resource so every DynamicResource
+        // reference is invalidated immediately, including already-open drawers.
         Current.Resources[key] = new SolidColorBrush(color);
     }
 }

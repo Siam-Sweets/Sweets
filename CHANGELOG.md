@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.3.8 — Complete Light-mode overlays
+
+- Replaced the remaining hard-coded black drawer and product-search scrims with theme-aware overlay resources.
+- Added a dedicated Light/Dark palette for the management drawer background, text, dividers, hover states, and border.
+- Reduced Light-mode background dimming to a subtle tint while preserving click-outside-to-close behavior.
+- Republish theme brushes whenever appearance changes or the drawer opens, preventing stale Dark resources from remaining on screen.
+
+## 1.3.7 — Checkout compatibility and complete theme controls
+
+- Added a safe, idempotent in-place database upgrade for existing stores so checkout gains the current payment table, cash-change field, discount reason, and sale-line stock link without deleting or replacing business data.
+- Kept checkout transactional and now displays the underlying database error plus log location if a sale still cannot be saved.
+- Replaced the display-only **Weighted** product checkbox with a clickable control that saves immediately and restores its previous value if persistence fails.
+- Made promotion and user status checkboxes explicitly one-way, preventing WPF from writing into calculated read-only properties.
+- Added theme-aware CheckBox, RadioButton, DatePicker/calendar, and ComboBox templates so marks, dates, selected values, and drop-down rows remain visible in both Dark and Light modes.
+- Removed hard-coded dark colors from the POS command rail, management sidebar, user card, and slide-over so the complete home screen follows the selected theme.
+
+## 1.3.6 — Discount dialog and searchable product fields
+
+- Replaced the Windows-default combo box rendering with a theme-aware Light/Dark template so selected values remain readable, including the line-discount promotion selector.
+- Reworked the line-discount dialog with visible field labels, localized text, reliable Enter-to-confirm and Escape-to-cancel behavior, and unchanged amount/percentage safety limits.
+- Added explicit **All fields**, **Product name**, **Product code**, and **Barcode** filters to the F3 product search panel.
+- Kept barcode scanner entry independent from the selected search filter and preserved exact code/barcode auto-add behavior.
+- Added product code and barcode details to stable-sized search result cards in both English and Bengali.
+
 ## 1.3.5 — Rolling release record lookup correction
 
 - Fixed the repeated "a release with the same tag name already exists" failure when `gh release view dev-build` cannot resolve an existing rolling release after its tag moves.

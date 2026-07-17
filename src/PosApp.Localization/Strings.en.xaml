@@ -239,6 +239,25 @@
     <!-- Receipt-first POS workflow -->
     <sys:String x:Key="POS_SearchReceipt">Scan barcode, enter code, or search products…</sys:String>
     <sys:String x:Key="POS_SearchButton">Find products (F3)</sys:String>
+    <sys:String x:Key="POS_SearchField">Search by</sys:String>
+    <sys:String x:Key="POS_SearchAllFields">All fields</sys:String>
+    <sys:String x:Key="POS_SearchProductName">Product name</sys:String>
+    <sys:String x:Key="POS_SearchProductCode">Product code</sys:String>
+    <sys:String x:Key="POS_SearchBarcode">Barcode</sys:String>
+    <sys:String x:Key="POS_SearchFilterHint">Enter a product name, code, or barcode…</sys:String>
+    <sys:String x:Key="POS_CodeLabel">Code</sys:String>
+    <sys:String x:Key="POS_BarcodeLabel">Barcode</sys:String>
+    <sys:String x:Key="POS_LineDiscount">Line discount</sys:String>
+    <sys:String x:Key="POS_DiscountPromotion">Promotion (optional)</sys:String>
+    <sys:String x:Key="POS_CustomDiscount">Custom discount</sys:String>
+    <sys:String x:Key="POS_DiscountType">Discount type</sys:String>
+    <sys:String x:Key="POS_DiscountPercentage">Percentage</sys:String>
+    <sys:String x:Key="POS_DiscountFixed">Fixed amount</sys:String>
+    <sys:String x:Key="POS_DiscountValue">Discount value</sys:String>
+    <sys:String x:Key="POS_DiscountReason">Reason (optional)</sys:String>
+    <sys:String x:Key="POS_DiscountInvalid">Enter a valid non-negative discount.</sys:String>
+    <sys:String x:Key="POS_DiscountPercentLimit">Percentage cannot exceed 100.</sys:String>
+    <sys:String x:Key="POS_DiscountAmountLimit">Discount cannot exceed the line amount.</sys:String>
     <sys:String x:Key="POS_ProductName">Product name</sys:String>
     <sys:String x:Key="POS_Quantity">Quantity</sys:String>
     <sys:String x:Key="POS_Price">Price</sys:String>

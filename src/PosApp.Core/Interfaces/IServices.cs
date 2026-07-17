@@ -1,4 +1,5 @@
 using PosApp.Core.Entities;
+using PosApp.Core.Enums;
 using PosApp.Core.Models;
 
 namespace PosApp.Core.Interfaces;
@@ -13,7 +14,10 @@ public interface IAuthService
 
 public interface IInventoryService
 {
-    Task<IReadOnlyList<Product>> SearchProductsAsync(string? query, int? categoryId = null);
+    Task<IReadOnlyList<Product>> SearchProductsAsync(
+        string? query,
+        int? categoryId = null,
+        ProductSearchField searchField = ProductSearchField.All);
     Task<Product?> GetProductBySkuAsync(string sku);
     Task<Product> CreateOrUpdateProductAsync(Product product);
     Task AdjustStockAsync(int productId, decimal delta, StockTransactionType type, string? note = null, int? userId = null, decimal? unitCost = null);

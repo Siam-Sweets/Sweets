@@ -135,6 +135,33 @@ public partial class ProductsView : UserControl, IRefreshable
         }
     }
 
+    private async void Weighted_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox checkBox || checkBox.Tag is not Product product) return;
+
+        var previousValue = product.IsWeighted;
+        var requestedValue = checkBox.IsChecked == true;
+        if (previousValue == requestedValue) return;
+
+        checkBox.IsEnabled = false;
+        try
+        {
+            product.IsWeighted = requestedValue;
+            await _inventory.CreateOrUpdateProductAsync(product);
+        }
+        catch (Exception ex)
+        {
+            product.IsWeighted = previousValue;
+            checkBox.IsChecked = previousValue;
+            MessageBox.Show(ex.GetBaseException().Message, "Unable to update weighted product",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            checkBox.IsEnabled = true;
+        }
+    }
+
     private async void ExportCsv_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog

@@ -23,7 +23,7 @@
                     <DataGridTextColumn Header="{DynamicResource Promo_ValidFrom}" Binding="{Binding ValidFrom, StringFormat='{}{0:dd MMM yyyy}'}" Width="135"/>
                     <DataGridTextColumn Header="{DynamicResource Promo_ValidTo}" Binding="{Binding ValidTo, StringFormat='{}{0:dd MMM yyyy}'}" Width="135"/>
                     <DataGridTextColumn Header="{DynamicResource Promo_Uses}" Binding="{Binding UsageDisplay}" Width="100"/>
-                    <DataGridCheckBoxColumn Header="{DynamicResource Promo_Active}" Binding="{Binding IsActive}" Width="85"/>
+                    <DataGridCheckBoxColumn Header="{DynamicResource Promo_Active}" Binding="{Binding IsActive, Mode=OneWay}" Width="85"/>
                 </DataGrid.Columns>
             </DataGrid>
         </Border>

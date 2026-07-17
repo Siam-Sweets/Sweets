@@ -239,6 +239,25 @@
     <!-- রসিদ-কেন্দ্রিক পিওএস -->
     <sys:String x:Key="POS_SearchReceipt">বারকোড স্ক্যান, কোড লিখুন বা পণ্য খুঁজুন…</sys:String>
     <sys:String x:Key="POS_SearchButton">পণ্য খুঁজুন (F3)</sys:String>
+    <sys:String x:Key="POS_SearchField">অনুসন্ধানের ধরন</sys:String>
+    <sys:String x:Key="POS_SearchAllFields">সব ক্ষেত্র</sys:String>
+    <sys:String x:Key="POS_SearchProductName">পণ্যের নাম</sys:String>
+    <sys:String x:Key="POS_SearchProductCode">পণ্য কোড</sys:String>
+    <sys:String x:Key="POS_SearchBarcode">বারকোড</sys:String>
+    <sys:String x:Key="POS_SearchFilterHint">পণ্যের নাম, কোড বা বারকোড লিখুন…</sys:String>
+    <sys:String x:Key="POS_CodeLabel">কোড</sys:String>
+    <sys:String x:Key="POS_BarcodeLabel">বারকোড</sys:String>
+    <sys:String x:Key="POS_LineDiscount">আইটেম ছাড়</sys:String>
+    <sys:String x:Key="POS_DiscountPromotion">প্রমোশন (ঐচ্ছিক)</sys:String>
+    <sys:String x:Key="POS_CustomDiscount">কাস্টম ছাড়</sys:String>
+    <sys:String x:Key="POS_DiscountType">ছাড়ের ধরন</sys:String>
+    <sys:String x:Key="POS_DiscountPercentage">শতাংশ</sys:String>
+    <sys:String x:Key="POS_DiscountFixed">নির্দিষ্ট পরিমাণ</sys:String>
+    <sys:String x:Key="POS_DiscountValue">ছাড়ের মান</sys:String>
+    <sys:String x:Key="POS_DiscountReason">কারণ (ঐচ্ছিক)</sys:String>
+    <sys:String x:Key="POS_DiscountInvalid">শূন্য বা তার বেশি একটি বৈধ ছাড় লিখুন।</sys:String>
+    <sys:String x:Key="POS_DiscountPercentLimit">শতাংশ ১০০-এর বেশি হতে পারবে না।</sys:String>
+    <sys:String x:Key="POS_DiscountAmountLimit">ছাড় আইটেমের মোট দামের বেশি হতে পারবে না।</sys:String>
     <sys:String x:Key="POS_ProductName">পণ্যের নাম</sys:String>
     <sys:String x:Key="POS_Quantity">পরিমাণ</sys:String>
     <sys:String x:Key="POS_Price">মূল্য</sys:String>

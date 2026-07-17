@@ -11,7 +11,7 @@
         </Style>
         <Style x:Key="DrawerAction" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource DrawerTextBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="18,13"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
@@ -24,7 +24,7 @@
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ActionBorder" Property="Background" Value="#334155"/></Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ActionBorder" Property="Background" Value="{DynamicResource DrawerHoverBrush}"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -40,7 +40,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Management navigation is hidden while serving customers. -->
-            <Border Grid.Column="0" Background="{DynamicResource SidebarBrush}" BorderBrush="#334155" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource SidebarBorderBrush}" BorderThickness="0,0,1,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -54,8 +54,8 @@
                             <StackPanel Orientation="Horizontal">
                                 <Image Width="36" Height="36" Source="/PosApp;component/Assets/PosAppLogo.png"/>
                                 <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock Text="PosApp" Foreground="White" FontSize="18" FontWeight="SemiBold"/>
-                                    <TextBlock Text="{DynamicResource Shell_BackToPOS}" Foreground="#93C5FD" FontSize="11"/>
+                                    <TextBlock Text="PosApp" Foreground="{DynamicResource SidebarTextBrush}" FontSize="18" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{DynamicResource Shell_BackToPOS}" Foreground="{DynamicResource InfoTextBrush}" FontSize="11"/>
                                 </StackPanel>
                             </StackPanel>
                         </StackPanel>
@@ -63,7 +63,7 @@
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="10,6">
-                            <TextBlock Text="{DynamicResource Shell_Management}" Foreground="#94A3B8" FontSize="11" FontWeight="Bold" Margin="10,4,10,8"/>
+                            <TextBlock Text="{DynamicResource Shell_Management}" Foreground="{DynamicResource SidebarMutedBrush}" FontSize="11" FontWeight="Bold" Margin="10,4,10,8"/>
                             <Button x:Name="NavDashboard" Style="{StaticResource NavButtonActive}" Click="Nav_Click" Tag="dashboard"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_Dashboard}"/></Button>
                             <Button x:Name="NavSales" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="sales"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_Documents}"/></Button>
                             <Button x:Name="NavProducts" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="products"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Nav_Products}"/></Button>
@@ -83,17 +83,17 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <Border Grid.Row="2" Background="#0F172A" Margin="10" CornerRadius="7" Padding="11">
+                    <Border Grid.Row="2" Background="{DynamicResource SidebarCardBrush}" BorderBrush="{DynamicResource SidebarBorderBrush}" BorderThickness="1" Margin="10" CornerRadius="7" Padding="11">
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <Border Width="36" Height="36" Background="{StaticResource PrimaryBrush}" CornerRadius="18">
                                 <TextBlock x:Name="UserInitials" Text="A" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                                <TextBlock x:Name="UserName" Text="Administrator" Foreground="White" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock x:Name="UserRoleLabel" Text="Admin" Foreground="#94A3B8" FontSize="11"/>
+                                <TextBlock x:Name="UserName" Text="Administrator" Foreground="{DynamicResource SidebarTextBrush}" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="UserRoleLabel" Text="Admin" Foreground="{DynamicResource SidebarMutedBrush}" FontSize="11"/>
                             </StackPanel>
-                            <Button Grid.Column="2" Content="Exit" Foreground="#CBD5E1" Background="Transparent" BorderThickness="0" Click="Logout_Click"/>
+                            <Button Grid.Column="2" Content="Exit" Foreground="{DynamicResource SidebarTextBrush}" Background="Transparent" BorderThickness="0" Click="Logout_Click"/>
                         </Grid>
                     </Border>
                 </Grid>
@@ -104,15 +104,15 @@
 
         <!-- Slide-over used from the receipt screen. -->
         <Grid x:Name="ManagementOverlay" Visibility="Collapsed" Panel.ZIndex="50">
-            <Border Background="#99000000" MouseLeftButtonDown="DrawerBackground_MouseLeftButtonDown"/>
-            <Border Width="410" HorizontalAlignment="Right" Background="#1E293B" BorderBrush="#475569" BorderThickness="1,0,0,0">
+            <Border Background="{DynamicResource OverlayScrimBrush}" MouseLeftButtonDown="DrawerBackground_MouseLeftButtonDown"/>
+            <Border Width="410" HorizontalAlignment="Right" Background="{DynamicResource DrawerPanelBrush}" BorderBrush="{DynamicResource DrawerBorderBrush}" BorderThickness="1,0,0,0">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid Grid.Row="0" Margin="20,18,14,14">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock x:Name="DrawerTitle" Foreground="White" FontSize="22" FontWeight="SemiBold"/>
-                            <TextBlock Text="{DynamicResource Shell_OfflineTerminal}" Foreground="#94A3B8" Margin="0,3,0,0"/>
+                            <TextBlock x:Name="DrawerTitle" Foreground="{DynamicResource DrawerTextBrush}" FontSize="22" FontWeight="SemiBold"/>
+                            <TextBlock Text="{DynamicResource Shell_OfflineTerminal}" Foreground="{DynamicResource DrawerMutedBrush}" Margin="0,3,0,0"/>
                         </StackPanel>
                         <Button Grid.Column="1" Content="Close" Style="{StaticResource DrawerAction}" Padding="12,8" Click="CloseManagementDrawer_Click"/>
                     </Grid>
@@ -124,14 +124,14 @@
                             <Button x:Name="DrawerOpenSales" Style="{StaticResource DrawerAction}" Tag="pos" Click="OpenSales_Click" Content="{DynamicResource Shell_OpenSales}"/>
                             <Button x:Name="DrawerRegister" Style="{StaticResource DrawerAction}" Tag="register" Click="ManagementAction_Click" Content="{DynamicResource Shell_CashInOut}"/>
                             <Button x:Name="DrawerReports" Style="{StaticResource DrawerAction}" Tag="register" Click="ManagementAction_Click" Content="{DynamicResource Shell_EndOfDay}"/>
-                            <Border Height="1" Background="#475569" Margin="14,8"/>
-                            <TextBlock Text="{DynamicResource Shell_User}" Foreground="#94A3B8" Margin="18,8,18,4" FontSize="12" FontWeight="Bold"/>
+                            <Border Height="1" Background="{DynamicResource DrawerBorderBrush}" Margin="14,8"/>
+                            <TextBlock Text="{DynamicResource Shell_User}" Foreground="{DynamicResource DrawerMutedBrush}" Margin="18,8,18,4" FontSize="12" FontWeight="Bold"/>
                             <Button Style="{StaticResource DrawerAction}" Click="UserInfo_Click" Content="{DynamicResource Shell_UserInfo}"/>
                             <Button Style="{StaticResource DrawerAction}" Click="DrawerSignOut_Click" Content="{DynamicResource Shell_SignOut}"/>
                         </StackPanel>
                     </ScrollViewer>
 
-                    <TextBlock Grid.Row="2" x:Name="DrawerDate" Foreground="#CBD5E1" HorizontalAlignment="Center" FontSize="17" Margin="0,16"/>
+                    <TextBlock Grid.Row="2" x:Name="DrawerDate" Foreground="{DynamicResource DrawerMutedBrush}" HorizontalAlignment="Center" FontSize="17" Margin="0,16"/>
 
                     <UniformGrid Grid.Row="3" Columns="3" Margin="10,0,10,12">
                         <Button x:Name="DrawerSettings" Content="{DynamicResource Nav_Settings}" Style="{StaticResource DrawerAction}" HorizontalContentAlignment="Center" Click="DrawerSettings_Click"/>
