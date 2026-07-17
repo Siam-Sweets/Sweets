@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.19 — Reliable rolling GitHub releases
+
+- Fixed rolling `dev-build` publication failing with HTTP 404 after the tag was force-moved while its previous release record was still active.
+- Deletes the old rolling release before moving the `dev-build` tag, then creates or reuses a fresh release tied to the new build commit.
+- Uses the release-specific `upload_url` returned by GitHub instead of reconstructing an upload endpoint from a potentially stale release ID.
+- Fixed the retry wrapper so failed API calls and asset uploads propagate their exit status instead of being masked by Bash conditional-function `errexit` behavior.
+- Validates each upload response and verifies only fully uploaded assets before allowing the release job to pass.
+- Re-resolves the release by tag if the initially published numeric ID is temporarily unreadable.
+
 ## 1.3.18 — Reliable weighted-product updates
 
 - Fixed the EF Core tracking conflict that prevented weighted-product checkboxes from being updated when multiple products shared the same category.

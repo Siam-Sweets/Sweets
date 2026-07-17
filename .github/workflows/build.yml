@@ -320,17 +320,25 @@ jobs:
             fi
           done
 
-          # Retry transient GitHub API and upload failures. The total backoff is
-          # bounded to 60 seconds and every operation is safe to run again.
+          # Retry transient GitHub API and upload failures. Every helper
+          # explicitly returns failures because Bash disables `errexit` for functions
+          # invoked from an if/until condition.
           retry() {
             local max_attempts=5
             local attempt=1
             local delay=4
+            local status
 
-            until "$@"; do
+            while true; do
+              if "$@"; then
+                return 0
+              else
+                status=$?
+              fi
+
               if (( attempt >= max_attempts )); then
-                echo "Command failed after ${attempt} attempts: $*" >&2
-                return 1
+                echo "Command failed after ${attempt} attempts (exit ${status}): $*" >&2
+                return "$status"
               fi
 
               echo "Attempt ${attempt} failed; retrying in ${delay}s: $*" >&2
@@ -375,9 +383,8 @@ jobs:
           EOF
           }
 
-          # `gh release view <tag>` can report not found after a rolling tag is
-          # force-moved even though the release record still exists. Resolve the
-          # release from the REST collection and operate on its immutable ID.
+          # Resolve a release from the complete REST collection instead of relying on
+          # `gh release view <tag>`, which can temporarily return 404 after a tag moves.
           find_release_id() {
             local rows
             local id
@@ -422,12 +429,35 @@ jobs:
             return 1
           }
 
+          delete_existing_dev_release() {
+            local release_id
+            local find_status
+
+            if release_id="$(find_release_id)"; then
+              echo "Deleting stale rolling release ID ${release_id} before moving ${RELEASE_TAG}."
+              gh api --method DELETE \
+                "repos/${GH_REPO}/releases/${release_id}" >/dev/null || return 2
+            else
+              find_status=$?
+              if (( find_status != 1 )); then
+                return "$find_status"
+              fi
+            fi
+          }
+
+          move_dev_tag() {
+            git tag --force "$RELEASE_TAG" "$GITHUB_SHA" || return 1
+            git push origin "refs/tags/${RELEASE_TAG}" --force || return 1
+          }
+
           replace_release_asset() {
             local release_id="$1"
-            local file="$2"
+            local upload_url="$2"
+            local file="$3"
             local file_name="${file##*/}"
             local asset_id
             local find_status
+            local response_file
 
             if [[ ! "$file_name" =~ ^[A-Za-z0-9._-]+$ ]]; then
               echo "Unsafe release asset filename: $file_name" >&2
@@ -436,7 +466,7 @@ jobs:
 
             if asset_id="$(find_asset_id "$release_id" "$file_name")"; then
               gh api --method DELETE \
-                "repos/${GH_REPO}/releases/assets/${asset_id}" >/dev/null
+                "repos/${GH_REPO}/releases/assets/${asset_id}" >/dev/null || return 2
             else
               find_status=$?
               if (( find_status != 1 )); then
@@ -444,15 +474,31 @@ jobs:
               fi
             fi
 
-            curl --fail-with-body --silent --show-error \
+            response_file="$(mktemp)" || return 1
+            if ! curl --location --fail-with-body --silent --show-error \
               --request POST \
               --header "Authorization: Bearer ${GH_TOKEN}" \
               --header "Accept: application/vnd.github+json" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
               --header "Content-Type: application/octet-stream" \
               --data-binary "@${file}" \
-              --output /dev/null \
-              "https://uploads.github.com/repos/${GH_REPO}/releases/${release_id}/assets?name=${file_name}"
+              --output "$response_file" \
+              "${upload_url}?name=${file_name}"; then
+              cat "$response_file" >&2 || true
+              rm -f "$response_file"
+              return 2
+            fi
+
+            if ! jq -e --arg expected "$file_name" \
+              '.name == $expected and .state == "uploaded"' \
+              "$response_file" >/dev/null; then
+              echo "GitHub returned an invalid upload response for ${file_name}:" >&2
+              cat "$response_file" >&2 || true
+              rm -f "$response_file"
+              return 1
+            fi
+
+            rm -f "$response_file"
           }
 
           publish_release() {
@@ -460,6 +506,10 @@ jobs:
             local find_status
             local title
             local notes
+            local response_file
+            local upload_template
+            local upload_url
+            local file
 
             if [[ "$IS_RELEASE" == "false" ]]; then
               title="PosApp Dev Build (run #${GITHUB_RUN_NUMBER})"
@@ -468,91 +518,133 @@ jobs:
               title="PosApp ${VERSION}"
             fi
 
+            response_file="$(mktemp)" || return 1
+
             if release_id="$(find_release_id)"; then
               if [[ "$IS_RELEASE" == "false" ]]; then
                 gh api --method PATCH \
                   "repos/${GH_REPO}/releases/${release_id}" \
                   --raw-field "tag_name=${RELEASE_TAG}" \
-                  --raw-field "target_commitish=${GITHUB_SHA}" \
                   --raw-field "name=${title}" \
                   --raw-field "body=${notes}" \
                   --field draft=false \
-                  --field prerelease=true >/dev/null
+                  --field prerelease=true > "$response_file" || {
+                    rm -f "$response_file"
+                    return 2
+                  }
               else
                 gh api --method PATCH \
                   "repos/${GH_REPO}/releases/${release_id}" \
                   --raw-field "tag_name=${RELEASE_TAG}" \
-                  --raw-field "target_commitish=${GITHUB_SHA}" \
                   --raw-field "name=${title}" \
                   --field draft=false \
-                  --field prerelease=false >/dev/null
+                  --field prerelease=false > "$response_file" || {
+                    rm -f "$response_file"
+                    return 2
+                  }
               fi
             else
               find_status=$?
               if (( find_status != 1 )); then
+                rm -f "$response_file"
                 return "$find_status"
               fi
 
               if [[ "$IS_RELEASE" == "false" ]]; then
-                release_id="$(
-                  gh api --method POST \
-                    "repos/${GH_REPO}/releases" \
-                    --raw-field "tag_name=${RELEASE_TAG}" \
-                    --raw-field "target_commitish=${GITHUB_SHA}" \
-                    --raw-field "name=${title}" \
-                    --raw-field "body=${notes}" \
-                    --field draft=false \
-                    --field prerelease=true \
-                    --jq '.id'
-                )"
+                gh api --method POST \
+                  "repos/${GH_REPO}/releases" \
+                  --raw-field "tag_name=${RELEASE_TAG}" \
+                  --raw-field "target_commitish=${GITHUB_SHA}" \
+                  --raw-field "name=${title}" \
+                  --raw-field "body=${notes}" \
+                  --field draft=false \
+                  --field prerelease=true > "$response_file" || {
+                    rm -f "$response_file"
+                    return 2
+                  }
               else
-                release_id="$(
-                  gh api --method POST \
-                    "repos/${GH_REPO}/releases" \
-                    --raw-field "tag_name=${RELEASE_TAG}" \
-                    --raw-field "target_commitish=${GITHUB_SHA}" \
-                    --raw-field "name=${title}" \
-                    --field draft=false \
-                    --field prerelease=false \
-                    --field generate_release_notes=true \
-                    --jq '.id'
-                )"
+                gh api --method POST \
+                  "repos/${GH_REPO}/releases" \
+                  --raw-field "tag_name=${RELEASE_TAG}" \
+                  --raw-field "target_commitish=${GITHUB_SHA}" \
+                  --raw-field "name=${title}" \
+                  --field draft=false \
+                  --field prerelease=false \
+                  --field generate_release_notes=true > "$response_file" || {
+                    rm -f "$response_file"
+                    return 2
+                  }
               fi
             fi
+
+            release_id="$(jq -er '.id | tostring' "$response_file")" || {
+              echo "GitHub release response did not contain a valid ID." >&2
+              cat "$response_file" >&2 || true
+              rm -f "$response_file"
+              return 1
+            }
+
+            upload_template="$(jq -er '.upload_url' "$response_file")" || {
+              echo "GitHub release response did not contain an upload URL." >&2
+              cat "$response_file" >&2 || true
+              rm -f "$response_file"
+              return 1
+            }
+            rm -f "$response_file"
 
             if [[ ! "$release_id" =~ ^[0-9]+$ ]]; then
               echo "GitHub returned an invalid release ID: $release_id" >&2
               return 1
             fi
 
-            for file in "${files[@]}"; do
-              replace_release_asset "$release_id" "$file"
-            done
+            # GitHub documents the returned upload_url as the source of truth for
+            # asset uploads. Remove its URI-template suffix before adding the name.
+            upload_url="${upload_template%%\{*}"
+            if [[ "$upload_url" != https://uploads.github.com/*/releases/*/assets ]]; then
+              echo "GitHub returned an unexpected release upload URL: $upload_url" >&2
+              return 1
+            fi
 
             PUBLISHED_RELEASE_ID="$release_id"
+
+            for file in "${files[@]}"; do
+              replace_release_asset "$release_id" "$upload_url" "$file" || return $?
+            done
           }
 
           verify_published_release() {
             local release_id="$PUBLISHED_RELEASE_ID"
+            local release_json
             local actual_tag
             local assets
             local file
             local file_name
+            local resolved_id
 
-            actual_tag="$(
-              gh api "repos/${GH_REPO}/releases/${release_id}" --jq '.tag_name'
-            )" || return 1
+            if ! release_json="$(gh api "repos/${GH_REPO}/releases/${release_id}")"; then
+              echo "Release ID ${release_id} was not readable; resolving ${RELEASE_TAG} again." >&2
+              resolved_id="$(find_release_id)" || return $?
+              release_id="$resolved_id"
+              PUBLISHED_RELEASE_ID="$release_id"
+              release_json="$(gh api "repos/${GH_REPO}/releases/${release_id}")" || return 2
+            fi
 
+            actual_tag="$(jq -er '.tag_name' <<< "$release_json")" || return 1
             if [[ "$actual_tag" != "$RELEASE_TAG" ]]; then
               echo "Published release tag mismatch: $actual_tag" >&2
+              return 1
+            fi
+
+            if [[ "$(jq -er '.draft' <<< "$release_json")" != "false" ]]; then
+              echo "Published release is still a draft." >&2
               return 1
             fi
 
             assets="$(
               gh api --paginate \
                 "repos/${GH_REPO}/releases/${release_id}/assets?per_page=100" \
-                --jq '.[].name'
-            )" || return 1
+                --jq '.[] | select(.state == "uploaded") | .name'
+            )" || return 2
 
             for file in "${files[@]}"; do
               file_name="${file##*/}"
@@ -562,8 +654,7 @@ jobs:
               fi
             done
 
-            gh api "repos/${GH_REPO}/releases/${release_id}" \
-              --jq '{tag_name: .tag_name, name: .name, html_url: .html_url, draft: .draft, prerelease: .prerelease}'
+            jq '{tag_name, name, html_url, draft, prerelease, immutable}' <<< "$release_json"
           }
 
           gh --version
@@ -571,10 +662,11 @@ jobs:
           if [[ "$IS_RELEASE" == "false" ]]; then
             write_dev_notes
 
-            # Keep the rolling dev release attached to the commit that produced
-            # these artifacts instead of leaving dev-build on an older commit.
-            git tag --force "$RELEASE_TAG" "$GITHUB_SHA"
-            retry git push origin "refs/tags/${RELEASE_TAG}" --force
+            # A rolling release is tied to its tag. Delete the old release record
+            # before force-moving the tag so GitHub cannot leave us with a stale,
+            # upload-ineligible release ID.
+            retry delete_existing_dev_release
+            retry move_dev_tag
           fi
 
           retry publish_release
