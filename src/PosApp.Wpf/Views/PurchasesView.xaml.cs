@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -6,6 +7,7 @@ using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
 using PosApp.Core.Utilities;
+using PosApp.Wpf.Helpers;
 
 namespace PosApp.Wpf.Views;
 
@@ -13,14 +15,17 @@ public partial class PurchasesView : UserControl, IRefreshable
 {
     private readonly IPurchaseService _purchases;
     private readonly IInventoryService _inventory;
+    private readonly IHardwareService _hardware;
     private IReadOnlyList<Supplier> _suppliers = Array.Empty<Supplier>();
+    private IReadOnlyList<PurchaseDocument> _documents = Array.Empty<PurchaseDocument>();
     private bool _datesInitialized;
 
-    public PurchasesView(IPurchaseService purchases, IInventoryService inventory)
+    public PurchasesView(IPurchaseService purchases, IInventoryService inventory, IHardwareService hardware)
     {
         InitializeComponent();
         _purchases = purchases;
         _inventory = inventory;
+        _hardware = hardware;
     }
 
     public async Task RefreshAsync()
@@ -53,16 +58,69 @@ public partial class PurchasesView : UserControl, IRefreshable
         if (toLocal < fromLocal) throw new InvalidOperationException("The To date cannot be before the From date.");
 
         var documents = await _purchases.GetPurchasesAsync(fromLocal, toLocal);
+        _documents = documents.ToList();
         _suppliers = await _purchases.SearchSuppliersAsync();
-        PurchasesGrid.ItemsSource = documents;
+        PurchasesGrid.ItemsSource = _documents;
         SuppliersGrid.ItemsSource = _suppliers;
-        DocumentCountText.Text = documents.Count.ToString();
-        PurchaseTotalText.Text = FormattingUtilities.Money(documents.Sum(item => item.Total), App.StoreSettings);
+        DocumentCountText.Text = _documents.Count.ToString();
+        PurchaseTotalText.Text = FormattingUtilities.Money(_documents.Sum(item => item.Total), App.StoreSettings);
         SupplierCountText.Text = _suppliers.Count.ToString();
         ApplySupplierFilter();
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => _ = RefreshAsync();
+
+    private async void Print_Click(object sender, RoutedEventArgs e)
+    {
+        var from = (FromPicker.SelectedDate ?? DateTime.Today).Date;
+        var to = (ToPicker.SelectedDate ?? DateTime.Today).Date;
+        if (to < from)
+        {
+            LocalizedMessageBox.Show("The To date cannot be before the From date.", "Invalid date range",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        await RefreshAsync();
+        await PageReportPrinter.PrintAsync(_hardware, BuildPrintReport(), "purchases and suppliers page");
+    }
+
+    private string BuildPrintReport()
+    {
+        var from = (FromPicker.SelectedDate ?? DateTime.Today).Date;
+        var to = (ToPicker.SelectedDate ?? DateTime.Today).Date;
+        var visibleSuppliers = SuppliersGrid.ItemsSource?.Cast<Supplier>().ToList() ?? _suppliers.ToList();
+        var builder = new StringBuilder();
+        PageReportPrinter.AppendHeader(builder, "PURCHASES & SUPPLIERS",
+            $"Period: {from:dd MMM yyyy} - {to:dd MMM yyyy}");
+        PageReportPrinter.AppendMetric(builder, "Purchase documents", _documents.Count.ToString());
+        PageReportPrinter.AppendMetric(builder, "Purchase total", PageReportPrinter.Money(_documents.Sum(item => item.Total)));
+        PageReportPrinter.AppendMetric(builder, "Active suppliers", _suppliers.Count.ToString());
+
+        PageReportPrinter.AppendSection(builder, "Posted purchases");
+        if (_documents.Count == 0) PageReportPrinter.AppendWrapped(builder, "No purchases in this period.");
+        foreach (var purchase in _documents)
+        {
+            var supplier = purchase.Supplier?.Name ?? "No supplier";
+            PageReportPrinter.AppendEntry(builder,
+                $"{purchase.DocumentNumber} | {purchase.DocumentDateLocal:dd MMM yyyy HH:mm}",
+                $"Supplier: {supplier}",
+                string.IsNullOrWhiteSpace(purchase.ExternalReference) ? null : $"Reference: {purchase.ExternalReference}",
+                $"Total {PageReportPrinter.Money(purchase.Total)} | {purchase.Status}");
+        }
+
+        PageReportPrinter.AppendSection(builder, "Suppliers shown");
+        if (visibleSuppliers.Count == 0) PageReportPrinter.AppendWrapped(builder, "No suppliers match the current search.");
+        foreach (var supplier in visibleSuppliers)
+            PageReportPrinter.AppendEntry(builder, supplier.Name,
+                string.IsNullOrWhiteSpace(supplier.Phone) ? null : $"Phone: {supplier.Phone}",
+                string.IsNullOrWhiteSpace(supplier.Email) ? null : $"Email: {supplier.Email}");
+
+        builder.AppendLine();
+        PageReportPrinter.AppendWrapped(builder, $"Printed {DateTime.Now:dd MMM yyyy HH:mm}");
+        return builder.ToString();
+    }
+
 
     private async void NewPurchase_Click(object sender, RoutedEventArgs e)
     {

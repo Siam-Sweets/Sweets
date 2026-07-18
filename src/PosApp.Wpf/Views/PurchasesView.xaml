@@ -26,6 +26,8 @@
                            Style="{StaticResource Muted}"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
+                        Click="Print_Click" Margin="0,0,8,0"/>
                 <Button Content="{DynamicResource Purch_AddSupplier}" Style="{StaticResource OutlineButton}"
                         Click="AddSupplier_Click" Margin="0,0,8,0"/>
                 <Button Content="{DynamicResource Purch_NewPurchase}" Style="{StaticResource PrimaryButton}"

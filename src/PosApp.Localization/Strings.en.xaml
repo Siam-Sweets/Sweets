@@ -130,6 +130,10 @@
     <sys:String x:Key="Setup_ConfirmPin">Confirm PIN</sys:String>
     <sys:String x:Key="Setup_DataSafety">Data safety</sys:String>
     <sys:String x:Key="Setup_EnableBackup">Enable automatic local backups</sys:String>
+    <sys:String x:Key="Setup_SampleProducts">Sample products</sys:String>
+    <sys:String x:Key="Setup_SampleProductsHelp">Add 15 example products, including fixed-price and weighted items. Turn this off to start with an empty product catalog.</sys:String>
+    <sys:String x:Key="Setup_On">ON</sys:String>
+    <sys:String x:Key="Setup_Off">OFF</sys:String>
     <sys:String x:Key="Setup_OfflineNote">Setup and all saved information remain on this computer.</sys:String>
     <sys:String x:Key="Setup_Exit">Exit</sys:String>
     <sys:String x:Key="Setup_Finish">Finish Setup</sys:String>
@@ -158,7 +162,7 @@
     <sys:String x:Key="POS_Tax">Tax</sys:String>
     <sys:String x:Key="POS_Total">Total</sys:String>
     <sys:String x:Key="POS_Checkout">Checkout</sys:String>
-    <sys:String x:Key="POS_Payment">Payment (F10)</sys:String>
+    <sys:String x:Key="POS_Payment">Payment</sys:String>
     <sys:String x:Key="POS_PaymentHint">Open payment, change, and split tender</sys:String>
     <sys:String x:Key="POS_Suspend">Suspend</sys:String>
     <sys:String x:Key="POS_Recall">Recall</sys:String>
@@ -442,7 +446,6 @@
     <sys:String x:Key="Promo_Subtitle">Create offline discount rules and optional promo codes for the register</sys:String>
     <sys:String x:Key="Promo_Add">Add promotion</sys:String>
     <sys:String x:Key="Promo_Edit">Edit</sys:String>
-    <sys:String x:Key="Promo_Deactivate">Deactivate</sys:String>
     <sys:String x:Key="Promo_Name">Name</sys:String>
     <sys:String x:Key="Promo_Code">Code</sys:String>
     <sys:String x:Key="Promo_Type">Type</sys:String>

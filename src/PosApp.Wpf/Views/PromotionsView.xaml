@@ -10,8 +10,7 @@
         </StackPanel>
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
             <Button Content="{DynamicResource Promo_Add}" Style="{StaticResource PrimaryButton}" Click="Add_Click" Margin="0,0,8,0"/>
-            <Button Content="{DynamicResource Promo_Edit}" Style="{StaticResource OutlineButton}" Click="Edit_Click" Margin="0,0,8,0"/>
-            <Button Content="{DynamicResource Promo_Deactivate}" Style="{StaticResource DangerButton}" Click="Deactivate_Click"/>
+            <Button Content="{DynamicResource Promo_Edit}" Style="{StaticResource OutlineButton}" Click="Edit_Click"/>
         </StackPanel>
         <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
             <DataGrid x:Name="PromotionGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" MouseDoubleClick="PromotionGrid_MouseDoubleClick">

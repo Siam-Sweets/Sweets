@@ -8,6 +8,71 @@
         ResizeMode="CanResize"
         Background="{DynamicResource BackgroundBrush}"
         Loaded="SetupView_Loaded">
+
+    <Window.Resources>
+        <Style x:Key="SetupSwitch" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Width" Value="88"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Grid Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                            <Border x:Name="Track"
+                                    Background="{DynamicResource SurfaceMutedBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="17"/>
+                            <TextBlock x:Name="OnText"
+                                       Text="{DynamicResource Setup_On}"
+                                       Foreground="White"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Left"
+                                       Margin="11,0,0,0"
+                                       Visibility="Collapsed"/>
+                            <TextBlock x:Name="OffText"
+                                       Text="{DynamicResource Setup_Off}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right"
+                                       Margin="0,0,11,0"/>
+                            <Ellipse x:Name="Thumb"
+                                     Width="26" Height="26"
+                                     Fill="White"
+                                     Stroke="{DynamicResource BorderBrush}"
+                                     StrokeThickness="1"
+                                     HorizontalAlignment="Left"
+                                     Margin="4,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
+                                <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0"/>
+                                <Setter TargetName="OnText" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="OffText" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="Opacity" Value="0.9"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Track" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -132,6 +197,28 @@
                             <TextBlock Text="{DynamicResource Setup_DataSafety}" Style="{StaticResource Muted}" Margin="0,0,0,8"/>
                             <CheckBox x:Name="BackupCheck" Content="{DynamicResource Setup_EnableBackup}"/>
                         </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                            <TextBlock Text="{DynamicResource Setup_SampleProducts}"
+                                       FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="{DynamicResource Setup_SampleProductsHelp}"
+                                       Style="{StaticResource Muted}"
+                                       TextWrapping="Wrap" Margin="0,5,0,0"/>
+                        </StackPanel>
+                        <ToggleButton Grid.Column="1"
+                                      x:Name="SampleProductsToggle"
+                                      Style="{StaticResource SetupSwitch}"
+                                      IsChecked="True"
+                                      VerticalAlignment="Center"
+                                      ToolTip="{DynamicResource Setup_SampleProducts}"/>
                     </Grid>
                 </Border>
 

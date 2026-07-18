@@ -70,7 +70,6 @@ public sealed class DiscountService : IDiscountService
         await _db.SaveChangesAsync();
     }
 
-    public Task DeactivateAsync(int id) => SetActiveAsync(id, false);
 
     private static void Validate(Discount discount)
     {

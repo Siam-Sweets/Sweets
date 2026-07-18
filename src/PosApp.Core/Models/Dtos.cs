@@ -185,6 +185,7 @@ public class InitialSetupRequest
     public string AdminFullName { get; set; } = "Administrator";
     public string AdminUsername { get; set; } = "admin";
     public string AdminPin { get; set; } = string.Empty;
+    public bool IncludeSampleProducts { get; set; } = true;
 }
 
 public class PurchaseDraft

@@ -51,6 +51,8 @@
                         Click="Filter_Click" Margin="16,0,0,0" Padding="16,8"/>
                 <Button Grid.Column="7" Content="{DynamicResource Sales_Export}" Style="{StaticResource OutlineButton}"
                         Click="Export_Click" Margin="8,0,0,0" Padding="16,8"/>
+                <Button Grid.Column="8" Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
+                        Click="PrintHistory_Click" Margin="8,0,0,0" Padding="16,8" HorizontalAlignment="Left"/>
             </Grid>
         </Border>
 

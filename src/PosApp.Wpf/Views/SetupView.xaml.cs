@@ -39,6 +39,7 @@ public partial class SetupView : Window
             ThemeDark.IsChecked = string.Equals(_storeSettings.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
             ThemeLight.IsChecked = ThemeDark.IsChecked != true;
             BackupCheck.IsChecked = _storeSettings.AutomaticBackupEnabled;
+            SampleProductsToggle.IsChecked = defaults.IncludeSampleProducts;
             StoreNameBox.Focus();
         }
         catch (Exception ex)
@@ -109,7 +110,8 @@ public partial class SetupView : Window
                 StoreSettings = _storeSettings,
                 AdminFullName = AdminNameBox.Text,
                 AdminUsername = UsernameBox.Text,
-                AdminPin = PinBox.Password
+                AdminPin = PinBox.Password,
+                IncludeSampleProducts = SampleProductsToggle.IsChecked == true
             };
 
             await _setup.CompleteSetupAsync(request);

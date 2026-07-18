@@ -5,7 +5,6 @@
              Background="{DynamicResource BackgroundBrush}">
     <UserControl.Resources>
         <conv:MoneyConverter x:Key="Money"/>
-        <conv:ActiveActionConverter x:Key="ActiveAction"/>
         <conv:ProductSaleModeConverter x:Key="SaleMode"/>
     </UserControl.Resources>
     <Grid Margin="{StaticResource PagePadding}">
@@ -74,15 +73,12 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTemplateColumn Header="{DynamicResource Common_Actions}" Width="175">
+                    <DataGridTemplateColumn Header="{DynamicResource Common_Actions}" Width="90">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
                                     <Button Content="{DynamicResource Common_Edit}" Style="{StaticResource OutlineButton}"
                                             Padding="10,4" Margin="2" Click="Edit_Click" Tag="{Binding}"/>
-                                    <Button Content="{Binding IsActive, Converter={StaticResource ActiveAction}}"
-                                            Style="{StaticResource OutlineButton}" Padding="10,4" Margin="2"
-                                            Click="Delete_Click" Tag="{Binding}"/>
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>

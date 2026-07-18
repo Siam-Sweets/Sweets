@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.4.20 — Stable selected sidebar hover state
+
+- Fixed every management-sidebar item becoming visually blank when the pointer hovered over the currently selected page.
+- Added a dedicated active-button template so the selected primary background and white label remain visible during hover and mouse press states.
+- Preserved the existing hover appearance for unselected sidebar items in both light and dark themes.
+
+## 1.4.19 — Printable management pages
+
+- Added page-level Print actions to Reports & Dashboard, Management Dashboard, Cash Register, Purchases & Suppliers, and Sales History.
+- Printed reports use the currently selected date range, status filter, supplier search, loaded KPIs, and visible page data.
+- Added compact multi-page text formatting that works with the configured Windows printer and remains usable on receipt-width printers.
+- Preserved existing individual receipt printing, register X reports, and final Z reports.
+
+## 1.4.18 — Optional sample products during first-run setup
+
+- Added an on/off switch to the first-run setup wizard for the built-in sample product catalog.
+- Kept the switch enabled by default to preserve the previous onboarding behavior while allowing a clean, empty product catalog.
+- Moved sample-product creation out of unconditional startup seeding and into the atomic setup-completion transaction.
+- Preserved default categories, taxes, discounts, users, and store settings regardless of the sample-product choice.
+- Added matching English and Bengali setup text.
+
+## 1.4.17 — Centered register command captions
+
+- Removed the redundant parenthesized `(F10)` text from the Payment caption while preserving the separate F10 shortcut label.
+- Centered the Delete, Quantity, Discount, Save sale, Payment, and Open sales captions independently within their command tiles.
+- Preserved the shortcut labels in the upper-left corner of each affected tile.
+- Updated both English and Bengali payment-caption resources.
+
+## 1.4.16 — Visible text-input caret
+
+- Added an explicit theme-aware caret brush to all standard text and password fields.
+- Ensured the main receipt barcode/product search field always shows its insertion cursor when focused in both light and dark themes.
+- Preserved the existing placeholder behavior: the hint hides on focus while the caret remains visible.
+
+## 1.4.15 — Simplified activation controls
+
+- Removed redundant Restore/Deactivate controls from Products, Customers & Suppliers, and Promotions.
+- Kept the Active checkbox as the single control for activating or deactivating products, customers, suppliers, and promotions.
+- Reduced the affected Actions columns and removed the now-unused activation-action converter, handlers, service method, and localization entries.
+
 ## 1.4.14 — Hardware project build fixes
 
 - Added the missing `System.IO` namespace import required by serial barcode-scanner `IOException` handling.

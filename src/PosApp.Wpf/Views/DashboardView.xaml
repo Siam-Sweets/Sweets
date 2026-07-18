@@ -21,8 +21,12 @@
                     <TextBlock Text="{DynamicResource Dash_Title}" Style="{StaticResource Heading1}"/>
                     <TextBlock x:Name="PeriodText" Style="{StaticResource Muted}" Margin="0,3,0,0"/>
                 </StackPanel>
-                <Button Grid.Column="1" Content="{DynamicResource Dash_Refresh}" Style="{StaticResource OutlineButton}"
-                        Padding="18,9" Click="Refresh_Click"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
+                            Padding="18,9" Click="Print_Click" Margin="0,0,8,0"/>
+                    <Button Content="{DynamicResource Dash_Refresh}" Style="{StaticResource OutlineButton}"
+                            Padding="18,9" Click="Refresh_Click"/>
+                </StackPanel>
             </Grid>
 
             <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,18">

@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Utilities;
+using PosApp.Wpf.Helpers;
 
 namespace PosApp.Wpf.Views;
 
@@ -79,6 +80,57 @@ public partial class SalesView : UserControl, IRefreshable
     }
 
     private void Filter_Click(object sender, RoutedEventArgs e) => _ = RefreshAsync();
+
+    private async void PrintHistory_Click(object sender, RoutedEventArgs e)
+    {
+        var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+        var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+        if (to < from)
+        {
+            LocalizedMessageBox.Show("The To date cannot be earlier than the From date.", "Invalid date range",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        await RefreshAsync();
+        await PageReportPrinter.PrintAsync(_hardware, BuildHistoryPrintReport(), "sales history page");
+    }
+
+    private string BuildHistoryPrintReport()
+    {
+        var from = (FromDate.SelectedDate ?? DateTime.Today.AddDays(-7)).Date;
+        var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
+        var status = StatusFilter.SelectedItem is ComboBoxItem item
+            ? item.Content?.ToString() ?? "All"
+            : "All";
+        var financial = _all.Where(sale => sale.Status is SaleStatus.Completed or SaleStatus.Refunded).ToList();
+        var builder = new StringBuilder();
+        PageReportPrinter.AppendHeader(builder, "SALES HISTORY",
+            $"Period: {from:dd MMM yyyy} - {to:dd MMM yyyy} | Status: {status}");
+        PageReportPrinter.AppendMetric(builder, "Completed transactions",
+            financial.Count(sale => sale.Status == SaleStatus.Completed).ToString());
+        PageReportPrinter.AppendMetric(builder, "Gross sales", PageReportPrinter.Money(financial.Sum(sale => sale.Subtotal)));
+        PageReportPrinter.AppendMetric(builder, "Discount", PageReportPrinter.Money(financial.Sum(sale => sale.DiscountTotal)));
+        PageReportPrinter.AppendMetric(builder, "Tax", PageReportPrinter.Money(financial.Sum(sale => sale.TaxTotal)));
+
+        PageReportPrinter.AppendSection(builder, "Transactions");
+        if (_all.Count == 0) PageReportPrinter.AppendWrapped(builder, "No sales match the current filters.");
+        foreach (var sale in _all)
+        {
+            var localDate = DateTimeUtilities.ToLocal(sale.SaleDate);
+            var quantity = sale.Items.Sum(line => line.Quantity);
+            PageReportPrinter.AppendEntry(builder,
+                $"{localDate:dd MMM yyyy HH:mm} | {sale.ReceiptNumber}",
+                $"Customer: {sale.Customer?.Name ?? "Walk-in"}",
+                $"Cashier: {sale.User?.FullName ?? sale.UserId.ToString()}",
+                $"Items {quantity:0.###} | Total {PageReportPrinter.Money(sale.Total)} | {sale.Status}");
+        }
+
+        builder.AppendLine();
+        PageReportPrinter.AppendWrapped(builder, $"Printed {DateTime.Now:dd MMM yyyy HH:mm}");
+        return builder.ToString();
+    }
+
 
     private async void SalesGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {

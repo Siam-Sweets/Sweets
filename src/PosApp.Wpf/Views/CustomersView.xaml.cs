@@ -125,29 +125,6 @@ public partial class CustomersView : UserControl, IRefreshable
         }
     }
 
-    private async void Delete_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: ContactListItem item }) return;
-        var activate = !item.IsActive;
-        var action = activate ? "restore" : "deactivate";
-        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} {item.TypeLabel.ToLowerInvariant()} '{item.Name}'?",
-                "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-
-        try
-        {
-            if (item.IsCustomer)
-                await _customers.SetCustomerActiveAsync(item.Id, activate);
-            else
-                await _purchases.SetSupplierActiveAsync(item.Id, activate);
-            await RefreshAsync();
-        }
-        catch (Exception ex)
-        {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, $"Cannot {action} {item.TypeLabel.ToLowerInvariant()}",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-    }
-
     private async void History_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: ContactListItem { Customer: not null } item }) return;

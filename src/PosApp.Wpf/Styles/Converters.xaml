@@ -10,6 +10,5 @@
     <c:PaymentMethodToStringConverter x:Key="PaymentMethodToStringConverter"/>
     <c:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
     <c:UserRoleToStringConverter x:Key="UserRoleToStringConverter"/>
-    <c:ActiveActionConverter x:Key="ActiveActionConverter"/>
     <c:UtcToLocalConverter x:Key="UtcToLocalConverter"/>
 </ResourceDictionary>

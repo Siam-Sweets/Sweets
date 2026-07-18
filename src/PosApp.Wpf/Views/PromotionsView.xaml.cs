@@ -92,21 +92,6 @@ public partial class PromotionsView : UserControl, IRefreshable
         }
     }
 
-    private async void Deactivate_Click(object sender, RoutedEventArgs e)
-    {
-        if (PromotionGrid.SelectedItem is not PromotionRow row || !row.IsActive) return;
-        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Deactivate {row.Name}?", "Promotion", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        try
-        {
-            await _discounts.DeactivateAsync(row.Discount.Id);
-            await LoadAsync();
-        }
-        catch (Exception ex)
-        {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to deactivate promotion", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
     private static Discount Clone(Discount source) => new()
     {
         Id = source.Id,

@@ -116,30 +116,6 @@ public partial class ProductsView : UserControl, IRefreshable
         }
     }
 
-    private async void Delete_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button btn && btn.Tag is Product p)
-        {
-            var activating = !p.IsActive;
-            var action = activating ? "restore" : "deactivate";
-            var confirm = PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} product '{p.Name}'?", "Confirm",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.Yes) return;
-            var previous = p.IsActive;
-            try
-            {
-                await _inventory.SetProductActiveAsync(p.Id, activating);
-                p.IsActive = activating;
-                await RefreshAsync();
-            }
-            catch (Exception ex)
-            {
-                p.IsActive = previous;
-                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, $"Unable to {action} product", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-    }
-
     private async void Active_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not CheckBox checkBox || checkBox.Tag is not Product product) return;

@@ -130,6 +130,10 @@
     <sys:String x:Key="Setup_ConfirmPin">পিন নিশ্চিত করুন</sys:String>
     <sys:String x:Key="Setup_DataSafety">ডেটা সুরক্ষা</sys:String>
     <sys:String x:Key="Setup_EnableBackup">স্বয়ংক্রিয় স্থানীয় ব্যাকআপ চালু করুন</sys:String>
+    <sys:String x:Key="Setup_SampleProducts">নমুনা পণ্য</sys:String>
+    <sys:String x:Key="Setup_SampleProductsHelp">নির্দিষ্ট-মূল্য ও ওজনভিত্তিক পণ্যসহ ১৫টি উদাহরণ পণ্য যোগ করুন। খালি পণ্য তালিকা দিয়ে শুরু করতে এটি বন্ধ করুন।</sys:String>
+    <sys:String x:Key="Setup_On">চালু</sys:String>
+    <sys:String x:Key="Setup_Off">বন্ধ</sys:String>
     <sys:String x:Key="Setup_OfflineNote">সেটআপ ও সংরক্ষিত সব তথ্য এই কম্পিউটারেই থাকবে।</sys:String>
     <sys:String x:Key="Setup_Exit">প্রস্থান</sys:String>
     <sys:String x:Key="Setup_Finish">সেটআপ শেষ করুন</sys:String>
@@ -158,7 +162,7 @@
     <sys:String x:Key="POS_Tax">ট্যাক্স</sys:String>
     <sys:String x:Key="POS_Total">মোট</sys:String>
     <sys:String x:Key="POS_Checkout">চেকআউট</sys:String>
-    <sys:String x:Key="POS_Payment">পেমেন্ট (F10)</sys:String>
+    <sys:String x:Key="POS_Payment">পেমেন্ট</sys:String>
     <sys:String x:Key="POS_PaymentHint">পেমেন্ট, খুচরা ও ভাগ করা পেমেন্ট খুলুন</sys:String>
     <sys:String x:Key="POS_Suspend">স্থগিত</sys:String>
     <sys:String x:Key="POS_Recall">পুনরুদ্ধার</sys:String>
@@ -442,7 +446,6 @@
     <sys:String x:Key="Promo_Subtitle">রেজিস্টারের জন্য অফলাইন ছাড়ের নিয়ম ও ঐচ্ছিক প্রোমো কোড তৈরি করুন</sys:String>
     <sys:String x:Key="Promo_Add">প্রমোশন যোগ</sys:String>
     <sys:String x:Key="Promo_Edit">সম্পাদনা</sys:String>
-    <sys:String x:Key="Promo_Deactivate">নিষ্ক্রিয়</sys:String>
     <sys:String x:Key="Promo_Name">নাম</sys:String>
     <sys:String x:Key="Promo_Code">কোড</sys:String>
     <sys:String x:Key="Promo_Type">ধরন</sys:String>

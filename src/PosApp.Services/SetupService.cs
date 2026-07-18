@@ -114,6 +114,9 @@ public sealed class SetupService : ISetupService
             }
 
             await _db.SaveChangesAsync();
+            if (request.IncludeSampleProducts)
+                await DbSeeder.SeedSampleProductsAsync(_db);
+
             await transaction.CommitAsync();
         }
         catch

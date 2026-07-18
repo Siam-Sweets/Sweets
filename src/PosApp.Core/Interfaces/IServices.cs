@@ -125,7 +125,6 @@ public interface IDiscountService
     Task<IReadOnlyList<Discount>> GetActiveAsync(DateTime? at = null);
     Task<Discount> SaveAsync(Discount discount);
     Task SetActiveAsync(int id, bool isActive);
-    Task DeactivateAsync(int id);
 }
 
 public interface ISetupService

@@ -170,6 +170,7 @@
                     </Grid.ColumnDefinitions>
                     <Grid Grid.Column="0">
                         <TextBox x:Name="BarcodeBox" FontSize="18" Padding="14,10"
+                                 CaretBrush="{DynamicResource TextDarkBrush}"
                                  VerticalContentAlignment="Center"
                                  KeyDown="BarcodeBox_KeyDown"
                                  TextChanged="BarcodeBox_TextChanged"/>
@@ -311,23 +312,49 @@
 
                 <UniformGrid Grid.Row="1" Columns="2">
                     <Button Style="{StaticResource CommandTile}" Click="DeleteLine_Click">
-                        <StackPanel><TextBlock Text="Del" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource Common_Delete}" Style="{StaticResource CommandCaption}"/></StackPanel>
+                        <Grid>
+                            <TextBlock Text="Del" Style="{StaticResource ShortcutLabel}" VerticalAlignment="Top"/>
+                            <TextBlock Text="{DynamicResource Common_Delete}" Style="{StaticResource CommandCaption}"/>
+                        </Grid>
                     </Button>
                     <Button Style="{StaticResource CommandTile}" Click="Quantity_Click">
-                        <StackPanel><TextBlock Text="F4" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Quantity}" Style="{StaticResource CommandCaption}"/></StackPanel>
+                        <Grid>
+                            <TextBlock Text="F4" Style="{StaticResource ShortcutLabel}" VerticalAlignment="Top"/>
+                            <TextBlock Text="{DynamicResource POS_Quantity}" Style="{StaticResource CommandCaption}"/>
+                        </Grid>
                     </Button>
                 </UniformGrid>
 
 
                 <UniformGrid Grid.Row="2" Columns="3" Rows="3">
                     <Button Style="{StaticResource CommandTile}" Click="ServiceType_Click"><TextBlock Text="{DynamicResource POS_ServiceType}" Style="{StaticResource CommandCaption}"/></Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Discount_Click"><StackPanel><TextBlock Text="F2" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Discount}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
+                    <Button Style="{StaticResource CommandTile}" Click="Discount_Click">
+                        <Grid>
+                            <TextBlock Text="F2" Style="{StaticResource ShortcutLabel}" VerticalAlignment="Top"/>
+                            <TextBlock Text="{DynamicResource POS_Discount}" Style="{StaticResource CommandCaption}"/>
+                        </Grid>
+                    </Button>
                     <Button Style="{StaticResource CommandTile}" Click="Comment_Click"><TextBlock Text="{DynamicResource POS_Comment}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="CustomerButton_Click"><TextBlock Text="{DynamicResource POS_Customer}" Style="{StaticResource CommandCaption}"/></Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Suspend_Click"><StackPanel><TextBlock Text="F9" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_SaveSale}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
+                    <Button Style="{StaticResource CommandTile}" Click="Suspend_Click">
+                        <Grid>
+                            <TextBlock Text="F9" Style="{StaticResource ShortcutLabel}" VerticalAlignment="Top"/>
+                            <TextBlock Text="{DynamicResource POS_SaveSale}" Style="{StaticResource CommandCaption}"/>
+                        </Grid>
+                    </Button>
                     <Button Style="{StaticResource CommandTile}" Click="Refund_Click"><TextBlock Text="{DynamicResource POS_CustomRefund}" Style="{StaticResource CommandCaption}"/></Button>
-                    <Button Style="{StaticResource PaymentTile}" Click="Checkout_Click"><StackPanel><TextBlock Text="F10" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Payment}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Recall_Click"><StackPanel><TextBlock Text="F7" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Transfer}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
+                    <Button Style="{StaticResource PaymentTile}" Click="Checkout_Click">
+                        <Grid>
+                            <TextBlock Text="F10" Style="{StaticResource ShortcutLabel}" VerticalAlignment="Top"/>
+                            <TextBlock Text="{DynamicResource POS_Payment}" Style="{StaticResource CommandCaption}"/>
+                        </Grid>
+                    </Button>
+                    <Button Style="{StaticResource CommandTile}" Click="Recall_Click">
+                        <Grid>
+                            <TextBlock Text="F7" Style="{StaticResource ShortcutLabel}" VerticalAlignment="Top"/>
+                            <TextBlock Text="{DynamicResource POS_Transfer}" Style="{StaticResource CommandCaption}"/>
+                        </Grid>
+                    </Button>
                     <Button Style="{StaticResource CommandTile}" Click="Management_Click"><TextBlock Text="{DynamicResource POS_More}" Style="{StaticResource CommandCaption}"/></Button>
                 </UniformGrid>
 

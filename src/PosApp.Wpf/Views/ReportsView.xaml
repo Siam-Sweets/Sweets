@@ -16,10 +16,18 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,16">
-                <TextBlock Text="{DynamicResource Rpt_Title}" Style="{StaticResource Heading1}"/>
-                <TextBlock Text="{DynamicResource Rpt_Subtitle}" Style="{StaticResource Muted}"/>
-            </StackPanel>
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource Rpt_Title}" Style="{StaticResource Heading1}"/>
+                    <TextBlock Text="{DynamicResource Rpt_Subtitle}" Style="{StaticResource Muted}"/>
+                </StackPanel>
+                <Button Grid.Column="1" Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
+                        Click="Print_Click" Padding="18,9" VerticalAlignment="Center"/>
+            </Grid>
 
             <!-- Period selector -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">

@@ -167,17 +167,6 @@ public class UserRoleToStringConverter : IValueConverter
         => Binding.DoNothing;
 }
 
-public class ActiveActionConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is bool active && active
-            ? ConverterText.Get("Common_Deactivate", "Deactivate")
-            : ConverterText.Get("Common_Restore", "Restore");
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => Binding.DoNothing;
-}
-
 public class ProductSaleModeConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

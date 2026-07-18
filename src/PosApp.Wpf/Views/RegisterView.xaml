@@ -24,10 +24,14 @@
                 <TextBlock Text="{DynamicResource Reg_Subtitle}"
                            Style="{StaticResource Muted}"/>
             </StackPanel>
-            <Border Grid.Column="1" x:Name="StatusBorder" CornerRadius="16" Padding="14,7"
-                    Background="{DynamicResource SurfaceMutedBrush}" VerticalAlignment="Center">
-                <TextBlock x:Name="StatusText" Text="{DynamicResource Reg_NoOpen}" FontWeight="SemiBold"/>
-            </Border>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
+                        Click="PrintPage_Click" Padding="18,9" Margin="0,0,8,0"/>
+                <Border x:Name="StatusBorder" CornerRadius="16" Padding="14,7"
+                        Background="{DynamicResource SurfaceMutedBrush}" VerticalAlignment="Center">
+                    <TextBlock x:Name="StatusText" Text="{DynamicResource Reg_NoOpen}" FontWeight="SemiBold"/>
+                </Border>
+            </StackPanel>
         </Grid>
 
         <UniformGrid Grid.Row="1" Columns="4" Margin="0,0,0,16">

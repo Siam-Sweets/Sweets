@@ -6,6 +6,7 @@ using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
 using PosApp.Core.Utilities;
+using PosApp.Wpf.Helpers;
 
 namespace PosApp.Wpf.Views;
 
@@ -14,6 +15,9 @@ public partial class RegisterView : UserControl, IRefreshable
     private readonly IRegisterService _register;
     private readonly IHardwareService _hardware;
     private CashSession? _openSession;
+    private RegisterSummary? _currentSummary;
+    private IReadOnlyList<CashMovementRow> _currentMovements = Array.Empty<CashMovementRow>();
+    private IReadOnlyList<RegisterSessionRow> _recentSessions = Array.Empty<RegisterSessionRow>();
 
     public RegisterView(IRegisterService register, IHardwareService hardware)
     {
@@ -37,7 +41,8 @@ public partial class RegisterView : UserControl, IRefreshable
     {
         _openSession = await _register.GetOpenSessionAsync();
         var recent = await _register.GetRecentSessionsAsync();
-        SessionGrid.ItemsSource = recent.Select(session => new RegisterSessionRow(session)).ToList();
+        _recentSessions = recent.Select(session => new RegisterSessionRow(session)).ToList();
+        SessionGrid.ItemsSource = _recentSessions;
 
         var isOpen = _openSession != null;
         OpenButton.IsEnabled = !isOpen;
@@ -54,6 +59,8 @@ public partial class RegisterView : UserControl, IRefreshable
             StatusText.Text = "No open session";
             StatusBorder.Background = (System.Windows.Media.Brush)FindResource("SurfaceMutedBrush");
             OpeningText.Text = CashSalesText.Text = MovementsText.Text = ExpectedText.Text = "—";
+            _currentSummary = null;
+            _currentMovements = Array.Empty<CashMovementRow>();
             MovementGrid.ItemsSource = null;
             return;
         }
@@ -62,11 +69,75 @@ public partial class RegisterView : UserControl, IRefreshable
         StatusBorder.Background = (System.Windows.Media.Brush)FindResource("SuccessSurfaceBrush");
         var summary = await _register.GetSummaryAsync(_openSession.Id);
         var movements = await _register.GetMovementsAsync(_openSession.Id);
-        MovementGrid.ItemsSource = movements.Select(movement => new CashMovementRow(movement)).ToList();
+        _currentSummary = summary;
+        _currentMovements = movements.Select(movement => new CashMovementRow(movement)).ToList();
+        MovementGrid.ItemsSource = _currentMovements;
         OpeningText.Text = Money(summary.OpeningFloat);
         CashSalesText.Text = Money(summary.CashSales);
         MovementsText.Text = $"+{Money(summary.CashIn)} / -{Money(summary.CashOut)}";
         ExpectedText.Text = Money(summary.ExpectedCash);
+    }
+
+
+    private async void PrintPage_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            IsEnabled = false;
+            await LoadAsync();
+            await PageReportPrinter.PrintAsync(_hardware, BuildPagePrintReport(), "cash register page");
+        }
+        catch (Exception ex)
+        {
+            LocalizedMessageBox.Show(ex.Message, "Unable to print register", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
+    }
+
+    private string BuildPagePrintReport()
+    {
+        var builder = new StringBuilder();
+        PageReportPrinter.AppendHeader(builder, "CASH REGISTER", $"As of {DateTime.Now:dd MMM yyyy HH:mm}");
+        if (_currentSummary == null)
+        {
+            PageReportPrinter.AppendMetric(builder, "Status", "No open session");
+        }
+        else
+        {
+            var summary = _currentSummary;
+            PageReportPrinter.AppendMetric(builder, "Status",
+                $"Open since {DateTimeUtilities.ToLocal(summary.OpenedAt):dd MMM yyyy HH:mm}");
+            PageReportPrinter.AppendMetric(builder, "Opening cash", Money(summary.OpeningFloat));
+            PageReportPrinter.AppendMetric(builder, "Cash sales", Money(summary.CashSales));
+            PageReportPrinter.AppendMetric(builder, "Cash in", Money(summary.CashIn));
+            PageReportPrinter.AppendMetric(builder, "Cash out", Money(summary.CashOut));
+            PageReportPrinter.AppendMetric(builder, "Expected in drawer", Money(summary.ExpectedCash));
+            PageReportPrinter.AppendMetric(builder, "Transactions", summary.TransactionCount.ToString());
+        }
+
+        PageReportPrinter.AppendSection(builder, "Current session movements");
+        if (_currentMovements.Count == 0) PageReportPrinter.AppendWrapped(builder, "No current-session movements.");
+        foreach (var movement in _currentMovements)
+            PageReportPrinter.AppendEntry(builder,
+                $"{movement.LocalTime:dd MMM HH:mm} | {movement.Type} | {Money(movement.SignedAmount)}",
+                movement.Description);
+
+        PageReportPrinter.AppendSection(builder, "Recent register sessions");
+        if (_recentSessions.Count == 0) PageReportPrinter.AppendWrapped(builder, "No register sessions found.");
+        foreach (var session in _recentSessions)
+        {
+            var closed = session.ClosedLocal.HasValue ? session.ClosedLocal.Value.ToString("dd MMM HH:mm") : "Open";
+            PageReportPrinter.AppendEntry(builder,
+                $"{session.OpenedLocal:dd MMM HH:mm} - {closed} | {session.Status}",
+                $"Expected {Money(session.Expected.GetValueOrDefault())} | Variance {Money(session.Variance.GetValueOrDefault())}");
+        }
+
+        builder.AppendLine();
+        PageReportPrinter.AppendWrapped(builder, $"Printed {DateTime.Now:dd MMM yyyy HH:mm}");
+        return builder.ToString();
     }
 
     private async void Open_Click(object sender, RoutedEventArgs e)

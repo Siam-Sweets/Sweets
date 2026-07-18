@@ -1,19 +1,29 @@
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using PosApp.Core.Interfaces;
+using PosApp.Core.Models;
 using PosApp.Core.Utilities;
+using PosApp.Wpf.Helpers;
 
 namespace PosApp.Wpf.Views;
 
 public partial class DashboardView : UserControl, IRefreshable
 {
     private readonly IReportService _reports;
+    private readonly IHardwareService _hardware;
     private bool _loading;
+    private DateRangeReport? _range;
+    private DailySalesReport? _today;
+    private IReadOnlyList<TopProductRow> _topProducts = Array.Empty<TopProductRow>();
+    private IReadOnlyList<SalesByHourRow> _hourly = Array.Empty<SalesByHourRow>();
+    private IReadOnlyList<PaymentBreakdownRow> _payments = Array.Empty<PaymentBreakdownRow>();
 
-    public DashboardView(IReportService reports)
+    public DashboardView(IReportService reports, IHardwareService hardware)
     {
         InitializeComponent();
         _reports = reports;
+        _hardware = hardware;
     }
 
     public async Task RefreshAsync() => await LoadAsync();
@@ -37,27 +47,83 @@ public partial class DashboardView : UserControl, IRefreshable
             var top = await _reports.GetTopProductsAsync(from, to, 10);
             var hourly = await _reports.GetSalesByHourAsync(now.Date);
             var payments = await _reports.GetPaymentBreakdownAsync(from, to);
+
+            _range = range;
+            _today = today;
+            _topProducts = top.ToList();
+            _hourly = hourly.ToList();
+            _payments = payments.ToList();
+
             PeriodText.Text = $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
             SalesText.Text = FormattingUtilities.Money(range.NetSales, App.StoreSettings);
             TransactionsText.Text = range.TransactionCount.ToString();
             ProfitText.Text = FormattingUtilities.Money(range.GrossProfit, App.StoreSettings);
             TodayText.Text = FormattingUtilities.Money(today.NetSales, App.StoreSettings);
             DailyGrid.ItemsSource = range.Daily.OrderByDescending(row => row.Date).ToList();
-            TopProductsGrid.ItemsSource = top;
-            PaymentGrid.ItemsSource = payments;
-            HourlyGrid.ItemsSource = hourly
+            TopProductsGrid.ItemsSource = _topProducts;
+            PaymentGrid.ItemsSource = _payments;
+            HourlyGrid.ItemsSource = _hourly
                 .Select(row => new HourlyDashboardRow(row.Hour, row.TransactionCount, row.Revenue))
                 .ToList();
         }
         catch (Exception ex)
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Dashboard", MessageBoxButton.OK, MessageBoxImage.Error);
+            LocalizedMessageBox.Show(ex.Message, "Dashboard", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             IsEnabled = true;
             _loading = false;
         }
+    }
+
+    private async void Print_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadAsync();
+        if (_range == null || _today == null) return;
+        await PageReportPrinter.PrintAsync(_hardware, BuildPrintReport(), "management dashboard page");
+    }
+
+    private string BuildPrintReport()
+    {
+        var range = _range ?? throw new InvalidOperationException("Dashboard data is not loaded.");
+        var today = _today ?? throw new InvalidOperationException("Today's dashboard data is not loaded.");
+        var builder = new StringBuilder();
+        PageReportPrinter.AppendHeader(builder, "MANAGEMENT DASHBOARD",
+            $"Period: {range.From:dd MMM yyyy} - {range.To:dd MMM yyyy}");
+        PageReportPrinter.AppendMetric(builder, "Monthly sales", PageReportPrinter.Money(range.NetSales));
+        PageReportPrinter.AppendMetric(builder, "Transactions", range.TransactionCount.ToString());
+        PageReportPrinter.AppendMetric(builder, "Gross profit", PageReportPrinter.Money(range.GrossProfit));
+        PageReportPrinter.AppendMetric(builder, "Today", PageReportPrinter.Money(today.NetSales));
+
+        PageReportPrinter.AppendSection(builder, "Daily sales");
+        if (range.Daily.Count == 0) PageReportPrinter.AppendWrapped(builder, "No sales this month.");
+        foreach (var row in range.Daily.OrderBy(item => item.Date))
+            PageReportPrinter.AppendEntry(builder, row.Date.ToString("dd MMM yyyy"),
+                $"Txns {row.TransactionCount} | Net {PageReportPrinter.Money(row.NetSales)}",
+                $"Gross profit {PageReportPrinter.Money(row.GrossProfit)}");
+
+        PageReportPrinter.AppendSection(builder, "Payment breakdown");
+        if (_payments.Count == 0) PageReportPrinter.AppendWrapped(builder, "No payments this month.");
+        foreach (var row in _payments)
+            PageReportPrinter.AppendEntry(builder, PageReportPrinter.PaymentMethodName(row.Method),
+                $"Transactions {row.Count} | Total {PageReportPrinter.Money(row.Total)}");
+
+        PageReportPrinter.AppendSection(builder, "Top products");
+        if (_topProducts.Count == 0) PageReportPrinter.AppendWrapped(builder, "No products sold this month.");
+        foreach (var row in _topProducts)
+            PageReportPrinter.AppendEntry(builder, row.ProductName,
+                $"Qty {row.QuantitySold:0.###} | Revenue {PageReportPrinter.Money(row.Revenue)}");
+
+        PageReportPrinter.AppendSection(builder, "Sales by hour today");
+        if (_hourly.Count == 0) PageReportPrinter.AppendWrapped(builder, "No sales today.");
+        foreach (var row in _hourly)
+            PageReportPrinter.AppendEntry(builder, $"{row.Hour:00}:00",
+                $"Transactions {row.TransactionCount} | Revenue {PageReportPrinter.Money(row.Revenue)}");
+
+        builder.AppendLine();
+        PageReportPrinter.AppendWrapped(builder, $"Printed {DateTime.Now:dd MMM yyyy HH:mm}");
+        return builder.ToString();
     }
 }
 
