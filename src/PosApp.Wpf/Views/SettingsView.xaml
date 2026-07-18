@@ -153,7 +153,8 @@
                                     <StackPanel Margin="0,0,10,0"><TextBlock Text="{DynamicResource Set_Footer}" Style="{StaticResource Muted}"/><TextBox x:Name="FooterBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
                                     <StackPanel Grid.Column="1" Margin="10,0,0,0"><TextBlock Text="{DynamicResource Set_ReceiptWidth}" Style="{StaticResource Muted}"/><TextBox x:Name="ReceiptWidthBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
                                 </Grid>
-                                <CheckBox x:Name="AutoPrintCheckbox" Content="{DynamicResource Set_AutoPrint}" Margin="0,16,0,0"/>
+                                <TextBlock Text="{DynamicResource Set_PrintFromHistory}" Style="{StaticResource Muted}"
+                                           TextWrapping="Wrap" Margin="0,16,0,0"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

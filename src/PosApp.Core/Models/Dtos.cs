@@ -71,6 +71,26 @@ public class SaleDraftLine : INotifyPropertyChanged
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
+/// <summary>
+/// A validated partial or full refund against one completed sale. Quantities
+/// always refer to the original sale-item rows so repeated partial refunds can
+/// never return more stock than was sold.
+/// </summary>
+public sealed class RefundDraft
+{
+    public int SaleId { get; set; }
+    public int UserId { get; set; }
+    public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.Cash;
+    public string? Reason { get; set; }
+    public List<RefundDraftLine> Lines { get; set; } = new();
+}
+
+public sealed class RefundDraftLine
+{
+    public int SaleItemId { get; set; }
+    public decimal Quantity { get; set; }
+}
+
 public class StoreSettings
 {
     public string StoreName { get; set; } = "My Store";
@@ -83,7 +103,10 @@ public class StoreSettings
     public string Country { get; set; } = "Bangladesh";
     public int CurrencyDecimals { get; set; } = 2;
     public string FooterNote { get; set; } = "Thank you for your business!";
-    public bool PrintReceiptAutomatically { get; set; } = true;
+    // Retained for backward-compatible settings deserialization. Checkout no
+    // longer prints automatically; receipts are printed deliberately from
+    // Sales History so PDF printers cannot interrupt a completed transaction.
+    public bool PrintReceiptAutomatically { get; set; } = false;
     public string ReceiptPrinterName { get; set; } = "";
     // Retained for backward-compatible settings deserialization. Loyalty is
     // intentionally disabled until the feature is reintroduced end-to-end.
@@ -116,6 +139,7 @@ public sealed class SafeUpdatePackageInfo
     public string ProductName { get; init; } = string.Empty;
     public string CurrentVersion { get; init; } = string.Empty;
     public string TargetVersion { get; init; } = string.Empty;
+    public string Publisher { get; init; } = string.Empty;
     public string Sha256 { get; init; } = string.Empty;
     public long SizeBytes { get; init; }
     public bool IsValid { get; init; }

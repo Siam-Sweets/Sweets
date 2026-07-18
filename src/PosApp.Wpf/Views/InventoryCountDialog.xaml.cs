@@ -54,19 +54,19 @@ public partial class InventoryCountDialog : Window
         var counted = _rows.Where(row => row.CountedQuantity.HasValue).ToList();
         if (counted.Count == 0)
         {
-            MessageBox.Show("Enter at least one counted quantity.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter at least one counted quantity.",
                 "Inventory Count", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (counted.Any(row => row.CountedQuantity.HasValue && row.CountedQuantity.Value < 0m))
         {
-            MessageBox.Show("Counted quantities cannot be negative.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Counted quantities cannot be negative.",
                 "Inventory Count", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         var changed = counted.Count(row => row.Difference != 0m);
-        if (MessageBox.Show(
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 $"Post this count for {counted.Count} products? {changed} stock balances will change.",
                 "Post Inventory Count", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
@@ -81,14 +81,14 @@ public partial class InventoryCountDialog : Window
                 }).ToList(),
                 NoteBox.Text,
                 _userId);
-            MessageBox.Show("Inventory count posted.", "Inventory Count",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Inventory count posted.", "Inventory Count",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             DialogResult = true;
             Close();
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to post inventory count",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to post inventory count",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally

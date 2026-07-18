@@ -53,7 +53,7 @@ public partial class ReportsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load reports", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load reports", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -90,7 +90,7 @@ public partial class ReportsView : UserControl, IRefreshable
         var to = (ToDate.SelectedDate ?? DateTime.Today).Date;
         if (to < from)
         {
-            MessageBox.Show("The To date cannot be earlier than the From date.", "Invalid date range",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("The To date cannot be earlier than the From date.", "Invalid date range",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }

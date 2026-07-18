@@ -96,7 +96,7 @@
                     <DataGridTextColumn Header="{DynamicResource Sales_Tax}" Binding="{Binding TaxTotal, Converter={StaticResource Money}}" Width="90"/>
                     <DataGridTextColumn Header="{DynamicResource Rpt_Total}" Binding="{Binding Total, Converter={StaticResource Money}}" Width="100"/>
                     <DataGridTextColumn Header="{DynamicResource Sales_Status}" Binding="{Binding Status, Converter={StaticResource StatusStr}}" Width="100"/>
-                    <DataGridTemplateColumn Header="{DynamicResource Sales_Actions}" Width="280">
+                    <DataGridTemplateColumn Header="{DynamicResource Sales_Actions}" Width="320">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -104,7 +104,7 @@
                                             Padding="8,4" Margin="2" Click="View_Click" Tag="{Binding}"/>
                                     <Button Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
                                             Padding="8,4" Margin="2" Click="Print_Click" Tag="{Binding}"/>
-                                    <Button Content="{DynamicResource Sales_Refund}" Style="{StaticResource OutlineButton}"
+                                    <Button Content="{DynamicResource POS_CustomRefund}" Style="{StaticResource OutlineButton}"
                                             Padding="8,4" Margin="2" Click="Refund_Click" Tag="{Binding}" IsEnabled="{Binding CanRefund}"/>
                                     <Button Content="{DynamicResource Sales_Void}" Style="{StaticResource DangerButton}"
                                             Padding="8,4" Margin="2" Click="Void_Click" Tag="{Binding}" IsEnabled="{Binding CanVoid}"/>

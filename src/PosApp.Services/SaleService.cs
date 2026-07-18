@@ -28,6 +28,7 @@ public class SaleService : ISaleService
     public async Task<Sale> SuspendAsync(SaleDraft draft)
     {
         ValidateDraftLines(draft);
+        _db.ChangeTracker.Clear();
         Sale? sale = null;
         if (draft.SuspendedSaleId.HasValue)
         {
@@ -58,11 +59,12 @@ public class SaleService : ISaleService
         foreach (var line in draft.Lines) sale.Items.Add(BuildSaleItem(line, sale));
 
         await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
         return sale;
     }
 
     public async Task<Sale> RecallSuspendedAsync(int saleId)
-        => await _db.Sales.Include(s => s.Items).Include(s => s.Customer)
+        => await _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Customer)
                .FirstOrDefaultAsync(s => s.Id == saleId && s.Status == SaleStatus.Suspended)
            ?? throw new InvalidOperationException("Suspended sale not found.");
 
@@ -94,9 +96,17 @@ public class SaleService : ISaleService
             !draft.Payments.Any(p => p.Method == PaymentMethod.Cash))
             throw new InvalidOperationException("Only cash payments can produce change.");
 
+        // SaleService lives for the whole signed-in window. Discard entities from
+        // earlier operations before reading stock so an inventory count performed
+        // by another view cannot be overwritten by a stale tracked Product.
+        _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
+            var openSessionId = await _db.CashSessions.AsNoTracking()
+                .Where(session => session.ClosedAt == null)
+                .Select(session => (int?)session.Id)
+                .SingleOrDefaultAsync();
             var receiptNo = draft.SuspendedSaleId.HasValue
                 ? (await _db.Sales.FindAsync(draft.SuspendedSaleId.Value))?.ReceiptNumber
                   ?? await GenerateReceiptNumberAsync()
@@ -120,6 +130,7 @@ public class SaleService : ISaleService
                 ReceiptNumber = receiptNo,
                 CustomerId = draft.CustomerId,
                 UserId = draft.UserId,
+                CashSessionId = openSessionId,
                 Status = SaleStatus.Completed,
                 SaleDate = DateTime.UtcNow,
                 Subtotal = draft.Subtotal,
@@ -187,6 +198,7 @@ public class SaleService : ISaleService
             if (stockLinks.Count > 0) await _db.SaveChangesAsync();
 
             await transaction.CommitAsync();
+            _db.ChangeTracker.Clear();
             return sale;
         }
         catch
@@ -212,18 +224,41 @@ public class SaleService : ISaleService
         var completedIds = sales.Where(s => s.Status == SaleStatus.Completed).Select(s => s.Id).ToList();
         if (completedIds.Count > 0)
         {
-            var refundedIds = await _db.Sales.AsNoTracking()
-                .Where(s => s.RefundedSaleId.HasValue && completedIds.Contains(s.RefundedSaleId.Value))
-                .Select(s => s.RefundedSaleId!.Value)
+            var refunds = await _db.Sales.AsNoTracking()
+                .Where(s => s.Status == SaleStatus.Refunded &&
+                            s.RefundedSaleId.HasValue && completedIds.Contains(s.RefundedSaleId.Value))
+                .Select(s => new
+                {
+                    OriginalSaleId = s.RefundedSaleId!.Value,
+                    s.Subtotal,
+                    s.DiscountTotal,
+                    s.TaxTotal,
+                    s.Rounding
+                })
                 .ToListAsync();
-            var refundedSet = refundedIds.ToHashSet();
-            foreach (var sale in sales) sale.HasRefund = refundedSet.Contains(sale.Id);
+            var refundedBySale = refunds
+                .GroupBy(refund => refund.OriginalSaleId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => new
+                    {
+                        Count = group.Count(),
+                        Total = group.Sum(refund => Math.Abs(
+                            refund.Subtotal - refund.DiscountTotal + refund.TaxTotal + refund.Rounding))
+                    });
+            foreach (var sale in sales.Where(sale => sale.Status == SaleStatus.Completed))
+            {
+                if (!refundedBySale.TryGetValue(sale.Id, out var refundState)) continue;
+                sale.HasRefund = refundState.Count > 0;
+                sale.IsFullyRefunded = refundState.Total + 0.0001m >= Math.Abs(sale.Total);
+            }
         }
         return sales;
     }
 
     public async Task<Sale> VoidSaleAsync(int saleId, int userId)
     {
+        _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
@@ -233,6 +268,16 @@ public class SaleService : ISaleService
                 throw new InvalidOperationException("Only completed sales can be voided.");
             if (await _db.Sales.AnyAsync(s => s.RefundedSaleId == saleId))
                 throw new InvalidOperationException("A refunded sale cannot be voided.");
+
+            if (sale.CashSessionId.HasValue)
+            {
+                var ownerSession = await _db.CashSessions.AsNoTracking()
+                    .FirstOrDefaultAsync(session => session.Id == sale.CashSessionId.Value)
+                    ?? throw new InvalidOperationException("The sale's register session could not be found.");
+                if (ownerSession.ClosedAt.HasValue)
+                    throw new InvalidOperationException(
+                        "This sale belongs to a closed register. Process a refund in an open register instead of voiding it.");
+            }
 
             foreach (var item in sale.Items)
             {
@@ -259,6 +304,7 @@ public class SaleService : ISaleService
             sale.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            _db.ChangeTracker.Clear();
             return sale;
         }
         catch
@@ -271,87 +317,181 @@ public class SaleService : ISaleService
 
     public async Task<Sale> RefundSaleAsync(int saleId, int userId, string? reason = null)
     {
+        _db.ChangeTracker.Clear();
+        var original = await _db.Sales.AsNoTracking()
+            .Include(sale => sale.Items)
+            .Include(sale => sale.Payments)
+            .FirstOrDefaultAsync(sale => sale.Id == saleId)
+            ?? throw new InvalidOperationException("Sale not found.");
+        var priorItems = await _db.Sales.AsNoTracking()
+            .Where(sale => sale.RefundedSaleId == saleId && sale.Status == SaleStatus.Refunded)
+            .SelectMany(sale => sale.Items)
+            .ToListAsync();
+        var returnedByLine = BuildReturnedQuantityMap(original.Items, priorItems);
+        var lines = original.Items
+            .Select(item => new RefundDraftLine
+            {
+                SaleItemId = item.Id,
+                Quantity = Math.Max(0m, item.Quantity - returnedByLine.GetValueOrDefault(item.Id))
+            })
+            .Where(line => line.Quantity > 0.0001m)
+            .ToList();
+        if (lines.Count == 0)
+            throw new InvalidOperationException("This sale has already been fully refunded.");
+
+        return await RefundSaleAsync(new RefundDraft
+        {
+            SaleId = saleId,
+            UserId = userId,
+            PaymentMethod = original.Payments.FirstOrDefault()?.Method ?? PaymentMethod.Cash,
+            Reason = reason,
+            Lines = lines
+        });
+    }
+
+    public async Task<Sale> RefundSaleAsync(RefundDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (draft.SaleId <= 0) throw new InvalidOperationException("Select a completed sale to refund.");
+        if (draft.UserId <= 0) throw new InvalidOperationException("A signed-in user is required.");
+        if (draft.Lines.Count == 0) throw new InvalidOperationException("Select at least one item to refund.");
+        if (!Enum.IsDefined(draft.PaymentMethod))
+            throw new InvalidOperationException("Select a valid refund payment method.");
+        if (draft.Lines.Any(line => line.SaleItemId <= 0 || line.Quantity <= 0m))
+            throw new InvalidOperationException("Refund quantities must be greater than zero.");
+
+        _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
             var original = await _db.Sales.Include(s => s.Items).Include(s => s.Payments)
-                .FirstOrDefaultAsync(s => s.Id == saleId)
+                .FirstOrDefaultAsync(s => s.Id == draft.SaleId)
                 ?? throw new InvalidOperationException("Sale not found.");
             if (original.Status != SaleStatus.Completed)
                 throw new InvalidOperationException("Only completed sales can be refunded.");
-            if (await _db.Sales.AnyAsync(s => s.RefundedSaleId == saleId))
-                throw new InvalidOperationException("This sale has already been refunded.");
+
+            var priorRefunds = await _db.Sales
+                .Include(sale => sale.Items)
+                .Where(sale => sale.RefundedSaleId == original.Id && sale.Status == SaleStatus.Refunded)
+                .ToListAsync();
+            var returnedByLine = BuildReturnedQuantityMap(
+                original.Items,
+                priorRefunds.SelectMany(refund => refund.Items));
+
+            var requestedByLine = draft.Lines
+                .GroupBy(line => line.SaleItemId)
+                .ToDictionary(group => group.Key, group => group.Sum(line => line.Quantity));
+            var originalById = original.Items.ToDictionary(item => item.Id);
+            var selections = new List<(SaleItem Item, decimal Quantity, decimal Discount, decimal Tax)>();
+            foreach (var request in requestedByLine)
+            {
+                if (!originalById.TryGetValue(request.Key, out var item))
+                    throw new InvalidOperationException("A selected refund line does not belong to this sale.");
+                var remaining = item.Quantity - returnedByLine.GetValueOrDefault(item.Id);
+                if (request.Value > remaining + 0.0001m)
+                    throw new InvalidOperationException(
+                        $"Only {remaining:0.###} of {item.ProductName} remains refundable.");
+
+                var ratio = item.Quantity == 0m ? 0m : request.Value / item.Quantity;
+                var discount = Math.Round(item.DiscountAmount * ratio, 4, MidpointRounding.AwayFromZero);
+                var gross = item.UnitPrice * request.Value;
+                var tax = Math.Round((gross - discount) * item.TaxRate / 100m, 4,
+                    MidpointRounding.AwayFromZero);
+                selections.Add((item, request.Value, discount, tax));
+            }
+
+            var allRemainingSelected = original.Items.All(item =>
+                item.Quantity - returnedByLine.GetValueOrDefault(item.Id) -
+                requestedByLine.GetValueOrDefault(item.Id) <= 0.0001m);
+            var subtotal = -selections.Sum(selection => selection.Item.UnitPrice * selection.Quantity);
+            var discountTotal = -selections.Sum(selection => selection.Discount);
+            var taxTotal = -selections.Sum(selection => selection.Tax);
+            var priorRefundTotal = priorRefunds.Sum(refund => Math.Abs(refund.Total));
+            var remainingFinancialTotal = Math.Max(0m, Math.Abs(original.Total) - priorRefundTotal);
+            var beforeRounding = subtotal - discountTotal + taxTotal;
+            var rounding = allRemainingSelected ? -remainingFinancialTotal - beforeRounding : 0m;
+            var refundTotal = subtotal - discountTotal + taxTotal + rounding;
+            if (refundTotal >= -0.0001m)
+                throw new InvalidOperationException("The selected items do not have a refundable value.");
+
+            var openSessionId = await _db.CashSessions.AsNoTracking()
+                .Where(session => session.ClosedAt == null)
+                .Select(session => (int?)session.Id)
+                .SingleOrDefaultAsync();
+            if (draft.PaymentMethod == PaymentMethod.Cash && !openSessionId.HasValue)
+            {
+                throw new InvalidOperationException(
+                    "Open the cash register before processing a refund that returns cash.");
+            }
 
             var refund = new Sale
             {
                 ReceiptNumber = await GenerateReceiptNumberAsync(),
-                UserId = userId,
+                UserId = draft.UserId,
                 CustomerId = original.CustomerId,
+                CashSessionId = openSessionId,
                 Status = SaleStatus.Refunded,
                 SaleDate = DateTime.UtcNow,
-                Subtotal = -original.Subtotal,
-                DiscountTotal = -original.DiscountTotal,
-                TaxTotal = -original.TaxTotal,
-                Rounding = -original.Rounding,
-                AmountPaid = -original.Total,
+                Subtotal = subtotal,
+                DiscountTotal = discountTotal,
+                TaxTotal = taxTotal,
+                Rounding = rounding,
+                AmountPaid = refundTotal,
                 Change = 0m,
                 RefundedSaleId = original.Id,
                 ServiceType = original.ServiceType,
-                Note = Clean(reason) ?? $"Refund of {original.ReceiptNumber}"
+                Note = Clean(draft.Reason) ?? $"Refund of {original.ReceiptNumber}"
             };
 
-            foreach (var payment in original.Payments)
+            refund.Payments.Add(new SalePayment
             {
-                refund.Payments.Add(new SalePayment
-                {
-                    Sale = refund,
-                    Method = payment.Method,
-                    Amount = -payment.Amount,
-                    Reference = string.IsNullOrWhiteSpace(payment.Reference)
-                        ? $"Refund {original.ReceiptNumber}"
-                        : $"Refund {original.ReceiptNumber}: {payment.Reference}"
-                });
-            }
+                Sale = refund,
+                Method = draft.PaymentMethod,
+                Amount = refundTotal,
+                Reference = $"Refund {original.ReceiptNumber}"
+            });
 
             var stockLinks = new List<(StockTransaction Transaction, SaleItem Item)>();
-            foreach (var item in original.Items)
+            foreach (var selection in selections)
             {
+                var item = selection.Item;
                 var refundItem = new SaleItem
                 {
                     Sale = refund,
                     ProductId = item.ProductId,
                     ProductName = item.ProductName,
                     Sku = item.Sku,
-                    Quantity = -item.Quantity,
+                    Quantity = -selection.Quantity,
                     UnitPrice = item.UnitPrice,
                     CostPrice = item.CostPrice,
                     TaxRate = item.TaxRate,
-                    DiscountAmount = -item.DiscountAmount,
+                    DiscountAmount = -selection.Discount,
                     DiscountReason = item.DiscountReason,
                     PromotionId = item.PromotionId,
+                    RefundedSaleItemId = item.Id,
                     IsRefunded = true
                 };
                 refund.Items.Add(refundItem);
 
                 var product = await _db.Products.FindAsync(item.ProductId);
                 if (product?.StockQuantity is not decimal current) continue;
-                product.StockQuantity = current + item.Quantity;
+                product.StockQuantity = current + selection.Quantity;
                 product.UpdatedAt = DateTime.UtcNow;
                 var ledger = new StockTransaction
                 {
                     ProductId = product.Id,
                     Type = StockTransactionType.Return,
-                    Quantity = item.Quantity,
+                    Quantity = selection.Quantity,
                     BalanceAfter = product.StockQuantity.Value,
                     UnitCost = item.CostPrice,
-                    UserId = userId,
+                    UserId = draft.UserId,
                     Note = $"Refund of sale {original.ReceiptNumber}"
                 };
                 _db.StockTransactions.Add(ledger);
                 stockLinks.Add((ledger, refundItem));
             }
 
-            await ReleasePromotionsAsync(original.Items);
+            if (allRemainingSelected) await ReleasePromotionsAsync(original.Items);
             original.UpdatedAt = DateTime.UtcNow;
             _db.Sales.Add(refund);
             await _db.SaveChangesAsync();
@@ -363,6 +503,7 @@ public class SaleService : ISaleService
             if (stockLinks.Count > 0) await _db.SaveChangesAsync();
 
             await transaction.CommitAsync();
+            _db.ChangeTracker.Clear();
             return refund;
         }
         catch
@@ -371,6 +512,30 @@ public class SaleService : ISaleService
             _db.ChangeTracker.Clear();
             throw;
         }
+    }
+
+    private static Dictionary<int, decimal> BuildReturnedQuantityMap(
+        IEnumerable<SaleItem> originalItems,
+        IEnumerable<SaleItem> refundItems)
+    {
+        var originals = originalItems.ToList();
+        var result = originals.ToDictionary(item => item.Id, _ => 0m);
+        foreach (var refundItem in refundItems)
+        {
+            var originalId = refundItem.RefundedSaleItemId;
+            if (!originalId.HasValue || !result.ContainsKey(originalId.Value))
+            {
+                originalId = originals
+                    .Where(item => item.ProductId == refundItem.ProductId &&
+                                   Math.Abs(item.UnitPrice - refundItem.UnitPrice) < 0.0001m)
+                    .OrderBy(item => item.Id)
+                    .Select(item => (int?)item.Id)
+                    .FirstOrDefault();
+            }
+            if (originalId.HasValue)
+                result[originalId.Value] += Math.Abs(refundItem.Quantity);
+        }
+        return result;
     }
 
     private async Task ValidateAndConsumePromotionsAsync(SaleDraft draft)

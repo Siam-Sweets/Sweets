@@ -28,11 +28,19 @@ public class BackupService : IBackupService
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Choose a path different from the live database.");
 
-            using var source = new SqliteConnection(DbPathResolver.ConnectionString());
+            using var source = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = DbPathResolver.DefaultPath(),
+                Mode = SqliteOpenMode.ReadOnly,
+                Cache = SqliteCacheMode.Private,
+                Pooling = false
+            }.ToString());
             using var target = new SqliteConnection(new SqliteConnectionStringBuilder
             {
                 DataSource = destination,
-                Mode = SqliteOpenMode.ReadWriteCreate
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Cache = SqliteCacheMode.Private,
+                Pooling = false
             }.ToString());
             source.Open();
             target.Open();
@@ -46,34 +54,34 @@ public class BackupService : IBackupService
 
     public async Task ValidateBackupAsync(string backupPath)
     {
-        if (!File.Exists(backupPath))
-            throw new FileNotFoundException("Backup file not found.", backupPath);
-
-        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-        {
-            DataSource = Path.GetFullPath(backupPath),
-            Mode = SqliteOpenMode.ReadOnly
-        }.ToString());
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = "PRAGMA quick_check;";
-        var result = (await command.ExecuteScalarAsync())?.ToString();
-        if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("The selected file is not a healthy SQLite backup.");
-
-        command.CommandText =
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' " +
-            "AND name IN ('Users', 'Products', 'Sales', 'Settings');";
-        var requiredTables = Convert.ToInt32(await command.ExecuteScalarAsync());
-        if (requiredTables != 4)
-            throw new InvalidOperationException("The selected file is not a PosApp database backup.");
+        await Task.Run(() => DatabaseFileValidator.ValidatePosAppDatabase(backupPath));
     }
 
     public async Task StageRestoreAsync(string backupPath)
     {
         await ValidateBackupAsync(backupPath);
 
-        File.Copy(backupPath, DbPathResolver.PendingRestorePath(), overwrite: true);
+        var pending = DbPathResolver.PendingRestorePath();
+        var temporary = pending + $".{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await Task.Run(() =>
+            {
+                DatabaseFileValidator.CopyDurably(backupPath, temporary);
+                DatabaseFileValidator.ValidatePosAppDatabase(temporary);
+
+                // The temporary file is in the same directory as the pending file,
+                // allowing Windows to publish the fully flushed copy atomically.
+                if (File.Exists(pending))
+                    File.Replace(temporary, pending, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                else
+                    File.Move(temporary, pending);
+            });
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     private void PruneAutomaticBackups(int keep)

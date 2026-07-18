@@ -180,6 +180,7 @@
     <sys:String x:Key="Pay_Bank">Bank Transfer</sys:String>
     <sys:String x:Key="Pay_StoreCredit">Store Credit</sys:String>
     <sys:String x:Key="Pay_Coupon">Coupon</sys:String>
+    <sys:String x:Key="Pay_Other">Other</sys:String>
     <sys:String x:Key="Pay_Reference">Transaction reference</sys:String>
     <sys:String x:Key="Pay_ReferenceRequired">Enter the card, wallet, or bank transaction reference.</sys:String>
     <sys:String x:Key="Pay_Complete">Complete Sale</sys:String>
@@ -312,6 +313,7 @@
     <sys:String x:Key="Set_Footer">Receipt Footer</sys:String>
     <sys:String x:Key="Set_Printer">Receipt Printer</sys:String>
     <sys:String x:Key="Set_AutoPrint">Auto-print receipt</sys:String>
+    <sys:String x:Key="Set_PrintFromHistory">Receipts are saved automatically. Print them when needed from Sales History so checkout is never interrupted by a printer or PDF save dialog.</sys:String>
     <sys:String x:Key="Set_Language">Language</sys:String>
     <sys:String x:Key="Set_Theme">Theme</sys:String>
     <sys:String x:Key="Set_Light">Light</sys:String>
@@ -394,6 +396,7 @@
     <sys:String x:Key="Shell_UserInfo">User information</sys:String>
     <sys:String x:Key="Shell_SignOut">Sign out</sys:String>
     <sys:String x:Key="Shell_FullScreen">Full screen</sys:String>
+    <sys:String x:Key="Shell_ExitFullScreen">Exit full screen</sys:String>
     <sys:String x:Key="Shell_ExitApp">Exit</sys:String>
 
     <!-- Management dashboard -->
@@ -451,7 +454,7 @@
     <sys:String x:Key="Set_Database">Database</sys:String>
     <sys:String x:Key="Set_Update">Update &amp; recovery</sys:String>
     <sys:String x:Key="Set_SafeUpdate">Safe offline update</sys:String>
-    <sys:String x:Key="Set_SafeUpdateHelp">Choose a newer PosApp setup installer already saved on this computer. PosApp verifies its product and version, records its SHA-256 hash, creates a healthy database snapshot, and then starts Setup.</sys:String>
+    <sys:String x:Key="Set_SafeUpdateHelp">Choose a newer, digitally signed PosApp setup installer already saved on this computer. PosApp verifies its trusted Windows publisher, product, version, and SHA-256 hash, creates a healthy database snapshot, and then starts Setup.</sys:String>
     <sys:String x:Key="Set_CurrentVersion">Current version</sys:String>
     <sys:String x:Key="Set_UpdateStatus">Update status</sys:String>
     <sys:String x:Key="Set_SelectedInstaller">Selected installer</sys:String>
@@ -463,6 +466,23 @@
     <sys:String x:Key="Set_UpdateBackupFolder">Update recovery folder</sys:String>
     <sys:String x:Key="Set_About">About</sys:String>
     <sys:String x:Key="Set_OfflineAbout">Local-first point of sale. Sales, inventory, users, reports, configuration, and backups remain on this computer.</sys:String>
+
+    <!-- Custom refund -->
+    <sys:String x:Key="POS_CustomRefund">Custom refund</sys:String>
+    <sys:String x:Key="Refund_CustomTitle">Custom refund</sys:String>
+    <sys:String x:Key="Refund_CustomHelp">Select the returned items and enter the quantity for each one. Previously returned quantities cannot be refunded again.</sys:String>
+    <sys:String x:Key="Refund_SelectAll">Select all remaining</sys:String>
+    <sys:String x:Key="Refund_Return">Return</sys:String>
+    <sys:String x:Key="Refund_Sold">Sold</sys:String>
+    <sys:String x:Key="Refund_PreviouslyReturned">Returned</sys:String>
+    <sys:String x:Key="Refund_Remaining">Remaining</sys:String>
+    <sys:String x:Key="Refund_Quantity">Refund qty</sys:String>
+    <sys:String x:Key="Refund_Amount">Amount</sys:String>
+    <sys:String x:Key="Refund_Method">Refund method</sys:String>
+    <sys:String x:Key="Refund_Reason">Reason / reference</sys:String>
+    <sys:String x:Key="Refund_Total">Refund total</sys:String>
+    <sys:String x:Key="Refund_StockHelp">Confirmed quantities are returned to stock and recorded as a linked refund receipt.</sys:String>
+    <sys:String x:Key="Refund_Process">Process refund</sys:String>
 
     <!-- Common -->
     <sys:String x:Key="Common_Save">Save</sys:String>

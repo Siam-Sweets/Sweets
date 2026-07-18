@@ -44,7 +44,7 @@ public partial class SalesView : UserControl, IRefreshable
 
         if (to < from)
         {
-            MessageBox.Show("The To date cannot be earlier than the From date.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("The To date cannot be earlier than the From date.",
                 "Invalid date range", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -70,7 +70,7 @@ public partial class SalesView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load sales", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load sales", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -116,7 +116,7 @@ public partial class SalesView : UserControl, IRefreshable
             if (full != null)
             {
                 var ok = await _hardware.PrintReceiptAsync(full);
-                MessageBox.Show(ok ? "Receipt sent to the printer." : "Printer not available. Sale remains saved.",
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ok ? "Receipt sent to the printer." : "Printer not available. Sale remains saved.",
                     "Print", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
             }
         }
@@ -126,23 +126,40 @@ public partial class SalesView : UserControl, IRefreshable
     {
         if (sender is Button btn && btn.Tag is Sale s)
         {
-            if (s.Status != SaleStatus.Completed)
+            if (!s.CanRefund)
             {
-                MessageBox.Show("Only completed sales can be refunded.", "Refund", MessageBoxButton.OK, MessageBoxImage.Information);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                    s.Status != SaleStatus.Completed
+                        ? "Only completed sales can be refunded."
+                        : "This sale has already been fully refunded.",
+                    "Custom Refund", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var confirm = MessageBox.Show($"Refund sale {s.ReceiptNumber} for {FormattingUtilities.Money(s.Total, App.StoreSettings)}?",
-                "Confirm Refund", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.Yes) return;
             try
             {
-                await _sales.RefundSaleAsync(s.Id, App.CurrentUser?.Id ?? 0);
-                MessageBox.Show("Refund processed.", "Refund", MessageBoxButton.OK, MessageBoxImage.Information);
-                _ = RefreshAsync();
+                var original = await _db.Sales.AsNoTracking()
+                    .Include(sale => sale.Items)
+                    .Include(sale => sale.Payments)
+                    .FirstOrDefaultAsync(sale => sale.Id == s.Id)
+                    ?? throw new InvalidOperationException("Sale not found.");
+                var priorRefunds = await _db.Sales.AsNoTracking()
+                    .Include(sale => sale.Items)
+                    .Where(sale => sale.RefundedSaleId == s.Id && sale.Status == SaleStatus.Refunded)
+                    .OrderBy(sale => sale.SaleDate)
+                    .ToListAsync();
+                var dialog = new CustomRefundDialog(original, priorRefunds) { Owner = Window.GetWindow(this) };
+                if (dialog.ShowDialog() != true || dialog.Draft == null) return;
+
+                var refund = await _sales.RefundSaleAsync(dialog.Draft);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                    $"Refund processed. Receipt: {refund.ReceiptNumber}\n" +
+                    $"Amount: {FormattingUtilities.Money(Math.Abs(refund.Total), App.StoreSettings)}",
+                    "Custom Refund", MessageBoxButton.OK, MessageBoxImage.Information);
+                await RefreshAsync();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Refund failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Refund failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -154,19 +171,19 @@ public partial class SalesView : UserControl, IRefreshable
             if (s.Status != SaleStatus.Completed) return;
             if (App.StoreSettings.ConfirmBeforeVoidingOrder)
             {
-                var confirm = MessageBox.Show($"Void sale {s.ReceiptNumber}? Stock will be returned.",
+                var confirm = PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Void sale {s.ReceiptNumber}? Stock will be returned.",
                     "Confirm Void", MessageBoxButton.YesNo, MessageBoxImage.Question);
                 if (confirm != MessageBoxResult.Yes) return;
             }
             try
             {
                 await _sales.VoidSaleAsync(s.Id, App.CurrentUser?.Id ?? 0);
-                MessageBox.Show("Sale voided.", "Void", MessageBoxButton.OK, MessageBoxImage.Information);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Sale voided.", "Void", MessageBoxButton.OK, MessageBoxImage.Information);
                 _ = RefreshAsync();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Void failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Void failed", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -200,7 +217,7 @@ public partial class SalesView : UserControl, IRefreshable
             sb.AppendLine(string.Join(',', values));
         }
         File.WriteAllText(dlg.FileName, sb.ToString());
-        MessageBox.Show($"Exported {_all.Count} sales to:\n{dlg.FileName}", "Export",
+        PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Exported {_all.Count} sales to:\n{dlg.FileName}", "Export",
             MessageBoxButton.OK, MessageBoxImage.Information);
         try { Process.Start(new ProcessStartInfo(dlg.FileName) { UseShellExecute = true }); } catch { }
     }

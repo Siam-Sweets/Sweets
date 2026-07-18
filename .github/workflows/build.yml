@@ -44,8 +44,65 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ${{ env.PROJECT_PATH }}
 
+      - name: Determine version
+        id: ver
+        shell: pwsh
+        run: |
+          $projectText = Get-Content -LiteralPath "${{ env.PROJECT_PATH }}" -Raw
+          $projectMatch = [regex]::Match($projectText, '<Version>\s*([^<]+?)\s*</Version>')
+          if (-not $projectMatch.Success) { throw "The project Version property was not found." }
+          $projectVersion = $projectMatch.Groups[1].Value.Trim()
+          $projectCoreMatch = [regex]::Match($projectVersion, '^(\d+)\.(\d+)\.(\d+)')
+          if (-not $projectCoreMatch.Success) { throw "Invalid project version: $projectVersion" }
+          $projectCore = "$($projectCoreMatch.Groups[1].Value).$($projectCoreMatch.Groups[2].Value).$($projectCoreMatch.Groups[3].Value)"
+
+          if ($env:GITHUB_REF -match 'refs/tags/v?(.+)$') {
+            $v = $matches[1]
+            $isRelease = 'true'
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and '${{ github.event.inputs.version }}' -ne '') {
+            $v = '${{ github.event.inputs.version }}'.TrimStart('v')
+            $isRelease = 'true'
+          } else {
+            $v = "$projectCore-dev.$($env:GITHUB_RUN_NUMBER)"
+            $isRelease = 'false'
+          }
+
+          $requestedCoreMatch = [regex]::Match($v, '^(\d+)\.(\d+)\.(\d+)')
+          if (-not $requestedCoreMatch.Success) { throw "Invalid build version: $v" }
+          $requestedCore = "$($requestedCoreMatch.Groups[1].Value).$($requestedCoreMatch.Groups[2].Value).$($requestedCoreMatch.Groups[3].Value)"
+          if ($isRelease -eq 'true' -and $requestedCore -ne $projectCore) {
+            throw "Release version $requestedCore does not match project version $projectCore. Update the project version before publishing."
+          }
+
+          if ($isRelease -eq 'true') {
+            $numericParts = @([regex]::Matches($v, '\d+') | ForEach-Object { [int64]$_.Value })
+            while ($numericParts.Count -lt 4) { $numericParts += 0 }
+            $numericParts = @($numericParts | Select-Object -First 4)
+          } else {
+            $numericParts = @(
+              [int64]$requestedCoreMatch.Groups[1].Value,
+              [int64]$requestedCoreMatch.Groups[2].Value,
+              [int64]$requestedCoreMatch.Groups[3].Value,
+              [int64]$env:GITHUB_RUN_NUMBER
+            )
+          }
+          $numericParts = @($numericParts | ForEach-Object { [Math]::Min([int64]65535, $_) })
+          $numericVersion = $numericParts -join '.'
+
+          Write-Host "Project: $projectCore; Installer: $v; Windows version: $numericVersion (release=$isRelease)"
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "numeric_version=$numericVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Build
-        run: dotnet build ${{ env.PROJECT_PATH }} --configuration ${{ env.CONFIGURATION }} --no-restore
+        run: >-
+          dotnet build ${{ env.PROJECT_PATH }}
+          --configuration ${{ env.CONFIGURATION }}
+          --no-restore
+          -p:Version=${{ steps.ver.outputs.version }}
+          -p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }}
+          -p:FileVersion=${{ steps.ver.outputs.numeric_version }}
+          -p:InformationalVersion=${{ steps.ver.outputs.version }}
 
       - name: Publish single-file self-contained exe
         run: |
@@ -58,7 +115,48 @@ jobs:
             --p:EnableCompressionInSingleFile=true `
             --p:DebugType=embedded `
             --p:PublishReadyToRun=false `
+            --p:Version=${{ steps.ver.outputs.version }} `
+            --p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }} `
+            --p:FileVersion=${{ steps.ver.outputs.numeric_version }} `
+            --p:InformationalVersion=${{ steps.ver.outputs.version }} `
             --output ./publish
+
+      - name: Sign application executable
+        shell: pwsh
+        env:
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          $certificateBase64 = $env:SIGNING_CERTIFICATE_BASE64
+          $certificatePassword = $env:SIGNING_CERTIFICATE_PASSWORD
+          if ([string]::IsNullOrWhiteSpace($certificateBase64) -or
+              [string]::IsNullOrWhiteSpace($certificatePassword)) {
+            Write-Warning "Signing secrets are not configured. Artifacts will build, but the in-app safe updater will reject the unsigned installer."
+            "SIGNED_BUILD=false" | Out-File -FilePath $env:GITHUB_ENV -Append
+            exit 0
+          }
+
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'posapp-signing.pfx'
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($certificateBase64))
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse |
+            Where-Object FullName -Match '\\x64\\signtool\.exe$' |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $signTool) { throw 'Windows signtool.exe was not found.' }
+
+          try {
+            & $signTool.FullName sign /f $certificatePath /p $certificatePassword /fd SHA256 `
+              /tr http://timestamp.digicert.com /td SHA256 "./publish/${{ env.APP_NAME }}.exe"
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE." }
+            & $signTool.FullName verify /pa /v "./publish/${{ env.APP_NAME }}.exe"
+            if ($LASTEXITCODE -ne 0) { throw "The application signature could not be verified." }
+            "SIGNTOOL_PATH=$($signTool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "SIGNING_CERTIFICATE_PATH=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "SIGNED_BUILD=true" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } catch {
+            Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
+            throw
+          }
 
       - name: Verify exe exists and report size
         shell: pwsh
@@ -83,10 +181,9 @@ jobs:
           ======================
 
           1. Double-click PosApp.exe to launch.
-          2. If Windows shows "Windows protected your PC":
-             - Click "More info"
-             - Click "Run anyway"
-             (This is normal for any unsigned exe - it's not a virus.)
+          2. Verify that Windows shows the expected PosApp publisher. If Windows
+             cannot verify the publisher, obtain a signed installer from the trusted
+             PosApp release source instead of bypassing the warning.
           3. First run will create the database in:
              %LOCALAPPDATA%\PosApp\posapp.db
           4. Complete the one-time store and administrator setup, then sign in
@@ -101,38 +198,6 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive -Path "./stage/*" -DestinationPath "./${{ env.APP_NAME }}-portable.zip" -Force
-
-      - name: Determine version
-        id: ver
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_REF -match 'refs/tags/v?(.+)$') {
-            $v = $matches[1]
-            $isRelease = 'true'
-          } elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and '${{ github.event.inputs.version }}' -ne '') {
-            $v = '${{ github.event.inputs.version }}'.TrimStart('v')
-            $isRelease = 'true'
-          } else {
-            # Dev build: use run number
-            $v = "0.0.0-dev.$($env:GITHUB_RUN_NUMBER)"
-            $isRelease = 'false'
-          }
-
-          # Windows version resources require exactly four numeric components.
-          # Keep the readable SemVer/dev label for AppVersion and filenames,
-          # while converting examples such as 0.0.0-dev.9 to 0.0.0.9.
-          $numericParts = @([regex]::Matches($v, '\d+') | ForEach-Object { [int64]$_.Value })
-          if ($numericParts.Count -eq 0) { $numericParts = @(0, 0, 0, [int64]$env:GITHUB_RUN_NUMBER) }
-          while ($numericParts.Count -lt 4) { $numericParts += 0 }
-          $numericParts = @($numericParts | Select-Object -First 4 | ForEach-Object {
-            [Math]::Min([int64]65535, $_)
-          })
-          $numericVersion = $numericParts -join '.'
-
-          Write-Host "Version: $v; Windows version: $numericVersion (release=$isRelease)"
-          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "numeric_version=$numericVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Locate or install Inno Setup
         shell: pwsh
@@ -159,6 +224,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE." }
           $setup = Join-Path $output "PosApp-${{ steps.ver.outputs.version }}-Setup.exe"
           if (-not (Test-Path -LiteralPath $setup)) { throw "Setup installer was not created: $setup" }
+
+      - name: Sign guided setup installer
+        if: env.SIGNED_BUILD == 'true'
+        shell: pwsh
+        env:
+          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          $setup = "./installer-output/PosApp-${{ steps.ver.outputs.version }}-Setup.exe"
+          & $env:SIGNTOOL_PATH sign /f $env:SIGNING_CERTIFICATE_PATH `
+            /p $env:SIGNING_CERTIFICATE_PASSWORD /fd SHA256 `
+            /tr http://timestamp.digicert.com /td SHA256 $setup
+          if ($LASTEXITCODE -ne 0) { throw "Installer signing failed with exit code $LASTEXITCODE." }
+          & $env:SIGNTOOL_PATH verify /pa /v $setup
+          if ($LASTEXITCODE -ne 0) { throw "The installer signature could not be verified." }
+          Remove-Item -LiteralPath $env:SIGNING_CERTIFICATE_PATH -Force -ErrorAction SilentlyContinue
 
       - name: Upload exe artifact
         uses: actions/upload-artifact@v7
@@ -244,6 +324,13 @@ jobs:
         id: ver
         shell: bash
         run: |
+          project_version="$(sed -n 's:.*<Version>[[:space:]]*\([^<]*\)[[:space:]]*</Version>.*:\1:p' "${{ env.PROJECT_PATH }}" | head -n 1 | xargs)"
+          if [[ ! "$project_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            echo "Invalid or missing project version: $project_version" >&2
+            exit 1
+          fi
+          project_core="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             v="${GITHUB_REF#refs/tags/}"
             v="${v#v}"
@@ -257,17 +344,29 @@ jobs:
             is_release="true"
             is_prerelease="false"
           else
-            # Rolling dev build on push to main
-            v="0.0.0-dev.${{ github.run_number }}"
+            # Rolling dev builds retain the actual product version so the offline
+            # updater can correctly compare them with the installed application.
+            v="${project_core}-dev.${{ github.run_number }}"
             tag="dev-build"
             is_release="false"
             is_prerelease="true"
           fi
-          echo "version=$v" >> $GITHUB_OUTPUT
-          echo "tag=$tag" >> $GITHUB_OUTPUT
-          echo "is_release=$is_release" >> $GITHUB_OUTPUT
-          echo "is_prerelease=$is_prerelease" >> $GITHUB_OUTPUT
-          echo "Tag: $tag, Version: $v, Release: $is_release"
+
+          if [[ ! "$v" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            echo "Invalid release version: $v" >&2
+            exit 1
+          fi
+          requested_core="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          if [[ "$is_release" == "true" && "$requested_core" != "$project_core" ]]; then
+            echo "Release version $requested_core does not match project version $project_core." >&2
+            exit 1
+          fi
+
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "is_release=$is_release" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$is_prerelease" >> "$GITHUB_OUTPUT"
+          echo "Tag: $tag, Version: $v, Project: $project_core, Release: $is_release"
 
       - name: Download exe artifact
         uses: actions/download-artifact@v8
@@ -363,7 +462,7 @@ jobs:
 
           ## Install
           1. Download PosApp-${VERSION}-Setup.exe
-          2. If Windows SmartScreen shows "Windows protected your PC", click **More info → Run anyway**
+          2. Confirm that Windows shows the expected PosApp publisher. Do not bypass an unknown-publisher warning.
           3. Follow the setup wizard and choose whether to create a Desktop shortcut
           4. Complete the first-run store and administrator setup inside PosApp
 

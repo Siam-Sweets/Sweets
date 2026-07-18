@@ -1,0 +1,87 @@
+<Window x:Class="PosApp.Wpf.Views.CustomRefundDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource Refund_CustomTitle}"
+        Width="900" Height="650" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{DynamicResource BackgroundBrush}"
+        Icon="/PosApp;component/Assets/PosApp.ico">
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="{DynamicResource Refund_CustomTitle}" Style="{StaticResource Heading1}"/>
+                <TextBlock x:Name="ReceiptText" Style="{StaticResource Muted}" Margin="0,4,0,0"/>
+                <TextBlock Text="{DynamicResource Refund_CustomHelp}" Style="{StaticResource Muted}"
+                           TextWrapping="Wrap" Margin="0,4,0,0"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="{DynamicResource Refund_SelectAll}"
+                    Style="{StaticResource OutlineButton}" Padding="14,8"
+                    VerticalAlignment="Bottom" Click="SelectAll_Click"/>
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0">
+            <DataGrid x:Name="RefundGrid" AutoGenerateColumns="False" CanUserAddRows="False"
+                      CanUserDeleteRows="False" SelectionMode="Single"
+                      CellEditEnding="RefundGrid_CellEditEnding">
+                <DataGrid.Columns>
+                    <DataGridCheckBoxColumn Header="{DynamicResource Refund_Return}" Width="70"
+                        Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridTextColumn Header="{DynamicResource POS_ProductName}" Binding="{Binding ProductName}" Width="*" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="{DynamicResource Refund_Sold}" Binding="{Binding SoldQuantity, StringFormat={}{0:0.###}}" Width="80" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="{DynamicResource Refund_PreviouslyReturned}" Binding="{Binding PreviouslyRefunded, StringFormat={}{0:0.###}}" Width="120" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="{DynamicResource Refund_Remaining}" Binding="{Binding RemainingQuantity, StringFormat={}{0:0.###}}" Width="95" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="{DynamicResource Refund_Quantity}" Width="105">
+                        <DataGridTextColumn.Binding>
+                            <Binding Path="Quantity" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged"
+                                     StringFormat="{}{0:0.###}" ValidatesOnExceptions="True"/>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="{DynamicResource Refund_Amount}" Binding="{Binding DisplayAmount}" Width="120" IsReadOnly="True"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="0,14,0,14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="220"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel Margin="0,0,14,0">
+                <TextBlock Text="{DynamicResource Refund_Method}" Style="{StaticResource Muted}"/>
+                <ComboBox x:Name="PaymentMethodCombo" Padding="10,7" Margin="0,5,0,0">
+                    <ComboBoxItem Content="{DynamicResource Pay_Cash}" Tag="Cash"/>
+                    <ComboBoxItem Content="{DynamicResource Pay_Card}" Tag="Card"/>
+                    <ComboBoxItem Content="{DynamicResource Pay_Mobile}" Tag="MobileWallet"/>
+                    <ComboBoxItem Content="{DynamicResource Pay_Bank}" Tag="BankTransfer"/>
+                    <ComboBoxItem Content="{DynamicResource Pay_StoreCredit}" Tag="StoreCredit"/>
+                    <ComboBoxItem Content="{DynamicResource Pay_Coupon}" Tag="Coupon"/>
+                    <ComboBoxItem Content="{DynamicResource Pay_Other}" Tag="Other"/>
+                </ComboBox>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="0,0,18,0">
+                <TextBlock Text="{DynamicResource Refund_Reason}" Style="{StaticResource Muted}"/>
+                <TextBox x:Name="ReasonBox" Padding="10,8" Margin="0,5,0,0" MaxLength="500"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" VerticalAlignment="Bottom" MinWidth="180">
+                <TextBlock Text="{DynamicResource Refund_Total}" Style="{StaticResource Muted}" HorizontalAlignment="Right"/>
+                <TextBlock x:Name="RefundTotalText" FontSize="27" FontWeight="Bold"
+                           Foreground="{DynamicResource DangerTextBrush}" HorizontalAlignment="Right"/>
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Text="{DynamicResource Refund_StockHelp}" Style="{StaticResource Muted}"
+                       VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,18,0"/>
+            <Button Grid.Column="1" Content="{DynamicResource Common_Cancel}" Style="{StaticResource OutlineButton}"
+                    Padding="24,10" Margin="0,0,8,0" IsCancel="True"/>
+            <Button Grid.Column="2" Content="{DynamicResource Refund_Process}" Style="{StaticResource DangerButton}"
+                    Padding="24,10" Click="Confirm_Click"/>
+        </Grid>
+    </Grid>
+</Window>

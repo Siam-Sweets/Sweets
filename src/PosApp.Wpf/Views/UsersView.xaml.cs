@@ -27,7 +27,7 @@ public partial class UsersView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load users", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load users", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -69,7 +69,7 @@ public partial class UsersView : UserControl, IRefreshable
         {
             user.IsActive = previousState;
             checkBox.IsChecked = previousState;
-            MessageBox.Show("You cannot deactivate the account that is currently signed in.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("You cannot deactivate the account that is currently signed in.",
                 "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -81,7 +81,7 @@ public partial class UsersView : UserControl, IRefreshable
             {
                 user.IsActive = previousState;
                 checkBox.IsChecked = previousState;
-                MessageBox.Show("At least one active administrator account is required.",
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("At least one active administrator account is required.",
                     "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -117,7 +117,7 @@ public partial class UsersView : UserControl, IRefreshable
         {
             user.IsActive = previousState;
             checkBox.IsChecked = previousState;
-            MessageBox.Show(ex.Message, "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -135,11 +135,11 @@ public partial class UsersView : UserControl, IRefreshable
                 try
                 {
                     await _auth.ChangePasswordAsync(u.Id, dlg.NewPin);
-                    MessageBox.Show("PIN reset successfully.", "Reset", MessageBoxButton.OK, MessageBoxImage.Information);
+                    PosApp.Wpf.Helpers.LocalizedMessageBox.Show("PIN reset successfully.", "Reset", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(ex.GetBaseException().Message, "Unable to reset PIN", MessageBoxButton.OK, MessageBoxImage.Error);
+                    PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to reset PIN", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
         }
@@ -151,19 +151,19 @@ public partial class UsersView : UserControl, IRefreshable
         {
             if (u.Id == App.CurrentUser?.Id)
             {
-                MessageBox.Show("Cannot delete your own account.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Cannot delete your own account.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
-            if (u.Role == UserRole.Admin)
+            if (u.Role == UserRole.Admin && u.IsActive)
             {
                 var adminCount = await _db.Users.CountAsync(x => x.Role == UserRole.Admin && x.IsActive);
                 if (adminCount <= 1)
                 {
-                    MessageBox.Show("Cannot delete the last admin account.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Cannot delete the last admin account.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
             }
-            var confirm = MessageBox.Show($"Delete user '{u.Username}'?", "Confirm",
+            var confirm = PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Delete user '{u.Username}'?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm != MessageBoxResult.Yes) return;
             try
@@ -193,7 +193,7 @@ public partial class UsersView : UserControl, IRefreshable
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Unable to delete user", MessageBoxButton.OK, MessageBoxImage.Error);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to delete user", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -270,17 +270,17 @@ public class UserEditDialog : Window
         var fullName = _fullnameBox.Text.Trim();
         if (username.Length == 0 || fullName.Length == 0)
         {
-            MessageBox.Show("Username and full name are required.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Username and full name are required.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (username.Any(char.IsWhiteSpace))
         {
-            MessageBox.Show("Username cannot contain spaces.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Username cannot contain spaces.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (await _db.Users.AsNoTracking().AnyAsync(u => u.Id != _userId && u.Username.ToLower() == username.ToLower()))
         {
-            MessageBox.Show("Another user already has this username.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Another user already has this username.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -288,7 +288,7 @@ public class UserEditDialog : Window
         var isActive = _activeCheckbox.IsChecked == true;
         if (!_isNew && _userId == App.CurrentUser?.Id && (!isActive || role != _originalRole))
         {
-            MessageBox.Show("You cannot deactivate or change the role of the account currently signed in.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("You cannot deactivate or change the role of the account currently signed in.",
                 "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -298,7 +298,7 @@ public class UserEditDialog : Window
                 u.Id != _userId && u.Role == UserRole.Admin && u.IsActive);
             if (otherActiveAdmins == 0)
             {
-                MessageBox.Show("At least one active administrator account is required.",
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("At least one active administrator account is required.",
                     "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -338,7 +338,7 @@ public class UserEditDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.GetBaseException().Message, "Unable to save user", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to save user", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -402,7 +402,7 @@ public class ResetPinDialog : Window
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Invalid PIN", MessageBoxButton.OK, MessageBoxImage.Warning);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Invalid PIN", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             NewPin = pin.Password;

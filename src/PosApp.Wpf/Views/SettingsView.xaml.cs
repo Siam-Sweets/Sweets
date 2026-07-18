@@ -75,7 +75,6 @@ public partial class SettingsView : UserControl, IRefreshable
             CountryBox.Text = _current.Country;
             FooterBox.Text = _current.FooterNote;
             ReceiptWidthBox.Text = Math.Clamp(_current.ReceiptWidth, 40, 120).ToString();
-            AutoPrintCheckbox.IsChecked = _current.PrintReceiptAutomatically;
             AutoBackupCheckbox.IsChecked = _current.AutomaticBackupEnabled;
             BackupStartupCheckbox.IsChecked = _current.BackupOnStartup;
             BackupExitCheckbox.IsChecked = _current.BackupOnExit;
@@ -127,7 +126,7 @@ public partial class SettingsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load settings", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load settings", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -167,7 +166,7 @@ public partial class SettingsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to save appearance", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to save appearance", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -180,11 +179,11 @@ public partial class SettingsView : UserControl, IRefreshable
         try
         {
             await SaveCurrentSettingsAsync();
-            MessageBox.Show("Settings saved.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Settings saved.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to save settings", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to save settings", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -207,7 +206,7 @@ public partial class SettingsView : UserControl, IRefreshable
         if (!int.TryParse(ReceiptWidthBox.Text, out var receiptWidth) || receiptWidth is < 40 or > 120)
             throw new InvalidOperationException("Receipt width must be a whole number from 40 to 120 mm.");
         candidate.ReceiptWidth = receiptWidth;
-        candidate.PrintReceiptAutomatically = AutoPrintCheckbox.IsChecked != false;
+        candidate.PrintReceiptAutomatically = false;
         candidate.ReceiptPrinterName = PrinterCombo.SelectedItem as string == "(default)" ? string.Empty : PrinterCombo.SelectedItem as string ?? string.Empty;
         candidate.Language = LangBn.IsChecked == true ? "bn" : "en";
         candidate.Theme = ThemeDark.IsChecked == true ? "Dark" : "Light";
@@ -266,12 +265,12 @@ public partial class SettingsView : UserControl, IRefreshable
             // Test the values currently visible in the form, not stale saved values.
             await SaveCurrentSettingsAsync();
             var ok = await _hardware.PrintReceiptAsync(BuildTestSale());
-            MessageBox.Show(ok ? "Print sent." : "Print failed. Check the selected printer and Windows print service.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ok ? "Print sent." : "Print failed. Check the selected printer and Windows print service.",
                 "Test Print", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Test Print", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Test Print", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -324,12 +323,12 @@ public partial class SettingsView : UserControl, IRefreshable
         {
             IsEnabled = false;
             var path = await _backup.CreateBackupAsync(dialog.FileName);
-            MessageBox.Show($"Backup created successfully.\n\n{path}", "Backup",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Backup created successfully.\n\n{path}", "Backup",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to create backup", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to create backup", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -347,7 +346,7 @@ public partial class SettingsView : UserControl, IRefreshable
             CheckFileExists = true
         };
         if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
-        if (MessageBox.Show(
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 "The selected backup will replace the current data on the next start. PosApp will preserve a safety copy of the current database and then close. Continue?",
                 "Restore Backup", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
 
@@ -355,13 +354,13 @@ public partial class SettingsView : UserControl, IRefreshable
         {
             IsEnabled = false;
             await _backup.StageRestoreAsync(dialog.FileName);
-            MessageBox.Show("Backup validated and staged. PosApp will now close; start it again to finish the restore.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Backup validated and staged. PosApp will now close; start it again to finish the restore.",
                 "Restore Ready", MessageBoxButton.OK, MessageBoxImage.Information);
             Application.Current.Shutdown();
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to restore backup", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to restore backup", MessageBoxButton.OK, MessageBoxImage.Error);
             IsEnabled = true;
         }
     }
@@ -379,7 +378,7 @@ public partial class SettingsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to open backup folder", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to open backup folder", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -438,7 +437,8 @@ public partial class SettingsView : UserControl, IRefreshable
 
             var sizeMb = package.SizeBytes / 1024d / 1024d;
             SelectedInstallerText.Text =
-                $"{package.FileName}\nVersion {package.TargetVersion} • {sizeMb:0.0} MB\nSHA-256: {package.Sha256}";
+                $"{package.FileName}\nVersion {package.TargetVersion} • {sizeMb:0.0} MB\n" +
+                $"Publisher: {package.Publisher}\nSHA-256: {package.Sha256}";
             IsEnabled = true;
 
             var confirmation =
@@ -446,9 +446,9 @@ public partial class SettingsView : UserControl, IRefreshable
                 "Before opening the installer, PosApp will create and validate a complete SQLite backup. " +
                 "The live database remains under your Windows profile and is not stored in Program Files.\n\n" +
                 $"Recovery backups:\n{_updates.UpdateBackupFolder}\n\n" +
-                "Only continue if this installer came from a PosApp release source you trust. " +
+                $"Windows verified the installer's digital signature from:\n{package.Publisher}\n\n" +
                 "PosApp will close after the installer starts.";
-            if (MessageBox.Show(confirmation, "Safe PosApp Update",
+            if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show(confirmation, "Safe PosApp Update",
                     MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
@@ -459,7 +459,7 @@ public partial class SettingsView : UserControl, IRefreshable
         catch (Exception ex)
         {
             IsEnabled = true;
-            MessageBox.Show(ex.Message, "Update stopped", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Update stopped", MessageBoxButton.OK, MessageBoxImage.Error);
             await LoadUpdateStatusAsync();
         }
     }
@@ -477,7 +477,7 @@ public partial class SettingsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to open update backups", MessageBoxButton.OK,
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to open update backups", MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
     }

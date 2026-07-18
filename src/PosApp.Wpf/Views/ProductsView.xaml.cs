@@ -32,7 +32,7 @@ public partial class ProductsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load products", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load products", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -94,7 +94,7 @@ public partial class ProductsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to open product editor", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to open product editor", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -110,7 +110,7 @@ public partial class ProductsView : UserControl, IRefreshable
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Unable to open product editor", MessageBoxButton.OK, MessageBoxImage.Error);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to open product editor", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -121,7 +121,7 @@ public partial class ProductsView : UserControl, IRefreshable
         {
             var activating = !p.IsActive;
             var action = activating ? "restore" : "deactivate";
-            var confirm = MessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} product '{p.Name}'?", "Confirm",
+            var confirm = PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} product '{p.Name}'?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm != MessageBoxResult.Yes) return;
             var previous = p.IsActive;
@@ -134,7 +134,7 @@ public partial class ProductsView : UserControl, IRefreshable
             catch (Exception ex)
             {
                 p.IsActive = previous;
-                MessageBox.Show(ex.Message, $"Unable to {action} product", MessageBoxButton.OK, MessageBoxImage.Error);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, $"Unable to {action} product", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -157,7 +157,7 @@ public partial class ProductsView : UserControl, IRefreshable
         {
             product.IsWeighted = previousValue;
             checkBox.IsChecked = previousValue;
-            MessageBox.Show(ex.GetBaseException().Message, "Unable to update weighted product",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to update weighted product",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -180,12 +180,12 @@ public partial class ProductsView : UserControl, IRefreshable
         {
             IsEnabled = false;
             await _catalogTransfer.ExportProductsAsync(dialog.FileName);
-            MessageBox.Show("Product catalog exported.", "CSV Export",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Product catalog exported.", "CSV Export",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to export CSV", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to export CSV", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -205,7 +205,7 @@ public partial class ProductsView : UserControl, IRefreshable
 
         var modeDialog = new CatalogImportModeDialog { Owner = Window.GetWindow(this) };
         if (modeDialog.ShowDialog() != true) return;
-        if (MessageBox.Show(modeDialog.ConfirmationText,
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show(modeDialog.ConfirmationText,
                 "Confirm CSV Import", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         try
@@ -218,7 +218,7 @@ public partial class ProductsView : UserControl, IRefreshable
                 : $"\n\nWarnings ({result.Warnings.Count}):\n" +
                   string.Join("\n", result.Warnings.Take(5)) +
                   (result.Warnings.Count > 5 ? "\n…" : string.Empty);
-            MessageBox.Show(
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 $"CSV import complete.\nCreated: {result.Created}\nUpdated: {result.Updated}\nStock changes: {result.StockAdjusted}{warningText}",
                 "CSV Import", MessageBoxButton.OK,
                 result.Warnings.Count == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
@@ -226,7 +226,7 @@ public partial class ProductsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to import CSV", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to import CSV", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -414,13 +414,13 @@ public class ProductEditDialog : Window
         var name = _nameBox.Text.Trim();
         if (name.Length == 0)
         {
-            MessageBox.Show("Name is required.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Name is required.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
             _nameBox.Focus();
             return;
         }
         if (_categoryBox.SelectedItem is not ComboBoxItem categoryItem || categoryItem.Tag is not Category category)
         {
-            MessageBox.Show("Select a category.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Select a category.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
             _categoryBox.Focus();
             return;
         }
@@ -430,7 +430,7 @@ public class ProductEditDialog : Window
         if (!TryOptionalDecimal(_thresholdBox, "Low stock threshold", out var threshold) || threshold < 0m) return;
         if (!TryRequiredDecimal(_taxBox, "Tax rate", out var tax) || tax is < 0m or > 100m)
         {
-            MessageBox.Show("Tax rate must be between 0 and 100.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Tax rate must be between 0 and 100.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
             _taxBox.Focus();
             return;
         }
@@ -458,7 +458,7 @@ public class ProductEditDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.GetBaseException().Message, "Unable to save product", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to save product", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -471,7 +471,7 @@ public class ProductEditDialog : Window
         if (decimal.TryParse(box.Text.Trim(), NumberStyles.Number, CultureInfo.CurrentCulture, out value) ||
             decimal.TryParse(box.Text.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out value))
             return true;
-        MessageBox.Show($"{label} must be a valid number.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
+        PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{label} must be a valid number.", "Invalid product", MessageBoxButton.OK, MessageBoxImage.Warning);
         box.Focus();
         return false;
     }

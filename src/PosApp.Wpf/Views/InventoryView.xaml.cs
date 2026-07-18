@@ -28,7 +28,7 @@ public partial class InventoryView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load inventory", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load inventory", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -85,7 +85,7 @@ public partial class InventoryView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to start inventory count", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to start inventory count", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }
@@ -137,7 +137,7 @@ public class StockAdjustDialog : Window
         {
             if (!FormattingUtilities.TryParseDecimal(qtyBox.Text, out var qty) || qty <= 0)
             {
-                MessageBox.Show("Enter a valid positive quantity", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter a valid positive quantity", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             var type = (StockTransactionType)((ComboBoxItem)typeCombo.SelectedItem).Tag;
@@ -155,7 +155,7 @@ public class StockAdjustDialog : Window
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         };
         btnRow.Children.Add(saveBtn);

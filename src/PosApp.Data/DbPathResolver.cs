@@ -63,30 +63,68 @@ public static class DbPathResolver
         if (!File.Exists(pending)) return null;
 
         var live = DefaultPath();
+        var prepared = live + $".restore-{Guid.NewGuid():N}.tmp";
         string? safetyCopy = null;
-        if (File.Exists(live))
+        try
         {
-            safetyCopy = Path.Combine(
-                BackupFolder(),
-                $"posapp-before-restore-{DateTime.Now:yyyyMMdd-HHmmss-fff}.db");
-            using var source = new SqliteConnection(ConnectionString(live));
-            using var target = new SqliteConnection(new SqliteConnectionStringBuilder
-            {
-                DataSource = safetyCopy,
-                Mode = SqliteOpenMode.ReadWriteCreate
-            }.ToString());
-            source.Open();
-            target.Open();
-            source.BackupDatabase(target);
-        }
+            // Never touch the live store until a durable copy of the staged file has
+            // passed SQLite integrity and PosApp schema checks.
+            DatabaseFileValidator.ValidatePosAppDatabase(pending);
+            DatabaseFileValidator.CopyDurably(pending, prepared);
+            DatabaseFileValidator.ValidatePosAppDatabase(prepared);
 
-        // These sidecars belong to the outgoing database and must not be paired
-        // with the restored file. No connection exists yet at this point.
-        File.Delete(live + "-wal");
-        File.Delete(live + "-shm");
-        File.Copy(pending, live, overwrite: true);
-        File.Delete(pending);
-        return safetyCopy;
+            if (File.Exists(live))
+            {
+                safetyCopy = Path.Combine(
+                    BackupFolder(),
+                    $"posapp-before-restore-{DateTime.Now:yyyyMMdd-HHmmss-fff}.db");
+                {
+                    // Keep the backup connections inside their own scope. Windows
+                    // does not allow the live database to be replaced while either
+                    // connection still owns a handle to it.
+                    using var source = new SqliteConnection(new SqliteConnectionStringBuilder
+                    {
+                        DataSource = live,
+                        Mode = SqliteOpenMode.ReadWrite,
+                        Cache = SqliteCacheMode.Private,
+                        Pooling = false
+                    }.ToString());
+                    using var target = new SqliteConnection(new SqliteConnectionStringBuilder
+                    {
+                        DataSource = safetyCopy,
+                        Mode = SqliteOpenMode.ReadWriteCreate,
+                        Cache = SqliteCacheMode.Private,
+                        Pooling = false
+                    }.ToString());
+                    source.Open();
+                    using (var checkpoint = source.CreateCommand())
+                    {
+                        checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+                        checkpoint.ExecuteNonQuery();
+                    }
+                    target.Open();
+                    source.BackupDatabase(target);
+                }
+                DatabaseFileValidator.ValidatePosAppDatabase(safetyCopy);
+
+                // Sidecars now contain no uncheckpointed data and belong to the old
+                // database identity. Replace the main file atomically afterwards.
+                File.Delete(live + "-wal");
+                File.Delete(live + "-shm");
+                File.Replace(prepared, live, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(prepared, live);
+            }
+
+            File.Delete(pending);
+            return safetyCopy;
+        }
+        finally
+        {
+            if (File.Exists(prepared)) File.Delete(prepared);
+        }
     }
 
     public static string ConnectionString(string? path = null)

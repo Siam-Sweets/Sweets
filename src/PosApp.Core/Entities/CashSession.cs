@@ -20,6 +20,7 @@ public class CashSession
 
     public bool IsOpen => ClosedAt == null;
     public ICollection<CashMovement> Movements { get; set; } = new List<CashMovement>();
+    public ICollection<Sale> Sales { get; set; } = new List<Sale>();
 }
 
 public class CashMovement

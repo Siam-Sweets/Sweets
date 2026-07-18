@@ -59,14 +59,14 @@ public class ReportService : IReportService
         var sales = await _db.Sales.AsNoTracking()
             .Where(s => s.SaleDate >= range.FromUtc && s.SaleDate < range.ToUtcExclusive &&
                         (s.Status == SaleStatus.Completed || s.Status == SaleStatus.Refunded))
-            .Select(s => new { s.SaleDate, s.Subtotal, s.DiscountTotal, s.TaxTotal, s.Rounding })
+            .Select(s => new { s.SaleDate, s.Status, s.Subtotal, s.DiscountTotal, s.TaxTotal, s.Rounding })
             .ToListAsync();
 
         return sales.GroupBy(s => DateTimeUtilities.ToLocal(s.SaleDate).Hour)
             .Select(g => new SalesByHourRow
             {
                 Hour = g.Key,
-                TransactionCount = g.Count(s => s.Subtotal >= 0m),
+                TransactionCount = g.Count(s => s.Status == SaleStatus.Completed),
                 Revenue = g.Sum(s => s.Subtotal - s.DiscountTotal + s.TaxTotal + s.Rounding)
             }).OrderBy(r => r.Hour).ToList();
     }

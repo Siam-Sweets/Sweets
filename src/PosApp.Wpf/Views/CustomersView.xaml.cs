@@ -28,7 +28,7 @@ public partial class CustomersView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load customers and suppliers",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load customers and suppliers",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -95,7 +95,7 @@ public partial class CustomersView : UserControl, IRefreshable
         if (sender is not Button { Tag: ContactListItem item }) return;
         var activate = !item.IsActive;
         var action = activate ? "restore" : "deactivate";
-        if (MessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} {item.TypeLabel.ToLowerInvariant()} '{item.Name}'?",
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{char.ToUpperInvariant(action[0])}{action[1..]} {item.TypeLabel.ToLowerInvariant()} '{item.Name}'?",
                 "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         try
@@ -108,7 +108,7 @@ public partial class CustomersView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.GetBaseException().Message, $"Cannot {action} {item.TypeLabel.ToLowerInvariant()}",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, $"Cannot {action} {item.TypeLabel.ToLowerInvariant()}",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
@@ -299,7 +299,7 @@ public sealed class ContactEditDialog : Window
         var name = _name.Text.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            MessageBox.Show("Name is required.", "Contact",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Name is required.", "Contact",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             _name.Focus();
             return;
@@ -352,7 +352,7 @@ public sealed class ContactEditDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, $"Unable to save {SelectedType.ToString().ToLowerInvariant()}",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, $"Unable to save {SelectedType.ToString().ToLowerInvariant()}",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally

@@ -1,5 +1,6 @@
 using System.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace PosApp.Data;
 
@@ -11,6 +12,12 @@ public static class DbSchemaUpgrader
 {
     public static async Task ApplyAsync(AppDbContext db)
     {
+        // SQLite supports transactional DDL. Keep the complete idempotent upgrade
+        // in one transaction so a disk error, power loss, or bad legacy row can
+        // never leave the installed database halfway between two schemas.
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        try
+        {
         var commands = new[]
         {
             """
@@ -132,8 +139,12 @@ public static class DbSchemaUpgrader
             "\"CostPrice\" decimal(18,4) NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SaleItems", "PromotionId",
             "\"PromotionId\" INTEGER NULL");
+        var refundedSaleItemColumnAdded = await EnsureColumnAsync(db, "SaleItems", "RefundedSaleItemId",
+            "\"RefundedSaleItemId\" INTEGER NULL");
         await EnsureColumnAsync(db, "Sales", "ServiceType",
             "\"ServiceType\" TEXT NOT NULL DEFAULT 'Retail'");
+        await EnsureColumnAsync(db, "Sales", "CashSessionId",
+            "\"CashSessionId\" INTEGER NULL REFERENCES \"CashSessions\"(\"Id\") ON DELETE RESTRICT");
         await EnsureColumnAsync(db, "Customers", "IsActive",
             "\"IsActive\" INTEGER NOT NULL DEFAULT 1");
 
@@ -150,14 +161,83 @@ public static class DbSchemaUpgrader
         // before publishing case-insensitive unique indexes.
         await ResolveLegacyDuplicatesAsync(db);
 
+        // Older versions only linked a reversal to the original sale. Normalize
+        // those legacy documents first, then link each negative line to the best
+        // matching original line. On later starts, the link also identifies modern
+        // partial refunds so legacy repair never overwrites their tender or rounding.
+        if (refundedSaleItemColumnAdded)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE "SaleItems" AS refundItem
+                SET "RefundedSaleItemId" = (
+                    SELECT originalItem."Id"
+                    FROM "Sales" AS refundSale
+                    JOIN "SaleItems" AS originalItem
+                      ON originalItem."SaleId" = refundSale."RefundedSaleId"
+                    WHERE refundSale."Id" = refundItem."SaleId"
+                      AND originalItem."ProductId" = refundItem."ProductId"
+                      AND ABS(originalItem."UnitPrice" - refundItem."UnitPrice") < 0.0001
+                    ORDER BY originalItem."Id"
+                    LIMIT 1
+                )
+                WHERE refundItem."RefundedSaleItemId" IS NULL
+                  AND EXISTS (
+                    SELECT 1 FROM "Sales" AS refundSale
+                    WHERE refundSale."Id" = refundItem."SaleId"
+                      AND refundSale."Status" = 3
+                      AND refundSale."RefundedSaleId" IS NOT NULL
+                  );
+                """);
+        }
+
+        // Legacy releases inferred register ownership from timestamps. Persist
+        // that ownership once so later refunds cannot alter a closed session.
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "Sales"
+            SET "CashSessionId" = (
+                SELECT session."Id"
+                FROM "CashSessions" AS session
+                WHERE session."OpenedAt" <= "Sales"."SaleDate"
+                  AND (session."ClosedAt" IS NULL OR "Sales"."SaleDate" <= session."ClosedAt")
+                ORDER BY session."OpenedAt" DESC, session."Id" DESC
+                LIMIT 1
+            )
+            WHERE "CashSessionId" IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM "CashSessions" AS session
+                WHERE session."OpenedAt" <= "Sales"."SaleDate"
+                  AND (session."ClosedAt" IS NULL OR "Sales"."SaleDate" <= session."ClosedAt")
+              );
+            """);
+
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Users_Username_NOCASE", "Users", "Username");
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Sku_NOCASE", "Products", "Sku");
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Barcode_NOCASE", "Products", "Barcode");
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Discounts_Code_NOCASE", "Discounts", "Code");
+        // Partial refunds legitimately create several reversal documents for one
+        // sale. Remove the old one-refund-only constraint before publishing the
+        // normal lookup indexes.
+        await db.Database.ExecuteSqlRawAsync("DROP INDEX IF EXISTS \"UX_Sales_RefundedSaleId\";");
+        await db.Database.ExecuteSqlRawAsync("DROP INDEX IF EXISTS \"IX_Sales_RefundedSaleId\";");
         await db.Database.ExecuteSqlRawAsync(
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_Sales_RefundedSaleId\" ON \"Sales\" (\"RefundedSaleId\") WHERE \"RefundedSaleId\" IS NOT NULL;");
+            "CREATE INDEX IF NOT EXISTS \"IX_Sales_RefundedSaleId\" ON \"Sales\" (\"RefundedSaleId\");");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_SaleItems_RefundedSaleItemId\" ON \"SaleItems\" (\"RefundedSaleItemId\");");
         await db.Database.ExecuteSqlRawAsync(
             "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_CashSessions_OneOpen\" ON \"CashSessions\" ((1)) WHERE \"ClosedAt\" IS NULL;");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_Sales_CashSessionId\" ON \"Sales\" (\"CashSessionId\");");
+
+        await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
 
@@ -219,17 +299,6 @@ public static class DbSchemaUpgrader
             WHERE "ClosedAt" IS NULL
               AND "Id" <> (SELECT "Id" FROM "CashSessions" WHERE "ClosedAt" IS NULL ORDER BY "OpenedAt" DESC, "Id" DESC LIMIT 1);
             """,
-            // Preserve extra legacy refund rows but detach duplicate links so the
-            // authoritative first refund can be protected by a unique index.
-            """
-            WITH ranked AS (
-                SELECT "Id", ROW_NUMBER() OVER (
-                    PARTITION BY "RefundedSaleId" ORDER BY "Id") AS rn
-                FROM "Sales" WHERE "RefundedSaleId" IS NOT NULL
-            )
-            UPDATE "Sales" SET "RefundedSaleId" = NULL
-            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
-            """,
             // Older versions marked both the original sale and its signed reversal
             // as Refunded. Restore the original to Completed so financial reports
             // include one positive sale and one negative refund transaction.
@@ -240,7 +309,7 @@ public static class DbSchemaUpgrader
             WHERE "Status" = 3
               AND "Id" IN (
                   SELECT "RefundedSaleId" FROM "Sales"
-                  WHERE "RefundedSaleId" IS NOT NULL AND "Subtotal" < 0
+                  WHERE "RefundedSaleId" IS NOT NULL
               );
             """,
             // Normalize signed legacy reversal amounts to the current refund model.
@@ -255,7 +324,13 @@ public static class DbSchemaUpgrader
                      FROM "Sales" AS original WHERE original."Id" = "Sales"."RefundedSaleId")
                 ),
                 "Change" = 0
-            WHERE "Status" = 3 AND "RefundedSaleId" IS NOT NULL;
+            WHERE "Status" = 3
+              AND "RefundedSaleId" IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM "SaleItems" AS refundItem
+                  WHERE refundItem."SaleId" = "Sales"."Id"
+                    AND refundItem."RefundedSaleItemId" IS NOT NULL
+              );
             """,
             // Legacy refunds did not create reverse tender rows, leaving register
             // cash and payment reports overstated. Add them only when the reversal
@@ -289,6 +364,7 @@ public static class DbSchemaUpgrader
         try
         {
             await using var duplicate = connection.CreateCommand();
+            duplicate.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
             duplicate.CommandText =
                 $"SELECT COUNT(*) FROM (SELECT \"{columnName}\" COLLATE NOCASE FROM \"{tableName}\" " +
                 $"WHERE \"{columnName}\" IS NOT NULL AND TRIM(\"{columnName}\") <> '' " +
@@ -297,6 +373,7 @@ public static class DbSchemaUpgrader
             if (duplicateGroups > 0) return;
 
             await using var create = connection.CreateCommand();
+            create.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
             create.CommandText =
                 $"CREATE UNIQUE INDEX IF NOT EXISTS \"{indexName}\" ON \"{tableName}\" (\"{columnName}\" COLLATE NOCASE) " +
                 $"WHERE \"{columnName}\" IS NOT NULL AND TRIM(\"{columnName}\") <> '';";
@@ -325,6 +402,7 @@ public static class DbSchemaUpgrader
 
             await using (var info = connection.CreateCommand())
             {
+                info.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
                 info.CommandText = $"PRAGMA table_info(\"{quotedTable}\");";
                 await using var reader = await info.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
@@ -340,6 +418,7 @@ public static class DbSchemaUpgrader
             if (exists) return false;
 
             await using var alter = connection.CreateCommand();
+            alter.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
             alter.CommandText = $"ALTER TABLE \"{quotedTable}\" ADD COLUMN {columnDeclaration};";
             await alter.ExecuteNonQueryAsync();
             return true;

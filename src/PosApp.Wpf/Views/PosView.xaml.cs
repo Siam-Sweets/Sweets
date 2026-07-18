@@ -18,12 +18,12 @@ public partial class PosView : UserControl, IRefreshable
     private readonly DispatcherTimer _searchTimer;
 
     public PosView(IInventoryService inventory, ISaleService sales,
-        ICustomerService customers, IHardwareService hardware, IRegisterService register,
+        ICustomerService customers, IRegisterService register,
         IDiscountService discounts)
     {
         InitializeComponent();
         _searchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
-        var vm = new PosViewModel(inventory, sales, customers, hardware, register, discounts);
+        var vm = new PosViewModel(inventory, sales, customers, register, discounts);
         _searchTimer.Tick += async (_, _) =>
         {
             _searchTimer.Stop();
@@ -51,7 +51,7 @@ public partial class PosView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load POS", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load POS", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -92,8 +92,6 @@ public partial class PosView : UserControl, IRefreshable
 
     private void BarcodeBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        BarcodePlaceholder.Visibility = string.IsNullOrEmpty(BarcodeBox.Text)
-            ? Visibility.Visible : Visibility.Collapsed;
         if (DataContext is not PosViewModel vm || !IsLoaded) return;
 
         vm.SearchText = BarcodeBox.Text;
@@ -241,7 +239,7 @@ public partial class PosView : UserControl, IRefreshable
         var line = SelectedLine ?? vm.CartLines.LastOrDefault();
         if (line == null)
         {
-            MessageBox.Show("Select a receipt line first.", "Quantity", MessageBoxButton.OK, MessageBoxImage.Information);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Select a receipt line first.", "Quantity", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -345,7 +343,7 @@ public partial class PosView : UserControl, IRefreshable
         var line = SelectedLine ?? vm.CartLines.LastOrDefault();
         if (line == null)
         {
-            MessageBox.Show("Select a receipt line first.", "Discount", MessageBoxButton.OK, MessageBoxImage.Information);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Select a receipt line first.", "Discount", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var promotions = await vm.GetActivePromotionsAsync();
@@ -370,20 +368,17 @@ public partial class PosView : UserControl, IRefreshable
     private void Refund_Click(object sender, RoutedEventArgs e)
         => (Window.GetWindow(this) as MainWindow)?.NavigateTo("sales");
 
-    private void Lock_Click(object sender, RoutedEventArgs e)
-        => (Window.GetWindow(this) as MainWindow)?.SignOut();
-
     private void VoidOrder_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is not PosViewModel vm || vm.CartLines.Count == 0) return;
         if (!App.StoreSettings.ConfirmBeforeVoidingOrder ||
-            MessageBox.Show("Void the current order? No sale will be recorded.", "Void Order",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Void the current order? No sale will be recorded.", "Void Order",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             vm.ClearCart();
     }
 
     private static void ShowError(Exception ex, string title)
-        => MessageBox.Show(ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+        => PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Error);
 }
 
 public class PosViewModel : ViewModelBase
@@ -391,7 +386,6 @@ public class PosViewModel : ViewModelBase
     private readonly IInventoryService _inventory;
     private readonly ISaleService _sales;
     private readonly ICustomerService _customers;
-    private readonly IHardwareService _hardware;
     private readonly IRegisterService _register;
     private readonly IDiscountService _discounts;
     private readonly SemaphoreSlim _productLoadGate = new(1, 1);
@@ -480,13 +474,12 @@ public class PosViewModel : ViewModelBase
         470d / Math.Clamp(App.StoreSettings.ProductGridRows, 2, 10), 126d, 150d);
 
     public PosViewModel(IInventoryService inventory, ISaleService sales,
-        ICustomerService customers, IHardwareService hardware, IRegisterService register,
+        ICustomerService customers, IRegisterService register,
         IDiscountService discounts)
     {
         _inventory = inventory;
         _sales = sales;
         _customers = customers;
-        _hardware = hardware;
         _register = register;
         _discounts = discounts;
         _serviceType = string.IsNullOrWhiteSpace(App.StoreSettings.DefaultServiceType)
@@ -741,7 +734,7 @@ public class PosViewModel : ViewModelBase
         if (!App.StoreSettings.RequireOpenRegisterForSales) return true;
         var session = await _register.GetOpenSessionAsync();
         if (session != null) return true;
-        MessageBox.Show("Open the cash register before completing a sale.", "Register Required",
+        PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Open the cash register before completing a sale.", "Register Required",
             MessageBoxButton.OK, MessageBoxImage.Information);
         (Application.Current.MainWindow as MainWindow)?.NavigateTo("register");
         return false;
@@ -757,27 +750,17 @@ public class PosViewModel : ViewModelBase
         {
             var sale = await _sales.CheckoutAsync(draft);
 
-            // Printing is deliberately outside the database transaction. A printer
-            // failure must not roll back a completed sale, but it must be visible.
-            var store = App.StoreSettings;
-            bool? printSucceeded = null;
-            if (store.PrintReceiptAutomatically)
-                printSucceeded = await _hardware.PrintReceiptAsync(sale);
-
             ClearCart();
-            var printMessage = printSucceeded == false
-                ? "\n\nThe sale was saved, but the receipt could not be printed. Reprint it from Sales History."
-                : string.Empty;
-            MessageBox.Show($"Sale completed. Receipt: {sale.ReceiptNumber}\n" +
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Sale completed. Receipt: {sale.ReceiptNumber}\n" +
                             $"Received: {FormattingUtilities.Money(sale.AmountPaid, App.StoreSettings)}\n" +
-                            $"Change: {FormattingUtilities.Money(sale.Change, App.StoreSettings)}{printMessage}",
-                "Sale Completed", MessageBoxButton.OK,
-                printSucceeded == false ? MessageBoxImage.Warning : MessageBoxImage.Information);
+                            $"Change: {FormattingUtilities.Money(sale.Change, App.StoreSettings)}\n\n" +
+                            "The receipt is available in Sales History if you want to print it.",
+                "Sale Completed", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             App.LogError("CHECKOUT FAILED", ex);
-            MessageBox.Show(
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 "Checkout could not be saved. No sale or stock changes were committed.\n\n" +
                 $"{ex.GetBaseException().Message}\n\n" +
                 $"Technical details were written to:\n{App.LogFilePath}",
@@ -797,12 +780,12 @@ public class PosViewModel : ViewModelBase
         {
             await _sales.SuspendAsync(draft);
             ClearCart();
-            MessageBox.Show("Sale suspended. Use Recall to continue later.", "Suspended",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Sale suspended. Use Recall to continue later.", "Suspended",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Suspend failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Suspend failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -811,7 +794,7 @@ public class PosViewModel : ViewModelBase
         var suspended = await _sales.GetSuspendedSalesAsync();
         if (suspended.Count == 0)
         {
-            MessageBox.Show("No suspended sales to recall.", "Recall", MessageBoxButton.OK, MessageBoxImage.Information);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("No suspended sales to recall.", "Recall", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var dlg = new SuspendedSalesDialog(suspended, _sales) { Owner = Application.Current.MainWindow };
@@ -964,7 +947,7 @@ public class CustomerPickerDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Customer search failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Customer search failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -1068,7 +1051,7 @@ public class NumericValueDialog : Window
     {
         if (!DialogLayout.TryParseDecimal(_valueBox.Text, out var value) || value < _minimum)
         {
-            MessageBox.Show($"Enter a value of at least {_minimum:0.###}.", Title,
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Enter a value of at least {_minimum:0.###}.", Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -1285,21 +1268,21 @@ public class DiscountEntryDialog : Window
     {
         if (!DialogLayout.TryParseDecimal(_valueBox.Text, out var value) || value < 0m)
         {
-            MessageBox.Show(DialogLayout.Text("POS_DiscountInvalid", "Enter a valid non-negative discount."), Title,
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(DialogLayout.Text("POS_DiscountInvalid", "Enter a valid non-negative discount."), Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         var gross = _line.UnitPrice * _line.Quantity;
         if (_percentage.IsChecked == true && value > 100m)
         {
-            MessageBox.Show(DialogLayout.Text("POS_DiscountPercentLimit", "Percentage cannot exceed 100."), Title,
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(DialogLayout.Text("POS_DiscountPercentLimit", "Percentage cannot exceed 100."), Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         DiscountAmount = _percentage.IsChecked == true ? gross * value / 100m : value;
         if (DiscountAmount > gross)
         {
-            MessageBox.Show(DialogLayout.Text("POS_DiscountAmountLimit", "Discount cannot exceed the line amount."), Title,
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(DialogLayout.Text("POS_DiscountAmountLimit", "Discount cannot exceed the line amount."), Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }

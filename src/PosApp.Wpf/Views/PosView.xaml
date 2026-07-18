@@ -177,7 +177,22 @@
                                    Text="{DynamicResource POS_SearchReceipt}"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    FontSize="17" Margin="16,0,0,0"
-                                   VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                   VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Text, ElementName=BarcodeBox}" Value=""/>
+                                                <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=BarcodeBox}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </Grid>
                     <Button Grid.Column="1" Content="{DynamicResource POS_SearchButton}"
                             Style="{StaticResource PrimaryButton}" Padding="22,11"
@@ -297,15 +312,14 @@
                 </UniformGrid>
 
 
-                <UniformGrid Grid.Row="2" Columns="4" Rows="3">
+                <UniformGrid Grid.Row="2" Columns="3" Rows="3">
                     <Button Style="{StaticResource CommandTile}" Click="ServiceType_Click"><TextBlock Text="{DynamicResource POS_ServiceType}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Discount_Click"><StackPanel><TextBlock Text="F2" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Discount}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Comment_Click"><TextBlock Text="{DynamicResource POS_Comment}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="CustomerButton_Click"><TextBlock Text="{DynamicResource POS_Customer}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Suspend_Click"><StackPanel><TextBlock Text="F9" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_SaveSale}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Refund_Click"><TextBlock Text="{DynamicResource Sales_Refund}" Style="{StaticResource CommandCaption}"/></Button>
+                    <Button Style="{StaticResource CommandTile}" Click="Refund_Click"><TextBlock Text="{DynamicResource POS_CustomRefund}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource PaymentTile}" Click="Checkout_Click"><StackPanel><TextBlock Text="F10" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Payment}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
-                    <Button Style="{StaticResource CommandTile}" Click="Lock_Click"><TextBlock Text="{DynamicResource POS_Lock}" Style="{StaticResource CommandCaption}"/></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Recall_Click"><StackPanel><TextBlock Text="F7" Style="{StaticResource ShortcutLabel}"/><TextBlock Text="{DynamicResource POS_Transfer}" Style="{StaticResource CommandCaption}"/></StackPanel></Button>
                     <Button Style="{StaticResource CommandTile}" Click="Management_Click"><TextBlock Text="{DynamicResource POS_More}" Style="{StaticResource CommandCaption}"/></Button>
                 </UniformGrid>

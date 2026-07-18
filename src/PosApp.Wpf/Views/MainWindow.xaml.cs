@@ -22,6 +22,11 @@ public partial class MainWindow : Window
     private readonly PurchasesView _purchases;
     private readonly RegisterView _register;
     private bool _fullScreen;
+    private WindowStyle _windowedStyle;
+    private WindowState _windowedState;
+    private ResizeMode _windowedResizeMode;
+    private bool _windowedTopmost;
+    private Rect _windowedBounds;
 
     public MainWindow(PosView pos, DashboardView dashboard, ProductsView products, PromotionsView promotions,
         InventoryView inventory, CustomersView customers, SalesView sales,
@@ -29,6 +34,11 @@ public partial class MainWindow : Window
         PurchasesView purchases, RegisterView register)
     {
         InitializeComponent();
+        _windowedStyle = WindowStyle;
+        _windowedState = WindowState;
+        _windowedResizeMode = ResizeMode;
+        _windowedTopmost = Topmost;
+        _windowedBounds = RestoreBounds;
         _pos = pos;
         _dashboard = dashboard;
         _products = products;
@@ -65,7 +75,6 @@ public partial class MainWindow : Window
         NavSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
         DrawerManagement.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         DrawerReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
-        DrawerSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
 
         NavigateTo("pos");
     }
@@ -90,7 +99,7 @@ public partial class MainWindow : Window
         }
         if (!IsAuthorized(tag))
         {
-            MessageBox.Show("Your account does not have permission to open this page.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Your account does not have permission to open this page.",
                 "Access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -152,7 +161,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             App.LogError("View refresh", ex);
-            MessageBox.Show(ex.GetBaseException().Message, "Unable to refresh page",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to refresh page",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -217,35 +226,92 @@ public partial class MainWindow : Window
         if (_pos.DataContext is PosViewModel vm) await vm.ShowSuspendedAsync();
     }
 
-    private void DrawerSettings_Click(object sender, RoutedEventArgs e) => NavigateTo("settings");
-
     private void UserInfo_Click(object sender, RoutedEventArgs e)
     {
         var user = App.CurrentUser;
         if (user == null) return;
-        MessageBox.Show($"{user.FullName}\nUsername: {user.Username}\nRole: {user.Role}\n\nThis terminal is working offline.",
+        PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{user.FullName}\nUsername: {user.Username}\nRole: {user.Role}\n\nThis terminal is working offline.",
             "User Information", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void DrawerFullscreen_Click(object sender, RoutedEventArgs e)
     {
-        _fullScreen = !_fullScreen;
-        if (_fullScreen)
+        SetFullScreen(!_fullScreen);
+        CloseManagementDrawer();
+    }
+
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.F11)
         {
+            SetFullScreen(!_fullScreen);
+            CloseManagementDrawer();
+            e.Handled = true;
+        }
+        else if (key == Key.Escape && _fullScreen)
+        {
+            SetFullScreen(false);
+            CloseManagementDrawer();
+            e.Handled = true;
+        }
+    }
+
+    private void SetFullScreen(bool enabled)
+    {
+        if (_fullScreen == enabled) return;
+
+        if (enabled)
+        {
+            _windowedStyle = WindowStyle;
+            _windowedState = WindowState == WindowState.Minimized ? WindowState.Normal : WindowState;
+            _windowedResizeMode = ResizeMode;
+            _windowedTopmost = Topmost;
+            _windowedBounds = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, Width, Height)
+                : RestoreBounds;
+
+            // Changing the chrome of an already maximized WPF window is not
+            // reliably applied by Windows. Return to Normal first, then enter
+            // a borderless maximized state so both the title bar and taskbar
+            // are removed consistently.
+            WindowState = WindowState.Normal;
             WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            Topmost = true;
             WindowState = WindowState.Maximized;
+            _fullScreen = true;
         }
         else
         {
-            WindowStyle = WindowStyle.SingleBorderWindow;
-            WindowState = WindowState.Maximized;
+            WindowState = WindowState.Normal;
+            Topmost = _windowedTopmost;
+            WindowStyle = _windowedStyle;
+            ResizeMode = _windowedResizeMode;
+
+            if (_windowedState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
+            else
+            {
+                Left = _windowedBounds.Left;
+                Top = _windowedBounds.Top;
+                Width = _windowedBounds.Width;
+                Height = _windowedBounds.Height;
+                WindowState = WindowState.Normal;
+            }
+            _fullScreen = false;
         }
-        CloseManagementDrawer();
+
+        DrawerFullscreen.SetResourceReference(
+            ContentControl.ContentProperty,
+            _fullScreen ? "Shell_ExitFullScreen" : "Shell_FullScreen");
     }
 
     private void DrawerExit_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Exit PosApp?", "Exit", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Exit PosApp?", "Exit", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             Close();
     }
 

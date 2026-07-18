@@ -100,7 +100,7 @@ public class RegisterService : IRegisterService
 
         var payments = await _db.SalePayments.AsNoTracking()
             .Where(payment => payment.Sale != null &&
-                              payment.Sale.SaleDate >= session.OpenedAt &&
+                              payment.Sale.CashSessionId == sessionId &&
                               payment.Sale.SaleDate <= end &&
                               (payment.Sale.Status == SaleStatus.Completed ||
                                payment.Sale.Status == SaleStatus.Refunded))
@@ -108,10 +108,11 @@ public class RegisterService : IRegisterService
             .ToListAsync();
 
         var sales = await _db.Sales.AsNoTracking()
-            .Where(sale => sale.SaleDate >= session.OpenedAt && sale.SaleDate <= end &&
+            .Where(sale => sale.CashSessionId == sessionId && sale.SaleDate <= end &&
                            (sale.Status == SaleStatus.Completed || sale.Status == SaleStatus.Refunded))
             .Select(sale => new
             {
+                sale.Status,
                 sale.Subtotal,
                 sale.DiscountTotal,
                 sale.TaxTotal,
@@ -142,7 +143,9 @@ public class RegisterService : IRegisterService
             CashOut = cashOut,
             GrossSales = sales.Sum(sale =>
                 sale.Subtotal - sale.DiscountTotal + sale.TaxTotal + sale.Rounding),
-            TransactionCount = sales.Count(sale => sale.Subtotal >= 0m),
+            // Status is authoritative. Amount signs and legacy refund links are
+            // not reliable identifiers for legitimate zero-value refunds.
+            TransactionCount = sales.Count(sale => sale.Status == SaleStatus.Completed),
             ExpectedCash = expected,
             CountedCash = session.CountedCash,
             Variance = session.Variance,

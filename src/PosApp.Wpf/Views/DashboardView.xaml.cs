@@ -51,7 +51,7 @@ public partial class DashboardView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Dashboard", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Dashboard", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {

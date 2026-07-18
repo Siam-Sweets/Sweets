@@ -180,6 +180,7 @@
     <sys:String x:Key="Pay_Bank">ব্যাংক ট্রান্সফার</sys:String>
     <sys:String x:Key="Pay_StoreCredit">স্টোর ক্রেডিট</sys:String>
     <sys:String x:Key="Pay_Coupon">কুপন</sys:String>
+    <sys:String x:Key="Pay_Other">অন্যান্য</sys:String>
     <sys:String x:Key="Pay_Reference">লেনদেন রেফারেন্স</sys:String>
     <sys:String x:Key="Pay_ReferenceRequired">কার্ড, ওয়ালেট বা ব্যাংক লেনদেনের রেফারেন্স লিখুন।</sys:String>
     <sys:String x:Key="Pay_Complete">বিক্রয় সম্পূর্ণ</sys:String>
@@ -312,6 +313,7 @@
     <sys:String x:Key="Set_Footer">রসিদ ফুটার</sys:String>
     <sys:String x:Key="Set_Printer">রসিদ প্রিন্টার</sys:String>
     <sys:String x:Key="Set_AutoPrint">অটো-প্রিন্ট রসিদ</sys:String>
+    <sys:String x:Key="Set_PrintFromHistory">রসিদ স্বয়ংক্রিয়ভাবে সংরক্ষিত হয়। প্রয়োজন হলে বিক্রয় ইতিহাস থেকে প্রিন্ট করুন, যাতে প্রিন্টার বা PDF সংরক্ষণ ডায়ালগ চেকআউট থামাতে না পারে।</sys:String>
     <sys:String x:Key="Set_Language">ভাষা</sys:String>
     <sys:String x:Key="Set_Theme">থিম</sys:String>
     <sys:String x:Key="Set_Light">হালকা</sys:String>
@@ -394,6 +396,7 @@
     <sys:String x:Key="Shell_UserInfo">ব্যবহারকারীর তথ্য</sys:String>
     <sys:String x:Key="Shell_SignOut">সাইন আউট</sys:String>
     <sys:String x:Key="Shell_FullScreen">পূর্ণ পর্দা</sys:String>
+    <sys:String x:Key="Shell_ExitFullScreen">পূর্ণ পর্দা থেকে বের হন</sys:String>
     <sys:String x:Key="Shell_ExitApp">প্রস্থান</sys:String>
 
     <!-- ব্যবস্থাপনা ড্যাশবোর্ড -->
@@ -451,7 +454,7 @@
     <sys:String x:Key="Set_Database">ডেটাবেস</sys:String>
     <sys:String x:Key="Set_Update">আপডেট ও পুনরুদ্ধার</sys:String>
     <sys:String x:Key="Set_SafeUpdate">নিরাপদ অফলাইন আপডেট</sys:String>
-    <sys:String x:Key="Set_SafeUpdateHelp">এই কম্পিউটারে সংরক্ষিত নতুন PosApp সেটআপ ইনস্টলার বেছে নিন। PosApp পণ্য ও সংস্করণ যাচাই করে, SHA-256 হ্যাশ সংরক্ষণ করে, সুস্থ ডেটাবেস স্ন্যাপশট তৈরি করে এবং তারপর সেটআপ চালু করে।</sys:String>
+    <sys:String x:Key="Set_SafeUpdateHelp">এই কম্পিউটারে সংরক্ষিত নতুন, ডিজিটাল স্বাক্ষরযুক্ত PosApp সেটআপ ইনস্টলার বেছে নিন। PosApp বিশ্বস্ত Windows প্রকাশক, পণ্য, সংস্করণ ও SHA-256 হ্যাশ যাচাই করে, সুস্থ ডেটাবেস স্ন্যাপশট তৈরি করে এবং তারপর সেটআপ চালু করে।</sys:String>
     <sys:String x:Key="Set_CurrentVersion">বর্তমান সংস্করণ</sys:String>
     <sys:String x:Key="Set_UpdateStatus">আপডেটের অবস্থা</sys:String>
     <sys:String x:Key="Set_SelectedInstaller">নির্বাচিত ইনস্টলার</sys:String>
@@ -463,6 +466,23 @@
     <sys:String x:Key="Set_UpdateBackupFolder">আপডেট পুনরুদ্ধার ফোল্ডার</sys:String>
     <sys:String x:Key="Set_About">পরিচিতি</sys:String>
     <sys:String x:Key="Set_OfflineAbout">স্থানীয় পয়েন্ট অফ সেল। বিক্রয়, ইনভেন্টরি, ব্যবহারকারী, রিপোর্ট, কনফিগারেশন ও ব্যাকআপ এই কম্পিউটারেই থাকে।</sys:String>
+
+    <!-- Custom refund -->
+    <sys:String x:Key="POS_CustomRefund">কাস্টম ফেরত</sys:String>
+    <sys:String x:Key="Refund_CustomTitle">কাস্টম ফেরত</sys:String>
+    <sys:String x:Key="Refund_CustomHelp">ফেরত আসা পণ্য বেছে নিয়ে প্রতিটির পরিমাণ লিখুন। আগে ফেরত দেওয়া পরিমাণ আবার ফেরত দেওয়া যাবে না।</sys:String>
+    <sys:String x:Key="Refund_SelectAll">বাকি সব নির্বাচন</sys:String>
+    <sys:String x:Key="Refund_Return">ফেরত</sys:String>
+    <sys:String x:Key="Refund_Sold">বিক্রি</sys:String>
+    <sys:String x:Key="Refund_PreviouslyReturned">আগে ফেরত</sys:String>
+    <sys:String x:Key="Refund_Remaining">বাকি</sys:String>
+    <sys:String x:Key="Refund_Quantity">ফেরত পরিমাণ</sys:String>
+    <sys:String x:Key="Refund_Amount">টাকা</sys:String>
+    <sys:String x:Key="Refund_Method">ফেরতের মাধ্যম</sys:String>
+    <sys:String x:Key="Refund_Reason">কারণ / রেফারেন্স</sys:String>
+    <sys:String x:Key="Refund_Total">মোট ফেরত</sys:String>
+    <sys:String x:Key="Refund_StockHelp">নিশ্চিত পরিমাণ স্টকে ফিরে যাবে এবং মূল বিক্রির সঙ্গে যুক্ত ফেরত রসিদ হিসেবে সংরক্ষিত হবে।</sys:String>
+    <sys:String x:Key="Refund_Process">ফেরত সম্পন্ন করুন</sys:String>
 
     <!-- Common -->
     <sys:String x:Key="Common_Save">সংরক্ষণ</sys:String>

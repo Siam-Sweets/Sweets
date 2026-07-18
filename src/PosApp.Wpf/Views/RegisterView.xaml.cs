@@ -28,7 +28,7 @@ public partial class RegisterView : UserControl, IRefreshable
         try { await LoadAsync(); }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load register", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load register", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { IsEnabled = true; }
     }
@@ -84,7 +84,7 @@ public partial class RegisterView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to open register", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to open register", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -109,7 +109,7 @@ public partial class RegisterView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to record movement", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to record movement", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -124,7 +124,7 @@ public partial class RegisterView : UserControl, IRefreshable
         if (_openSession == null || App.CurrentUser == null) return;
         if (App.CurrentUser.Role < UserRole.Manager)
         {
-            MessageBox.Show("A manager or administrator must close the register.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("A manager or administrator must close the register.",
                 "Register", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -136,7 +136,7 @@ public partial class RegisterView : UserControl, IRefreshable
             Amount = current.ExpectedCash
         };
         if (dialog.ShowDialog() != true) return;
-        if (MessageBox.Show("Close this register session and produce the final Z report?",
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Close this register session and produce the final Z report?",
                 "Close Register", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
         try
@@ -149,7 +149,7 @@ public partial class RegisterView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to close register", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to close register", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -169,7 +169,7 @@ public partial class RegisterView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to build register report", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to build register report", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -288,7 +288,7 @@ public sealed class CashEntryDialog : Window
         if (!FormattingUtilities.TryParseDecimal(_amountBox.Text, out var amount) || amount < 0m ||
             (_requireReason && amount == 0m))
         {
-            MessageBox.Show(_requireReason
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(_requireReason
                     ? "Enter an amount greater than zero."
                     : "Enter a valid non-negative amount.",
                 Title, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -296,7 +296,7 @@ public sealed class CashEntryDialog : Window
         }
         if (_requireReason && string.IsNullOrWhiteSpace(_reasonBox.Text))
         {
-            MessageBox.Show("Enter a reason.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter a reason.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         DialogResult = true;
@@ -338,7 +338,7 @@ public sealed class RegisterReportDialog : Window
         print.Click += async (_, _) =>
         {
             var ok = await hardware.PrintTextAsync(report);
-            MessageBox.Show(ok ? "Report sent to the printer." : "Printing failed. Check printer settings.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ok ? "Report sent to the printer." : "Printing failed. Check printer settings.",
                 Title, MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
         };
         var close = new Button { Content = "Close", Style = (Style)FindResource("OutlineButton") };

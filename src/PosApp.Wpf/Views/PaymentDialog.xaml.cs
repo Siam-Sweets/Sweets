@@ -322,7 +322,7 @@ public partial class PaymentDialog : Window
     private void ShowWarning(string key, string fallback)
     {
         var message = Application.Current.TryFindResource(key) as string ?? fallback;
-        MessageBox.Show(this, message,
+        PosApp.Wpf.Helpers.LocalizedMessageBox.Show(this, message,
             Application.Current.TryFindResource("Pay_Title") as string ?? "Payment",
             MessageBoxButton.OK, MessageBoxImage.Warning);
     }

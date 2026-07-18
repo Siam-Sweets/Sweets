@@ -98,6 +98,37 @@ public sealed class SafeUpdateService : IUpdateService
         if (!await HasPortableExecutableHeaderAsync(fullPath))
             return Invalid(fullPath, "The selected file is not a Windows executable.");
 
+        if (!AuthenticodeVerifier.TryVerify(fullPath, out var publisher, out var signatureFailure))
+            return Invalid(fullPath,
+                $"The update was stopped because its publisher could not be verified. {signatureFailure}");
+
+        var runningExecutable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(runningExecutable) || !File.Exists(runningExecutable))
+        {
+            return Invalid(fullPath,
+                "Safe update is unavailable because Windows could not identify the running PosApp executable. " +
+                "Install the signed release manually instead.");
+        }
+
+        if (!AuthenticodeVerifier.TryVerify(
+                runningExecutable, out var currentPublisher, out var currentSignatureFailure))
+        {
+            return Invalid(fullPath,
+                "Safe update is unavailable because this running copy of PosApp does not have a verifiable " +
+                $"Windows publisher signature. Install the signed release manually instead. {currentSignatureFailure}");
+        }
+
+        // Trust continuity matters as much as a valid signature: an unrelated
+        // company must not be able to sign a look-alike PosApp installer. Exact
+        // signer-subject matching permits normal certificate renewal while Windows
+        // still validates both certificate chains.
+        if (!string.Equals(publisher.Subject, currentPublisher.Subject, StringComparison.OrdinalIgnoreCase))
+        {
+            return Invalid(fullPath,
+                $"The installer publisher ({publisher.DisplayName}) does not match the installed PosApp publisher " +
+                $"({currentPublisher.DisplayName}).");
+        }
+
         FileVersionInfo versionInfo;
         try { versionInfo = FileVersionInfo.GetVersionInfo(fullPath); }
         catch (Exception ex) { return Invalid(fullPath, $"Windows could not read the installer metadata: {ex.Message}"); }
@@ -106,12 +137,25 @@ public sealed class SafeUpdateService : IUpdateService
         if (!string.Equals(productName, "PosApp", StringComparison.OrdinalIgnoreCase))
             return Invalid(fullPath, "The selected setup file is not identified as a PosApp installer.");
 
-        var targetVersion = ParseVersion(versionInfo.ProductVersion ?? versionInfo.FileVersion);
-        if (targetVersion == null)
-            return Invalid(fullPath, "The installer does not contain a valid PosApp version.");
-        if (targetVersion.CompareTo(_currentVersion) <= 0)
+        var fileNameVersion = ParseInstallerFileNameVersion(fileName);
+        if (fileNameVersion == null)
+            return Invalid(fullPath, "The installer filename does not contain a valid PosApp version.");
+
+        var resourceVersion = ParseVersion(versionInfo.ProductVersion ?? versionInfo.FileVersion);
+        if (resourceVersion == null)
+            return Invalid(fullPath, "The installer does not contain a valid PosApp version resource.");
+
+        // Development packages encode the Actions run in both the filename
+        // (1.4.5-dev.27) and the Windows resource (1.4.5.27). Compare the complete
+        // build identity so a second dev package is not mistaken for the same build.
+        if (!SameBuildVersion(fileNameVersion, resourceVersion))
             return Invalid(fullPath,
-                $"This computer has PosApp {CurrentVersion}. Choose a newer installer than {DisplayVersion(targetVersion)}.");
+                $"The installer version metadata ({DisplayVersion(resourceVersion)}) does not match its filename ({DisplayVersion(fileNameVersion)}).");
+
+        var targetVersion = NormalizeVersion(fileNameVersion);
+        if (CompareBuildVersions(targetVersion, _currentVersion) <= 0)
+            return Invalid(fullPath,
+                $"This computer has PosApp {CurrentVersion}. The selected installer is PosApp {DisplayVersion(targetVersion)}, which is not newer.");
 
         var hash = await ComputeSha256Async(fullPath);
         return new SafeUpdatePackageInfo
@@ -119,12 +163,14 @@ public sealed class SafeUpdateService : IUpdateService
             InstallerPath = fullPath,
             FileName = fileName,
             ProductName = productName,
+            Publisher = publisher.DisplayName,
             CurrentVersion = CurrentVersion,
             TargetVersion = DisplayVersion(targetVersion),
             Sha256 = hash,
             SizeBytes = new FileInfo(fullPath).Length,
             IsValid = true,
-            ValidationMessage = "Newer PosApp installer verified. Confirm that it came from your trusted PosApp release source."
+            ValidationMessage =
+                $"Newer PosApp installer verified. Publisher matches the installed app: {publisher.DisplayName}."
         };
     }
 
@@ -213,7 +259,7 @@ public sealed class SafeUpdateService : IUpdateService
             record.RunningVersion = CurrentVersion;
             record.CompletedAtUtc = DateTime.UtcNow;
             var target = ParseVersion(record.TargetVersion);
-            record.State = target != null && _currentVersion.CompareTo(target) >= 0
+            record.State = target != null && CompareBuildVersions(_currentVersion, target) >= 0
                 ? "Completed"
                 : "InstallerNotApplied";
             await WriteRecordAsync(DbPathResolver.LastUpdateRecordPath(), record);
@@ -272,6 +318,27 @@ public sealed class SafeUpdateService : IUpdateService
             ? NormalizeVersion(version)
             : null;
     }
+
+    private static Version? ParseInstallerFileNameVersion(string fileName)
+    {
+        var match = Regex.Match(fileName,
+            @"^PosApp-(?<core>\d+\.\d+\.\d+)(?:(?:\.(?<revision>\d+))|(?:-dev\.(?<dev>\d+)))?-Setup\.exe$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success) return null;
+
+        var revision = match.Groups["revision"].Success
+            ? match.Groups["revision"].Value
+            : match.Groups["dev"].Success
+                ? match.Groups["dev"].Value
+                : "0";
+        return ParseVersion($"{match.Groups["core"].Value}.{revision}");
+    }
+
+    private static bool SameBuildVersion(Version left, Version right)
+        => NormalizeVersion(left).Equals(NormalizeVersion(right));
+
+    private static int CompareBuildVersions(Version left, Version right)
+        => NormalizeVersion(left).CompareTo(NormalizeVersion(right));
 
     private static string DisplayVersion(Version version)
         => version.Revision > 0 ? version.ToString(4) : version.ToString(3);

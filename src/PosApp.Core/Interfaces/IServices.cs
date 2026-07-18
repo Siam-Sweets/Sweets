@@ -87,6 +87,7 @@ public interface ISaleService
     Task<Sale> SuspendAsync(SaleDraft draft);
     Task<Sale> RecallSuspendedAsync(int saleId);
     Task<Sale> VoidSaleAsync(int saleId, int userId);
+    Task<Sale> RefundSaleAsync(RefundDraft draft);
     Task<Sale> RefundSaleAsync(int saleId, int userId, string? reason = null);
     Task<string> GenerateReceiptNumberAsync();
 }

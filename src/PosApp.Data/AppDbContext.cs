@@ -114,9 +114,14 @@ public class AppDbContext : DbContext
                 .WithMany(u => u.Sales)
                 .HasForeignKey(s => s.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(s => s.CashSession)
+                .WithMany(session => session.Sales)
+                .HasForeignKey(s => s.CashSessionId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(s => s.ReceiptNumber).IsUnique();
             b.HasIndex(s => s.SaleDate);
-            b.HasIndex(s => s.RefundedSaleId).IsUnique();
+            b.HasIndex(s => s.CashSessionId);
+            b.HasIndex(s => s.RefundedSaleId);
         });
 
         // SaleItem
@@ -136,6 +141,7 @@ public class AppDbContext : DbContext
                 .WithMany(p => p.SaleItems)
                 .HasForeignKey(i => i.ProductId)
                 .OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(i => i.RefundedSaleItemId);
         });
 
         // SalePayment

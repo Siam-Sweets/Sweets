@@ -31,7 +31,7 @@ public partial class PromotionsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Promotions", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Promotions", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -58,7 +58,7 @@ public partial class PromotionsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to save promotion", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to save promotion", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -82,7 +82,7 @@ public partial class PromotionsView : UserControl, IRefreshable
         catch (Exception ex)
         {
             checkBox.IsChecked = previousState;
-            MessageBox.Show(ex.Message, "Unable to update promotion",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to update promotion",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -94,7 +94,7 @@ public partial class PromotionsView : UserControl, IRefreshable
     private async void Deactivate_Click(object sender, RoutedEventArgs e)
     {
         if (PromotionGrid.SelectedItem is not PromotionRow row || !row.IsActive) return;
-        if (MessageBox.Show($"Deactivate {row.Name}?", "Promotion", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Deactivate {row.Name}?", "Promotion", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         try
         {
             await _discounts.DeactivateAsync(row.Discount.Id);
@@ -102,7 +102,7 @@ public partial class PromotionsView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to deactivate promotion", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to deactivate promotion", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -221,7 +221,7 @@ public sealed class PromotionEditorDialog : Window
     {
         if (string.IsNullOrWhiteSpace(_name.Text) || !DialogLayout.TryParseDecimal(_value.Text, out var amount))
         {
-            MessageBox.Show("Enter a name and valid value.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter a name and valid value.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         int? maxUses = null;
@@ -229,7 +229,7 @@ public sealed class PromotionEditorDialog : Window
         {
             if (!int.TryParse(_maxUses.Text, out var parsed) || parsed < 1)
             {
-                MessageBox.Show("Maximum uses must be blank or a positive whole number.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Maximum uses must be blank or a positive whole number.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
             maxUses = parsed;

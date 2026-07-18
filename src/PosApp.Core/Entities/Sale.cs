@@ -21,6 +21,14 @@ public class Sale
     public int UserId { get; set; }
     public User? User { get; set; }
 
+    /// <summary>
+    /// Register session that owned this transaction. This is deliberately stored
+    /// on the sale instead of inferred from timestamps so a later refund or void
+    /// cannot rewrite the totals of a register that has already been closed.
+    /// </summary>
+    public int? CashSessionId { get; set; }
+    public CashSession? CashSession { get; set; }
+
     public SaleStatus Status { get; set; } = SaleStatus.Completed;
 
     public DateTime SaleDate { get; set; } = DateTime.UtcNow;
@@ -65,7 +73,10 @@ public class Sale
     public bool HasRefund { get; set; }
 
     [NotMapped]
-    public bool CanRefund => Status == SaleStatus.Completed && !HasRefund;
+    public bool IsFullyRefunded { get; set; }
+
+    [NotMapped]
+    public bool CanRefund => Status == SaleStatus.Completed && !IsFullyRefunded;
 
     [NotMapped]
     public bool CanVoid => Status == SaleStatus.Completed && !HasRefund;

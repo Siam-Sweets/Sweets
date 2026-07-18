@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.4.5 — Custom refunds, quieter checkout, and reliable scrolling
+
+- Removed the Lock command from the receipt-screen home actions.
+- Added item- and quantity-based custom refunds with repeatable partial returns, payment-method selection, stock restoration, and over-refund protection.
+- Changed checkout completion to save the sale without opening a printer/file dialog; receipts remain printable from Sales History.
+- Replaced the one-refund-per-sale database constraint with line-level refund links and an upgrade-safe non-unique lookup index.
+- Preserved legacy refund repair while preventing it from rewriting modern partial-refund tender or rounding values on later starts.
+- Fixed mouse-wheel routing across nested management pages, grids, combo boxes, and containing scroll viewers.
+- Updated English and Bengali labels for the new refund and print-from-history workflow.
+
+## 1.4.4 — Data-integrity, recovery, update, and localization hardening
+
+- Bound every sale and refund to its owning register session so later activity cannot rewrite a previously closed Z report.
+- Cleared stale EF tracking before stock-changing sale operations and protected void/refund workflows with register-aware validation.
+- Corrected cash-refund register requirements and zero-value refund transaction counting.
+- Made database schema upgrades transactional and added an idempotent legacy register-ownership migration.
+- Made restore staging and startup replacement durable, validated, and atomic while retaining a pre-restore safety copy.
+- Added full development-build version comparison for offline updates.
+- Required Windows Authenticode verification and installed-publisher continuity before an update installer can launch.
+- Expanded live Bengali localization to code-generated dialogs, errors, headers, and dynamic windows.
+- Corrected inactive-administrator deletion protection without weakening the last-active-admin rule.
+
+## 1.4.3 — Streamlined POS drawer and reliable full screen
+
+- Removed the redundant Settings action from the receipt-screen drawer; Settings remains available through Management.
+- Reworked Full screen to transition through a normal window state before applying borderless maximization, ensuring Windows applies the chrome change.
+- Preserved and restored the previous window style, size, state, resize mode, and always-on-top setting when leaving full screen.
+- Added F11 to toggle full screen, Escape to leave it, and a localized **Exit full screen** label while the mode is active.
+
+## 1.4.2 — Focus-aware POS search placeholder
+
+- Converted the main barcode/code/product instruction into a focus-aware placeholder instead of persistent field text.
+- The placeholder now disappears immediately when the scanner/search field receives keyboard focus.
+- The placeholder returns after focus leaves only when the field is still empty, without changing typed or scanned input.
+
+## 1.4.1 — Offline installer version detection fix
+
+- Fixed rolling GitHub development installers being published as version `0.0.0.<run>`, which caused the in-app updater to reject them as older than an installed release.
+- Development installers now use the real project version plus a prerelease run label, such as `1.4.1-dev.27`, and a Windows resource version such as `1.4.1.27`.
+- The updater now reads the semantic product version from the verified installer filename and validates it against the Windows version resource.
+- Installer build/run revisions are ignored when confirming the application version after restart, preventing a successful development update from being reported as not applied.
+- Release builds now fail early when the requested tag or manual version does not match the version in `PosApp.Wpf.csproj`.
+- Improved the rejection message so it reports the installed and selected versions accurately.
+
 ## 1.4.0 — Comprehensive reliability, accounting, and data-integrity repair
 
 - Removed the remaining build-breaking weighted-product recall reference and completed the suspended-sale hydration path.

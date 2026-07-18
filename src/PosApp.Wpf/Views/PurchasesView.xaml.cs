@@ -38,7 +38,7 @@ public partial class PurchasesView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to load purchases", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load purchases", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -80,7 +80,7 @@ public partial class PurchasesView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to start purchase", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to start purchase", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -317,14 +317,14 @@ public sealed class PurchaseEditDialog : Window
     {
         if (_productCombo.SelectedItem is not ComboBoxItem { Tag: Product product })
         {
-            MessageBox.Show("Select a product.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Select a product.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (!FormattingUtilities.TryParseDecimal(_quantityBox.Text, out var quantity) || quantity <= 0m ||
             !FormattingUtilities.TryParseDecimal(_costBox.Text, out var cost) || cost < 0m ||
             !FormattingUtilities.TryParseDecimal(_taxBox.Text, out var tax) || tax is < 0m or > 100m)
         {
-            MessageBox.Show("Enter a positive quantity and valid cost/tax values.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter a positive quantity and valid cost/tax values.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -372,7 +372,7 @@ public sealed class PurchaseEditDialog : Window
     {
         if (_lines.Count == 0)
         {
-            MessageBox.Show("Add at least one product.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Add at least one product.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         if (App.CurrentUser == null) return;
@@ -394,14 +394,14 @@ public sealed class PurchaseEditDialog : Window
                 Lines = _lines.ToList()
             };
             var posted = await _service.PostPurchaseAsync(draft);
-            MessageBox.Show($"Purchase {posted.DocumentNumber} posted and stock updated.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Purchase {posted.DocumentNumber} posted and stock updated.",
                 "Purchase", MessageBoxButton.OK, MessageBoxImage.Information);
             DialogResult = true;
             Close();
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to post purchase", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to post purchase", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -507,13 +507,13 @@ public sealed class SupplierEditDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to save supplier", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to save supplier", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     private async void Deactivate_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Deactivate this supplier? Existing purchase history will be kept.",
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Deactivate this supplier? Existing purchase history will be kept.",
                 "Supplier", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         try
         {
@@ -523,7 +523,7 @@ public sealed class SupplierEditDialog : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(ex.Message, "Unable to deactivate supplier", MessageBoxButton.OK, MessageBoxImage.Error);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to deactivate supplier", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

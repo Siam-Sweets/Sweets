@@ -44,6 +44,12 @@ public class SaleItem
 
     public int? PromotionId { get; set; }
 
+    /// <summary>
+    /// Original receipt line returned by this negative refund line. Keeping the
+    /// link on every row makes repeated partial refunds independently auditable.
+    /// </summary>
+    public int? RefundedSaleItemId { get; set; }
+
     public decimal LineTotal => (UnitPrice * Quantity) - DiscountAmount;
 
     public decimal LineTax => LineTotal * TaxRate / 100m;

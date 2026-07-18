@@ -42,6 +42,12 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
+        EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent,
+            new RoutedEventHandler((sender, _) =>
+            {
+                if (sender is Window window) RuntimeUiText.LocalizeWindow(window);
+            }));
+
         EnterKeyNavigation.Register();
     }
 
@@ -79,7 +85,7 @@ public partial class App : Application
         try
         {
             Log($"DISPATCHER EXCEPTION: {e.Exception}");
-            MessageBox.Show(
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 $"An error occurred:\n\n{e.Exception.Message}\n\n" +
                 $"Technical details were written to:\n{LogFilePath}",
                 "PosApp - Error",
@@ -99,7 +105,7 @@ public partial class App : Application
         {
             var ex = e.ExceptionObject as Exception;
             Log($"APPDOMAIN EXCEPTION (isTerminating={e.IsTerminating}): {ex}");
-            MessageBox.Show(
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 $"A fatal error occurred:\n\n{ex?.Message}\n\n" +
                 $"Technical details were written to:\n{LogFilePath}",
                 "PosApp - Fatal Error",
@@ -256,7 +262,7 @@ public partial class App : Application
             {
                 Log($"Could not read update recovery information: {recoveryError}");
             }
-            MessageBox.Show(
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 $"PosApp failed to start.\n\nError: {ex.Message}\n\n" +
                 $"Full details were written to:\n{LogFilePath}{updateRecovery}",
                 "PosApp - Startup Failed",
@@ -396,6 +402,7 @@ public partial class App : Application
         }
         mergedDictionaries.Insert(0, dictionary);
         LocalizationManager.Instance.SetLanguage(code);
+        foreach (Window window in Current.Windows) RuntimeUiText.LocalizeWindow(window);
     }
 
     private static void SetThemeBrush(string key, string hex)
