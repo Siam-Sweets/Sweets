@@ -161,6 +161,12 @@ public sealed class PromotionEditorDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
 
+        _name.MaxLength = 60;
+        _code.MaxLength = 40;
+        _description.MaxLength = 200;
+        _value.MaxLength = 32;
+        _maxUses.MaxLength = 10;
+
         var root = new Grid { Margin = new Thickness(20) };
         for (var i = 0; i < 7; i++) root.RowDefinitions.Add(new RowDefinition { Height = i == 2 ? new GridLength(100) : GridLength.Auto });
         root.Children.Add(Field("Name", _name, 0));
@@ -225,6 +231,26 @@ public sealed class PromotionEditorDialog : Window
             PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter a name and valid value.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        var type = _type.SelectedItem is DiscountType selectedType
+            ? selectedType
+            : DiscountType.Percentage;
+        if (amount <= 0m || (type == DiscountType.Percentage && amount > 100m))
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                type == DiscountType.Percentage
+                    ? "Percentage must be greater than 0 and no more than 100."
+                    : "Fixed amount must be greater than 0.",
+                Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (_from.SelectedDate.HasValue && _to.SelectedDate.HasValue
+            && _to.SelectedDate.Value.Date < _from.SelectedDate.Value.Date)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                "Valid to cannot be earlier than valid from.", Title,
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         int? maxUses = null;
         if (!string.IsNullOrWhiteSpace(_maxUses.Text))
         {
@@ -238,7 +264,7 @@ public sealed class PromotionEditorDialog : Window
         Value.Name = _name.Text.Trim();
         Value.Code = string.IsNullOrWhiteSpace(_code.Text) ? null : _code.Text.Trim();
         Value.Description = string.IsNullOrWhiteSpace(_description.Text) ? null : _description.Text.Trim();
-        Value.Type = _type.SelectedItem is DiscountType type ? type : DiscountType.Percentage;
+        Value.Type = type;
         Value.Value = amount;
         Value.ValidFrom = _from.SelectedDate;
         Value.ValidTo = _to.SelectedDate?.Date.AddDays(1).AddTicks(-1);

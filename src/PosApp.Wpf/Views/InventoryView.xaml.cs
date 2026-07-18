@@ -64,7 +64,7 @@ public partial class InventoryView : UserControl, IRefreshable
             var dlg = new StockAdjustDialog(p, _inventory, App.CurrentUser?.Id ?? 0) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true)
             {
-                _ = RefreshAsync();
+                await RefreshAsync();
             }
         }
     }
@@ -81,7 +81,7 @@ public partial class InventoryView : UserControl, IRefreshable
             {
                 Owner = Window.GetWindow(this)
             };
-            if (dialog.ShowDialog() == true) _ = RefreshAsync();
+            if (dialog.ShowDialog() == true) await RefreshAsync();
         }
         catch (Exception ex)
         {

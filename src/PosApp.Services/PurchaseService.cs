@@ -76,6 +76,7 @@ public class PurchaseService : IPurchaseService
 
     public async Task SetSupplierActiveAsync(int supplierId, bool isActive)
     {
+        if (supplierId <= 0) throw new InvalidOperationException("Select a valid supplier.");
         var supplier = await _db.Suppliers.FindAsync(supplierId)
             ?? throw new InvalidOperationException("Supplier not found.");
         supplier.IsActive = isActive;
@@ -96,18 +97,36 @@ public class PurchaseService : IPurchaseService
 
     public async Task<PurchaseDocument> PostPurchaseAsync(PurchaseDraft draft)
     {
+        ArgumentNullException.ThrowIfNull(draft);
+        var externalReference = Normalize(draft.ExternalReference);
+        var note = Normalize(draft.Note);
+        ValidateLength(externalReference, 80, "External reference");
+        ValidateLength(note, 500, "Purchase note");
+        if (draft.Lines == null)
+            throw new InvalidOperationException("Purchase items are unavailable.");
         if (draft.Lines.Count == 0)
             throw new InvalidOperationException("Add at least one product to the purchase.");
         if (draft.UserId <= 0)
             throw new InvalidOperationException("A signed-in user is required.");
+        if (draft.SupplierId is <= 0)
+            throw new InvalidOperationException("Select a valid supplier.");
         if (draft.Lines.Any(line =>
-                line.Quantity <= 0m || line.UnitCost < 0m || line.TaxRate is < 0m or > 100m))
+                line.ProductId <= 0 || line.Quantity <= 0m || line.UnitCost < 0m ||
+                line.TaxRate is < 0m or > 100m))
             throw new InvalidOperationException(
-                "Purchase quantities must be positive, costs cannot be negative, and tax must be between 0 and 100.");
+                "Purchase products and quantities must be valid, costs cannot be negative, and tax must be between 0 and 100.");
 
+        // This service can outlive other management views. Clear previously tracked
+        // products so a stock change made elsewhere cannot be overwritten here.
+        _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
+            if (!await _db.Users.AsNoTracking().AnyAsync(user =>
+                    user.Id == draft.UserId && user.IsActive))
+                throw new InvalidOperationException(
+                    "The signed-in user no longer exists or is inactive. Sign in again.");
+
             Supplier? supplier = null;
             if (draft.SupplierId.HasValue)
             {
@@ -121,7 +140,7 @@ public class PurchaseService : IPurchaseService
             var document = new PurchaseDocument
             {
                 DocumentNumber = GenerateDocumentNumber(now),
-                ExternalReference = Normalize(draft.ExternalReference),
+                ExternalReference = externalReference,
                 Supplier = supplier,
                 UserId = draft.UserId,
                 DocumentDate = NormalizeLocalDateToUtc(draft.DocumentDate),
@@ -130,7 +149,7 @@ public class PurchaseService : IPurchaseService
                 Subtotal = draft.Subtotal,
                 TaxTotal = draft.TaxTotal,
                 Total = draft.Total,
-                Note = Normalize(draft.Note)
+                Note = note
             };
 
             foreach (var line in draft.Lines)
@@ -179,6 +198,7 @@ public class PurchaseService : IPurchaseService
             _db.PurchaseDocuments.Add(document);
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            _db.ChangeTracker.Clear();
             return document;
         }
         catch

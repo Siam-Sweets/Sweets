@@ -383,8 +383,8 @@
     <sys:String x:Key="POS_Weight">Weight</sys:String>
     <sys:String x:Key="POS_Volume">Volume</sys:String>
     <sys:String x:Key="POS_Length">Length</sys:String>
-    <sys:String x:Key="POS_EnterMeasuredAmount">Enter the amount of {0} in {1}. Price: {2} per {1}.</sys:String>
-    <sys:String x:Key="POS_AdjustMeasuredAmount">Enter the exact amount of {0} in {1}. Price: {2} per {1}.</sys:String>
+    <sys:String x:Key="POS_EnterMeasuredAmount">Enter the amount of {0} in {1}. Unit price: {2}.</sys:String>
+    <sys:String x:Key="POS_AdjustMeasuredAmount">Enter the exact amount of {0} in {1}. Unit price: {2}.</sys:String>
     <sys:String x:Key="POS_AdjustItemQuantity">Enter the whole-item quantity for {0}.</sys:String>
     <sys:String x:Key="POS_WholeQuantityRequired">Enter a whole-item quantity of at least 1.</sys:String>
     <sys:String x:Key="POS_MinimumMeasuredAmount">Enter an amount of at least {0:0.###}.</sys:String>

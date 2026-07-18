@@ -43,27 +43,48 @@ public static class DbSeeder
             });
         }
 
-        if (!await db.Categories.AnyAsync())
+        // A restored or manually repaired database can contain only some of the
+        // built-in categories. Ensure each category independently so an empty
+        // product catalog never fails below while looking up a missing default.
+        var categoryDefinitions = new[]
         {
-            var cats = new[]
+            (Name: "Beverages", Color: "#2D7FF9", SortOrder: 1),
+            (Name: "Snacks", Color: "#F59E0B", SortOrder: 2),
+            (Name: "Groceries", Color: "#10B981", SortOrder: 3),
+            (Name: "Household", Color: "#8B5CF6", SortOrder: 4),
+            (Name: "Personal Care", Color: "#EC4899", SortOrder: 5),
+            (Name: "Produce", Color: "#22C55E", SortOrder: 6)
+        };
+        var categories = await db.Categories.ToListAsync();
+        var categoriesAdded = false;
+        foreach (var definition in categoryDefinitions)
+        {
+            if (categories.Any(c => string.Equals(c.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var category = new Category
             {
-                new Category { Name = "Beverages", Color = "#2D7FF9", SortOrder = 1 },
-                new Category { Name = "Snacks", Color = "#F59E0B", SortOrder = 2 },
-                new Category { Name = "Groceries", Color = "#10B981", SortOrder = 3 },
-                new Category { Name = "Household", Color = "#8B5CF6", SortOrder = 4 },
-                new Category { Name = "Personal Care", Color = "#EC4899", SortOrder = 5 },
-                new Category { Name = "Produce", Color = "#22C55E", SortOrder = 6 }
+                Name = definition.Name,
+                Color = definition.Color,
+                SortOrder = definition.SortOrder
             };
-            db.Categories.AddRange(cats);
-            await db.SaveChangesAsync();
+            db.Categories.Add(category);
+            categories.Add(category);
+            categoriesAdded = true;
         }
+
+        if (categoriesAdded)
+            await db.SaveChangesAsync();
 
         if (!await db.Products.AnyAsync())
         {
-            var beverages = await db.Categories.FirstAsync(c => c.Name == "Beverages");
-            var snacks = await db.Categories.FirstAsync(c => c.Name == "Snacks");
-            var groceries = await db.Categories.FirstAsync(c => c.Name == "Groceries");
-            var produce = await db.Categories.FirstAsync(c => c.Name == "Produce");
+            Category CategoryNamed(string name) => categories.First(c =>
+                string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+
+            var beverages = CategoryNamed("Beverages");
+            var snacks = CategoryNamed("Snacks");
+            var groceries = CategoryNamed("Groceries");
+            var produce = CategoryNamed("Produce");
 
             var products = new[]
             {
@@ -123,7 +144,7 @@ public static class DbSeeder
             );
         }
 
-        if (!await db.Settings.AnyAsync())
+        if (!await db.Settings.AnyAsync(s => s.Key == "store:config"))
         {
             var defaults = new StoreSettings();
             db.Settings.Add(new Setting { Key = "store:config", Value = System.Text.Json.JsonSerializer.Serialize(defaults) });
@@ -149,15 +170,22 @@ public static class DbSeeder
 
     public static bool VerifyPin(string pin, string hash, string salt)
     {
+        if (string.IsNullOrEmpty(pin) || string.IsNullOrWhiteSpace(hash) || string.IsNullOrWhiteSpace(salt))
+            return false;
+        if (pin.Length > 12 || hash.Length > 256 || salt.Length > 256)
+            return false;
         if (hash.StartsWith("PBKDF2$", StringComparison.Ordinal))
         {
             var parts = hash.Split('$');
-            if (parts.Length != 3 || !int.TryParse(parts[1], out var iterations) || iterations < 10_000)
+            if (parts.Length != 3 || !int.TryParse(parts[1], out var iterations)
+                                  || iterations is < 10_000 or > 1_000_000)
                 return false;
             try
             {
                 var saltBytes = Convert.FromBase64String(salt);
                 var expected = Convert.FromBase64String(parts[2]);
+                if (saltBytes.Length is < 8 or > 128 || expected.Length != 32)
+                    return false;
                 var actual = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
                     pin, saltBytes, iterations,
                     System.Security.Cryptography.HashAlgorithmName.SHA256,
@@ -165,6 +193,14 @@ public static class DbSeeder
                 return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(actual, expected);
             }
             catch (FormatException)
+            {
+                return false;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (System.Security.Cryptography.CryptographicException)
             {
                 return false;
             }
@@ -184,11 +220,11 @@ public static class DbSeeder
     }
 
     public static bool IsLegacyHash(string hash)
-        => !hash.StartsWith("PBKDF2$", StringComparison.Ordinal);
+        => !string.IsNullOrWhiteSpace(hash) && !hash.StartsWith("PBKDF2$", StringComparison.Ordinal);
 
     public static void ValidatePin(string pin)
     {
-        if (pin.Length is < 4 or > 12 || pin.Any(ch => !char.IsDigit(ch)))
+        if (string.IsNullOrEmpty(pin) || pin.Length is < 4 or > 12 || pin.Any(ch => !char.IsDigit(ch)))
             throw new InvalidOperationException("PIN must contain 4 to 12 digits.");
     }
 

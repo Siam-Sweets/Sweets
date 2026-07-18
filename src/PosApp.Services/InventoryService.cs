@@ -59,6 +59,7 @@ public class InventoryService : IInventoryService
     public async Task<Product> CreateOrUpdateProductAsync(Product product, int? userId = null)
     {
         ArgumentNullException.ThrowIfNull(product);
+        await ValidateOptionalUserAsync(userId);
         NormalizeAndValidateProduct(product);
         await EnsureIdentifiersUniqueAsync(product);
 
@@ -135,24 +136,9 @@ public class InventoryService : IInventoryService
         return product;
     }
 
-    public async Task SetProductWeightedAsync(int productId, bool isWeighted)
-    {
-        var tracked = _db.Products.Local.FirstOrDefault(product => product.Id == productId);
-        tracked ??= await _db.Products.FirstOrDefaultAsync(product => product.Id == productId);
-        if (tracked is null)
-            throw new InvalidOperationException("Product not found");
-
-        tracked.IsWeighted = isWeighted;
-        if (isWeighted && !tracked.Unit.IsMeasuredUnit())
-            tracked.Unit = UnitOfMeasure.Kilogram;
-        else if (!isWeighted && tracked.Unit.IsMeasuredUnit())
-            tracked.Unit = UnitOfMeasure.Piece;
-        tracked.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-    }
-
     public async Task SetProductActiveAsync(int productId, bool isActive)
     {
+        if (productId <= 0) throw new InvalidOperationException("Select a valid product.");
         var tracked = _db.Products.Local.FirstOrDefault(product => product.Id == productId);
         tracked ??= await _db.Products.FirstOrDefaultAsync(product => product.Id == productId);
         if (tracked is null)
@@ -185,11 +171,15 @@ public class InventoryService : IInventoryService
     private async Task EnsureIdentifiersUniqueAsync(Product product)
     {
         if (!string.IsNullOrWhiteSpace(product.Sku) && await _db.Products.AnyAsync(p =>
-                p.Id != product.Id && p.Sku != null && p.Sku.ToLower() == product.Sku.ToLower()))
-            throw new InvalidOperationException("SKU is already used by another product.");
+                p.Id != product.Id &&
+                ((p.Sku != null && p.Sku.ToLower() == product.Sku.ToLower()) ||
+                 (p.Barcode != null && p.Barcode.ToLower() == product.Sku.ToLower()))))
+            throw new InvalidOperationException("SKU is already used as an SKU or barcode by another product.");
         if (!string.IsNullOrWhiteSpace(product.Barcode) && await _db.Products.AnyAsync(p =>
-                p.Id != product.Id && p.Barcode != null && p.Barcode.ToLower() == product.Barcode.ToLower()))
-            throw new InvalidOperationException("Barcode is already used by another product.");
+                p.Id != product.Id &&
+                ((p.Barcode != null && p.Barcode.ToLower() == product.Barcode.ToLower()) ||
+                 (p.Sku != null && p.Sku.ToLower() == product.Barcode.ToLower()))))
+            throw new InvalidOperationException("Barcode is already used as a barcode or SKU by another product.");
     }
 
     private static void NormalizeAndValidateProduct(Product product)
@@ -198,6 +188,7 @@ public class InventoryService : IInventoryService
         product.Sku = string.IsNullOrWhiteSpace(product.Sku) ? null : product.Sku.Trim();
         product.Barcode = string.IsNullOrWhiteSpace(product.Barcode) ? null : product.Barcode.Trim();
         product.Description = string.IsNullOrWhiteSpace(product.Description) ? null : product.Description.Trim();
+        product.ImagePath = string.IsNullOrWhiteSpace(product.ImagePath) ? null : product.ImagePath.Trim();
         if (product.IsWeighted && !product.Unit.IsMeasuredUnit())
             product.Unit = UnitOfMeasure.Kilogram;
         product.IsWeighted = product.Unit.IsMeasuredUnit();
@@ -212,11 +203,22 @@ public class InventoryService : IInventoryService
             throw new InvalidOperationException("Stock and low-stock threshold cannot be negative.");
         if (product.Sku?.Length > 64 || product.Barcode?.Length > 64)
             throw new InvalidOperationException("SKU and barcode cannot exceed 64 characters.");
+        if (product.Description?.Length > 1000)
+            throw new InvalidOperationException("Product description cannot exceed 1000 characters.");
+        if (product.ImagePath?.Length > 2048)
+            throw new InvalidOperationException("Product image path cannot exceed 2048 characters.");
     }
 
     public async Task AdjustStockAsync(int productId, decimal delta, StockTransactionType type,
         string? note = null, int? userId = null, decimal? unitCost = null)
     {
+        if (productId <= 0) throw new InvalidOperationException("Select a valid product.");
+        if (delta == 0m) throw new InvalidOperationException("The stock change cannot be zero.");
+        if (!Enum.IsDefined(type)) throw new InvalidOperationException("Select a valid stock movement type.");
+        if (unitCost < 0m) throw new InvalidOperationException("Unit cost cannot be negative.");
+        await ValidateOptionalUserAsync(userId);
+        note = NormalizeOptional(note, 500, "Stock note");
+
         var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId);
         if (product == null) throw new InvalidOperationException("Product not found");
         if (!product.StockQuantity.HasValue)
@@ -243,6 +245,9 @@ public class InventoryService : IInventoryService
 
     public async Task<IReadOnlyList<StockTransaction>> GetStockHistoryAsync(int productId)
     {
+        if (productId <= 0)
+            return Array.Empty<StockTransaction>();
+
         return await _db.StockTransactions.AsNoTracking()
             .Where(t => t.ProductId == productId)
             .OrderByDescending(t => t.CreatedAt)
@@ -285,6 +290,8 @@ public class InventoryService : IInventoryService
             throw new InvalidOperationException("Another category already uses this name.");
 
         var description = string.IsNullOrWhiteSpace(category.Description) ? null : category.Description.Trim();
+        if (description?.Length > 500)
+            throw new InvalidOperationException("Category description cannot exceed 500 characters.");
         var color = string.IsNullOrWhiteSpace(category.Color) ? "#64748B" : category.Color.Trim();
         if (color.Length != 7 || color[0] != '#' || !color[1..].All(Uri.IsHexDigit))
             throw new InvalidOperationException("Category color must use #RRGGBB format.");
@@ -328,6 +335,7 @@ public class InventoryService : IInventoryService
 
     public async Task DeleteCategoryAsync(int id)
     {
+        if (id <= 0) throw new InvalidOperationException("Select a valid category.");
         var inUse = await _db.Products.AnyAsync(p => p.CategoryId == id);
         if (inUse) throw new InvalidOperationException("Category in use by products");
         var cat = await _db.Categories.FindAsync(id);
@@ -343,6 +351,9 @@ public class InventoryService : IInventoryService
         string? note = null,
         int? userId = null)
     {
+        ArgumentNullException.ThrowIfNull(entries);
+        await ValidateOptionalUserAsync(userId);
+        note = NormalizeOptional(note, 500, "Inventory-count note");
         if (entries.Count == 0)
             throw new InvalidOperationException("Enter at least one counted quantity.");
         if (entries.Any(entry => entry.CountedQuantity < 0m))
@@ -351,6 +362,12 @@ public class InventoryService : IInventoryService
         var counts = entries
             .GroupBy(entry => entry.ProductId)
             .ToDictionary(group => group.Key, group => group.Last().CountedQuantity);
+        if (counts.Keys.Any(productId => productId <= 0))
+            throw new InvalidOperationException("The inventory count contains an invalid product.");
+
+        // This service lives for the view lifetime. Discard older tracked product
+        // snapshots so a count cannot overwrite stock changed by another screen.
+        _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
@@ -372,12 +389,13 @@ public class InventoryService : IInventoryService
                     Quantity = delta,
                     BalanceAfter = count.Value,
                     UnitCost = product.CostPrice,
-                    Note = string.IsNullOrWhiteSpace(note) ? "Physical inventory count" : note.Trim(),
+                    Note = note ?? "Physical inventory count",
                     UserId = userId
                 });
             }
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            _db.ChangeTracker.Clear();
         }
         catch
         {
@@ -385,5 +403,24 @@ public class InventoryService : IInventoryService
             _db.ChangeTracker.Clear();
             throw;
         }
+    }
+
+    private async Task ValidateOptionalUserAsync(int? userId)
+    {
+        if (userId is <= 0)
+            throw new InvalidOperationException("A valid user is required for this stock change.");
+        if (userId.HasValue && !await _db.Users.AsNoTracking().AnyAsync(user =>
+                user.Id == userId.Value && user.IsActive))
+            throw new InvalidOperationException(
+                "The signed-in user no longer exists or is inactive. Sign in again.");
+    }
+
+    private static string? NormalizeOptional(string? value, int maximum, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim();
+        if (normalized.Length > maximum)
+            throw new InvalidOperationException($"{field} cannot exceed {maximum} characters.");
+        return normalized;
     }
 }

@@ -77,12 +77,15 @@ public class StockColorConverter : IValueConverter
     {
         if (value is decimal d)
         {
-            if (d <= 0) return new SolidColorBrush(Colors.OrangeRed);
-            if (d <= 5) return new SolidColorBrush(Colors.DarkOrange);
-            return new SolidColorBrush(Colors.ForestGreen);
+            if (d <= 0) return GetBrush("DangerTextBrush", Colors.OrangeRed);
+            if (d <= 5) return GetBrush("WarningBrush", Colors.DarkOrange);
+            return GetBrush("SuccessTextBrush", Colors.ForestGreen);
         }
-        return new SolidColorBrush(Colors.Gray);
+        return GetBrush("TextMutedBrush", Colors.Gray);
     }
+
+    private static Brush GetBrush(string key, Color fallback)
+        => Application.Current?.TryFindResource(key) as Brush ?? new SolidColorBrush(fallback);
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => Binding.DoNothing;

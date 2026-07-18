@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.4.13 — Reliability and data-integrity hardening
+
+- Corrected partial-refund allocation when a receipt contains duplicate product lines, including legacy refunds without an original-line link.
+- Prevented stale saved-sale identifiers from reusing receipt numbers or creating duplicate suspended orders during checkout.
+- Hardened malformed local PIN records, case-insensitive login, scanner lifecycle callbacks, printer-spooler failures, and invalid entity identifiers.
+- Made register movements refresh deterministically and strengthened product, customer, supplier, promotion, refund, and numeric input validation.
+- Protected exported CSV values from spreadsheet formula execution while preserving safe import/export round trips.
+- Kept invalid report ranges and CSV export failures inside their owning screens instead of escalating them to application-level error dialogs.
+- Made startup seeding recover missing built-in categories and store settings safely in partially restored local databases.
+- Removed redundant refund, export, dialog, and purchase-editor code left behind by earlier iterations.
+
+## 1.4.12 — Codebase cleanup
+
+- Removed the unused generic repository abstraction and implementation; all active services already use the scoped EF Core context directly.
+- Removed an unused command helper, obsolete theme/language enums, orphaned SVG source artwork, and empty placeholder directories.
+- Removed unused WPF, hosting, logging, behavior, HID-discovery, design-time EF, and dependency-abstraction package references while preserving the packages required by active features.
+- Removed redundant project references and stopped copying the embedded application manifest as a loose publish file.
+- Replaced a no-op HID scanner branch with the intended inter-key timeout behavior and removed stale startup state that was never read.
+- Tightened nullable report/import queries to eliminate known compiler-warning sources without changing database or report behavior.
+
+## 1.4.11 — Complete measured-price prompts
+
+- Prevents weight, volume, and length prompts from clipping the numeric unit price at common Windows display scaling levels.
+- Shows a compact, unambiguous unit-price label such as `৳ 80.00 / kg` in both add and quantity-adjustment dialogs.
+- Allows measured-quantity prompts to wrap and grow vertically for long product names in English and Bengali.
+
 ## 1.4.10 — Product search binding stability
 - Displays computed product units and sale modes using explicit one-way bindings, preventing the product finder from trying to write into read-only properties.
 - Prevents a single UI failure from recursively opening a stack of identical error dialogs.

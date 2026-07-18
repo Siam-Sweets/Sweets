@@ -30,11 +30,11 @@ public partial class ReportsView : UserControl, IRefreshable
     private async Task LoadAsync()
     {
         var version = ++_loadVersion;
-        var (from, to) = GetRange();
         await _loadGate.WaitAsync();
         try
         {
             if (version != _loadVersion) return;
+            var (from, to) = GetRange();
 
             var range = await _reports.GetRangeReportAsync(from, to);
             var top = await _reports.GetTopProductsAsync(from, to, 20);

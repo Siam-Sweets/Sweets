@@ -16,7 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PosApp.Core\PosApp.Core.csproj" />
-    <ProjectReference Include="..\PosApp.Services\PosApp.Services.csproj" />
   </ItemGroup>
 
 </Project>

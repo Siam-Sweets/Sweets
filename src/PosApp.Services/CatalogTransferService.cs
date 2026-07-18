@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Core.Utilities;
 using PosApp.Data;
 
 namespace PosApp.Services;
@@ -48,13 +49,16 @@ public class CatalogTransferService : ICatalogTransferService
                 product.AllowDiscount.ToString(),
                 product.IsActive.ToString()
             };
-            await writer.WriteLineAsync(string.Join(',', values.Select(Escape)));
+            await writer.WriteLineAsync(string.Join(',', values.Select(FormattingUtilities.CsvField)));
         }
     }
 
     public async Task<CatalogImportResult> ImportProductsAsync(
         string filePath, ProductImportMode mode, int? userId = null)
     {
+        if (userId is <= 0)
+            throw new InvalidOperationException("A valid user is required for a stock import.");
+
         var csv = await File.ReadAllTextAsync(filePath);
         var records = ParseCsv(csv);
         if (records.Count < 2)
@@ -73,9 +77,15 @@ public class CatalogTransferService : ICatalogTransferService
         var hasSaleModeColumn = headerMap.ContainsKey("salemode");
 
         var result = new CatalogImportResult();
+        _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
+            if (userId.HasValue && !await _db.Users.AsNoTracking().AnyAsync(user =>
+                    user.Id == userId.Value && user.IsActive))
+                throw new InvalidOperationException(
+                    "The signed-in user no longer exists or is inactive. Sign in again.");
+
             var products = await _db.Products.Include(product => product.Category).ToListAsync();
             var categories = await _db.Categories.ToListAsync();
             var nextCategorySort = categories.Count == 0 ? 1 : categories.Max(category => category.SortOrder) + 1;
@@ -89,9 +99,12 @@ public class CatalogTransferService : ICatalogTransferService
                     result.Warnings.Add($"Row {rowNumber + 1}: skipped because Name is empty.");
                     continue;
                 }
+                ValidateLength(name, 100, "Name", rowNumber + 1);
 
                 var sku = EmptyToNull(Field(row, headerMap, "sku"));
                 var barcode = EmptyToNull(Field(row, headerMap, "barcode"));
+                ValidateLength(sku, 64, "SKU", rowNumber + 1);
+                ValidateLength(barcode, 64, "Barcode", rowNumber + 1);
                 var rowPrice = DecimalField(row, headerMap, "price");
                 var rowCost = DecimalField(row, headerMap, "costprice");
                 var rowTax = DecimalField(row, headerMap, "taxrate");
@@ -114,6 +127,7 @@ public class CatalogTransferService : ICatalogTransferService
                     throw new InvalidOperationException(
                         $"Row {rowNumber + 1}: tax rate must be between 0 and 100.");
                 var categoryName = EmptyToNull(Field(row, headerMap, "category")) ?? "Uncategorized";
+                ValidateLength(categoryName, 100, "Category", rowNumber + 1);
                 var category = categories.FirstOrDefault(item =>
                     string.Equals(item.Name, categoryName, StringComparison.OrdinalIgnoreCase));
                 if (category == null)
@@ -128,9 +142,16 @@ public class CatalogTransferService : ICatalogTransferService
                     _db.Categories.Add(category);
                 }
 
-                var product = products.FirstOrDefault(item =>
-                    (!string.IsNullOrEmpty(sku) && string.Equals(item.Sku, sku, StringComparison.OrdinalIgnoreCase)) ||
-                    (!string.IsNullOrEmpty(barcode) && string.Equals(item.Barcode, barcode, StringComparison.OrdinalIgnoreCase)));
+                // SKU and barcode share the scanner's identifier namespace. Resolve
+                // every supplied identifier across both fields and reject an import
+                // row that would otherwise update an arbitrary product.
+                var identifierMatches = products.Where(item =>
+                        IdentifierMatches(item, sku) || IdentifierMatches(item, barcode))
+                    .ToList();
+                if (identifierMatches.Count > 1)
+                    throw new InvalidOperationException(
+                        $"Row {rowNumber + 1}: SKU and barcode identify different products. Correct the identifiers and try again.");
+                var product = identifierMatches.SingleOrDefault();
                 if (product == null && string.IsNullOrEmpty(sku) && string.IsNullOrEmpty(barcode))
                 {
                     var nameMatches = products.Where(item =>
@@ -211,9 +232,10 @@ public class CatalogTransferService : ICatalogTransferService
                 {
                     if (!oldQuantity.HasValue)
                         throw new InvalidOperationException($"Row {rowNumber + 1}: {product.Name} is not stock-tracked.");
+                    var oldStock = oldQuantity.Value;
                     if (mode == ProductImportMode.InventoryCount)
                     {
-                        stockDelta = importedStock.Value - oldQuantity.Value;
+                        stockDelta = importedStock.Value - oldStock;
                         product.StockQuantity = importedStock.Value;
                         if (importedCost.HasValue) product.CostPrice = importedCost.Value;
                     }
@@ -222,11 +244,11 @@ public class CatalogTransferService : ICatalogTransferService
                         if (importedStock.Value < 0m)
                             throw new InvalidOperationException($"Row {rowNumber + 1}: purchase quantity cannot be negative.");
                         stockDelta = importedStock.Value;
-                        var newQuantity = oldQuantity.Value + stockDelta;
+                        var newQuantity = oldStock + stockDelta;
                         var incomingCost = importedCost ?? oldCost;
                         if (newQuantity > 0m)
                             product.CostPrice =
-                                (Math.Max(0m, oldQuantity.Value) * oldCost + stockDelta * incomingCost) / newQuantity;
+                                (Math.Max(0m, oldStock) * oldCost + stockDelta * incomingCost) / newQuantity;
                         product.StockQuantity = newQuantity;
                     }
 
@@ -257,6 +279,7 @@ public class CatalogTransferService : ICatalogTransferService
 
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            _db.ChangeTracker.Clear();
             return result;
         }
         catch
@@ -269,13 +292,6 @@ public class CatalogTransferService : ICatalogTransferService
 
     private static string Format(decimal value) => value.ToString("0.####", CultureInfo.InvariantCulture);
 
-    private static string Escape(string value)
-    {
-        if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r'))
-            return value;
-        return "\"" + value.Replace("\"", "\"\"") + "\"";
-    }
-
     private static string NormalizeHeader(string value) => new(
         value.Trim().TrimStart('\uFEFF').Where(char.IsLetterOrDigit)
             .Select(char.ToLowerInvariant).ToArray());
@@ -284,12 +300,24 @@ public class CatalogTransferService : ICatalogTransferService
         IReadOnlyList<string> row, IReadOnlyDictionary<string, int> headers, string name)
     {
         return headers.TryGetValue(NormalizeHeader(name), out var index) && index < row.Count
-            ? row[index]
+            ? FormattingUtilities.UnprotectCsvField(row[index])
             : null;
     }
 
     private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool IdentifierMatches(Product product, string? identifier) =>
+        !string.IsNullOrEmpty(identifier) &&
+        (string.Equals(product.Sku, identifier, StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(product.Barcode, identifier, StringComparison.OrdinalIgnoreCase));
+
+    private static void ValidateLength(string? value, int maximum, string field, int rowNumber)
+    {
+        if (value?.Length > maximum)
+            throw new InvalidOperationException(
+                $"Row {rowNumber}: {field} cannot exceed {maximum} characters.");
+    }
 
     private static bool HasValue(
         IReadOnlyList<string> row, IReadOnlyDictionary<string, int> headers, string name) =>

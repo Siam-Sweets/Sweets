@@ -25,7 +25,10 @@ public class CustomerService : ICustomerService
     }
 
     public async Task<Customer?> GetCustomerAsync(int id)
-        => await _db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+    {
+        if (id <= 0) return null;
+        return await _db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+    }
 
     public async Task<Customer> CreateOrUpdateCustomerAsync(Customer customer)
     {
@@ -79,6 +82,7 @@ public class CustomerService : ICustomerService
 
     public async Task SetCustomerActiveAsync(int id, bool isActive)
     {
+        if (id <= 0) throw new InvalidOperationException("Select a valid customer.");
         var customer = await _db.Customers.FindAsync(id)
             ?? throw new InvalidOperationException("Customer not found.");
         customer.IsActive = isActive;
@@ -88,6 +92,7 @@ public class CustomerService : ICustomerService
 
     public async Task<IReadOnlyList<Sale>> GetCustomerHistoryAsync(int customerId)
     {
+        if (customerId <= 0) return Array.Empty<Sale>();
         return await _db.Sales.AsNoTracking()
             .Include(s => s.Items)
             .Where(s => s.CustomerId == customerId &&

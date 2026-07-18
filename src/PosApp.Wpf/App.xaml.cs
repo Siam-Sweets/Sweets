@@ -8,7 +8,6 @@ using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
 using PosApp.Data;
-using PosApp.Data.Repositories;
 using PosApp.Hardware;
 using PosApp.Hardware.Devices;
 using PosApp.Hardware.Printers;
@@ -31,9 +30,9 @@ public partial class App : Application
         StoreSettings = settings;
         SettingsChanged?.Invoke(null, EventArgs.Empty);
     }
-    public static string? StartupError { get; private set; }
     private bool _startupCompleted;
     private bool _dispatcherErrorDialogOpen;
+    private static IServiceScope? _activeSessionScope;
 
     public App()
     {
@@ -225,7 +224,8 @@ public partial class App : Application
 
             // Show login window
             Log("Showing login window...");
-            var login = Services.GetRequiredService<LoginView>();
+            var login = CreateLoginSession(out var previousSession);
+            previousSession?.Dispose();
             MainWindow = login;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             login.Show();
@@ -252,7 +252,6 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            StartupError = ex.ToString();
             Log($"FATAL DURING STARTUP: {ex}");
             var updateRecovery = string.Empty;
             try
@@ -333,6 +332,42 @@ public partial class App : Application
         services.AddTransient<RegisterView>();
     }
 
+    /// <summary>
+    /// Creates one disposable dependency scope for a login and its main window.
+    /// Closing and signing in repeatedly must not retain every view and DbContext
+    /// in the root service provider for the remainder of the process.
+    /// </summary>
+    internal static LoginView CreateLoginSession(out IServiceScope? previousSession)
+    {
+        previousSession = _activeSessionScope;
+        var nextSession = Services.CreateScope();
+        try
+        {
+            var login = nextSession.ServiceProvider.GetRequiredService<LoginView>();
+            _activeSessionScope = nextSession;
+            return login;
+        }
+        catch
+        {
+            nextSession.Dispose();
+            throw;
+        }
+    }
+
+    internal static void DisposePreviousSession(IServiceScope? session)
+    {
+        if (session == null || ReferenceEquals(session, _activeSessionScope)) return;
+        session.Dispose();
+    }
+
+    internal static void RestorePreviousSession(IServiceScope? previousSession)
+    {
+        var failedSession = _activeSessionScope;
+        _activeSessionScope = previousSession;
+        if (failedSession != null && !ReferenceEquals(failedSession, previousSession))
+            failedSession.Dispose();
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         if (_startupCompleted && StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnExit)
@@ -351,7 +386,20 @@ public partial class App : Application
             }
         }
 
-        base.OnExit(e);
+        try
+        {
+            _activeSessionScope?.Dispose();
+            _activeSessionScope = null;
+            (Services as IDisposable)?.Dispose();
+        }
+        catch (Exception disposeError)
+        {
+            Log($"Service cleanup failed: {disposeError}");
+        }
+        finally
+        {
+            base.OnExit(e);
+        }
     }
 
     public static void ApplyTheme(string? theme)

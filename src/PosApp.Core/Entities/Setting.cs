@@ -13,7 +13,7 @@ public class Setting
     [MaxLength(64)]
     public string Key { get; set; } = string.Empty;
 
-    [MaxLength(2048)]
+    [MaxLength(8192)]
     public string? Value { get; set; }
 
     [MaxLength(200)]

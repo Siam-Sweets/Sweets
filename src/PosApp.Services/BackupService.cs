@@ -28,23 +28,41 @@ public class BackupService : IBackupService
                     StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Choose a path different from the live database.");
 
-            using var source = new SqliteConnection(new SqliteConnectionStringBuilder
+            var temporary = destination + $".{Guid.NewGuid():N}.tmp";
+            try
             {
-                DataSource = DbPathResolver.DefaultPath(),
-                Mode = SqliteOpenMode.ReadOnly,
-                Cache = SqliteCacheMode.Private,
-                Pooling = false
-            }.ToString());
-            using var target = new SqliteConnection(new SqliteConnectionStringBuilder
+                using (var source = new SqliteConnection(new SqliteConnectionStringBuilder
+                       {
+                           DataSource = DbPathResolver.DefaultPath(),
+                           Mode = SqliteOpenMode.ReadOnly,
+                           Cache = SqliteCacheMode.Private,
+                           Pooling = false
+                       }.ToString()))
+                using (var target = new SqliteConnection(new SqliteConnectionStringBuilder
+                       {
+                           DataSource = temporary,
+                           Mode = SqliteOpenMode.ReadWriteCreate,
+                           Cache = SqliteCacheMode.Private,
+                           Pooling = false
+                       }.ToString()))
+                {
+                    source.Open();
+                    target.Open();
+                    source.BackupDatabase(target);
+                }
+
+                // Validate the completed temporary database before publishing it.
+                // An interrupted backup therefore leaves an existing backup intact.
+                DatabaseFileValidator.ValidatePosAppDatabase(temporary);
+                if (File.Exists(destination))
+                    File.Replace(temporary, destination, destinationBackupFileName: null, ignoreMetadataErrors: true);
+                else
+                    File.Move(temporary, destination);
+            }
+            finally
             {
-                DataSource = destination,
-                Mode = SqliteOpenMode.ReadWriteCreate,
-                Cache = SqliteCacheMode.Private,
-                Pooling = false
-            }.ToString());
-            source.Open();
-            target.Open();
-            source.BackupDatabase(target);
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
 
             if (isAutomatic)
                 PruneAutomaticBackups(Math.Clamp(retentionCount ?? 20, 1, 200));

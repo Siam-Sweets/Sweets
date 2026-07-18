@@ -151,11 +151,20 @@ public partial class CustomersView : UserControl, IRefreshable
     private async void History_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: ContactListItem { Customer: not null } item }) return;
-        var history = await _customers.GetCustomerHistoryAsync(item.Customer.Id);
-        new CustomerHistoryDialog(item.Customer, history)
+        try
         {
-            Owner = Window.GetWindow(this)
-        }.ShowDialog();
+            var history = await _customers.GetCustomerHistoryAsync(item.Customer.Id);
+            new CustomerHistoryDialog(item.Customer, history)
+            {
+                Owner = Window.GetWindow(this)
+            }.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            App.LogError("Load customer purchase history", ex);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                "Unable to load purchase history", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }
 
@@ -253,6 +262,13 @@ public sealed class ContactEditDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
 
+        _name.MaxLength = 100;
+        _phone.MaxLength = 30;
+        _email.MaxLength = 120;
+        _taxId.MaxLength = 40;
+        _address.MaxLength = 300;
+        _notes.MaxLength = 500;
+
         _type.Items.Add(new ComboBoxItem { Content = "Customer", Tag = ContactRecordType.Customer });
         _type.Items.Add(new ComboBoxItem { Content = "Supplier", Tag = ContactRecordType.Supplier });
         _type.SelectedIndex = existing?.RecordType == ContactRecordType.Supplier ? 1 : 0;
@@ -323,6 +339,9 @@ public sealed class ContactEditDialog : Window
     private void UpdateTypeUi()
     {
         var supplier = SelectedType == ContactRecordType.Supplier;
+        _phone.MaxLength = supplier ? 30 : 20;
+        _email.MaxLength = supplier ? 120 : 100;
+        _taxId.MaxLength = supplier ? 40 : 20;
         _notesField.Visibility = supplier ? Visibility.Visible : Visibility.Collapsed;
         _saveButton.Content = supplier ? "Save Supplier" : "Save Customer";
         if (_existing == null)

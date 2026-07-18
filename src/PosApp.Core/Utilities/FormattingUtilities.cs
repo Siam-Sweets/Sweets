@@ -23,8 +23,19 @@ public static class FormattingUtilities
     public static string CsvField(string? value)
     {
         value ??= string.Empty;
+        // Spreadsheet applications can execute cells beginning with these characters as formulas.
+        // Prefix text values so exported local data is safe to open in Excel or similar software.
+        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t')
+            value = "'" + value;
         return value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0
             ? "\"" + value.Replace("\"", "\"\"") + "\""
             : value;
+    }
+
+    public static string UnprotectCsvField(string value)
+    {
+        if (value.Length > 1 && value[0] == '\'' && value[1] is '=' or '+' or '-' or '@' or '\t')
+            return value[1..];
+        return value;
     }
 }

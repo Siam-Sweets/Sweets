@@ -35,8 +35,9 @@ public class ReportService : IReportService
     {
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var items = await _db.SaleItems.AsNoTracking()
-            .Where(i => i.Sale!.SaleDate >= range.FromUtc && i.Sale.SaleDate < range.ToUtcExclusive &&
-                        (i.Sale.Status == SaleStatus.Completed || i.Sale.Status == SaleStatus.Refunded))
+            .Where(i => i.Sale != null &&
+                        i.Sale!.SaleDate >= range.FromUtc && i.Sale!.SaleDate < range.ToUtcExclusive &&
+                        (i.Sale!.Status == SaleStatus.Completed || i.Sale!.Status == SaleStatus.Refunded))
             .Select(i => new { i.ProductId, i.ProductName, i.Sku, i.Quantity, i.UnitPrice, i.CostPrice, i.DiscountAmount })
             .ToListAsync();
 
@@ -75,8 +76,9 @@ public class ReportService : IReportService
     {
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var items = await _db.SaleItems.AsNoTracking()
-            .Where(i => i.Sale!.SaleDate >= range.FromUtc && i.Sale.SaleDate < range.ToUtcExclusive &&
-                        (i.Sale.Status == SaleStatus.Completed || i.Sale.Status == SaleStatus.Refunded))
+            .Where(i => i.Sale != null &&
+                        i.Sale!.SaleDate >= range.FromUtc && i.Sale!.SaleDate < range.ToUtcExclusive &&
+                        (i.Sale!.Status == SaleStatus.Completed || i.Sale!.Status == SaleStatus.Refunded))
             .Select(i => new
             {
                 CategoryName = i.Product != null && i.Product.Category != null ? i.Product.Category.Name : "Uncategorized",
@@ -96,8 +98,9 @@ public class ReportService : IReportService
     {
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var payments = await _db.SalePayments.AsNoTracking()
-            .Where(p => p.Sale!.SaleDate >= range.FromUtc && p.Sale.SaleDate < range.ToUtcExclusive &&
-                        (p.Sale.Status == SaleStatus.Completed || p.Sale.Status == SaleStatus.Refunded))
+            .Where(p => p.Sale != null &&
+                        p.Sale!.SaleDate >= range.FromUtc && p.Sale!.SaleDate < range.ToUtcExclusive &&
+                        (p.Sale!.Status == SaleStatus.Completed || p.Sale!.Status == SaleStatus.Refunded))
             .Select(p => new { p.SaleId, p.Method, p.Amount }).ToListAsync();
 
         return payments.GroupBy(p => p.Method)

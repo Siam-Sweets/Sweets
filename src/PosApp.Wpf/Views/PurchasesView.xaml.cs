@@ -131,7 +131,6 @@ public partial class PurchasesView : UserControl, IRefreshable
 public sealed class PurchaseEditDialog : Window
 {
     private readonly IPurchaseService _service;
-    private readonly IReadOnlyList<Product> _products;
     private readonly ObservableCollection<PurchaseDraftLine> _lines = new();
     private readonly ComboBox _supplierCombo = new();
     private readonly ComboBox _productCombo = new();
@@ -150,7 +149,6 @@ public sealed class PurchaseEditDialog : Window
         IReadOnlyList<Product> products)
     {
         _service = service;
-        _products = products;
         Title = "New Purchase";
         Width = 940;
         Height = 700;

@@ -80,7 +80,7 @@ public partial class RegisterView : UserControl, IRefreshable
         try
         {
             await _register.OpenSessionAsync(dialog.Amount, App.CurrentUser.Id, dialog.Reason);
-            _ = RefreshAsync();
+            await RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -88,10 +88,13 @@ public partial class RegisterView : UserControl, IRefreshable
         }
     }
 
-    private void CashIn_Click(object sender, RoutedEventArgs e) => AddMovement(CashMovementType.CashIn);
-    private void CashOut_Click(object sender, RoutedEventArgs e) => AddMovement(CashMovementType.CashOut);
+    private async void CashIn_Click(object sender, RoutedEventArgs e)
+        => await AddMovementAsync(CashMovementType.CashIn);
 
-    private async void AddMovement(CashMovementType type)
+    private async void CashOut_Click(object sender, RoutedEventArgs e)
+        => await AddMovementAsync(CashMovementType.CashOut);
+
+    private async Task AddMovementAsync(CashMovementType type)
     {
         if (App.CurrentUser == null) return;
         var dialog = new CashEntryDialog(
@@ -105,7 +108,7 @@ public partial class RegisterView : UserControl, IRefreshable
         try
         {
             await _register.AddMovementAsync(type, dialog.Amount, dialog.Reason, App.CurrentUser.Id);
-            _ = RefreshAsync();
+            await RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -129,23 +132,24 @@ public partial class RegisterView : UserControl, IRefreshable
             return;
         }
 
-        var current = await _register.GetSummaryAsync(_openSession.Id);
-        var dialog = new CashEntryDialog("Close Register", "Counted cash", requireReason: false)
-        {
-            Owner = Window.GetWindow(this),
-            Amount = current.ExpectedCash
-        };
-        if (dialog.ShowDialog() != true) return;
-        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Close this register session and produce the final Z report?",
-                "Close Register", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-
         try
         {
+            var current = await _register.GetSummaryAsync(_openSession.Id);
+            var dialog = new CashEntryDialog("Close Register", "Counted cash", requireReason: false)
+            {
+                Owner = Window.GetWindow(this),
+                Amount = current.ExpectedCash
+            };
+            if (dialog.ShowDialog() != true) return;
+            if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                    "Close this register session and produce the final Z report?",
+                    "Close Register", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
             var closedSummary = await _register.CloseSessionAsync(
                 _openSession.Id, dialog.Amount, App.CurrentUser.Id, dialog.Reason);
             var report = BuildReport(closedSummary, "Z REPORT");
             new RegisterReportDialog(report, _hardware) { Owner = Window.GetWindow(this) }.ShowDialog();
-            _ = RefreshAsync();
+            await RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -337,9 +341,19 @@ public sealed class RegisterReportDialog : Window
         var print = new Button { Content = "Print", Style = (Style)FindResource("PrimaryButton"), Margin = new Thickness(0, 0, 8, 0) };
         print.Click += async (_, _) =>
         {
-            var ok = await hardware.PrintTextAsync(report);
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ok ? "Report sent to the printer." : "Printing failed. Check printer settings.",
-                Title, MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            try
+            {
+                var ok = await hardware.PrintTextAsync(report);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                    ok ? "Report sent to the printer." : "Printing failed. Check printer settings.",
+                    Title, MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                App.LogError("Print register report", ex);
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                    "Print failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         };
         var close = new Button { Content = "Close", Style = (Style)FindResource("OutlineButton") };
         close.Click += (_, _) => Close();

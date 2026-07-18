@@ -26,7 +26,8 @@ public partial class CustomRefundDialog : Window
             Math.Abs(original.Total) - priorRefunds.Sum(refund => Math.Abs(refund.Total)));
         ReceiptText.Text = $"Receipt {original.ReceiptNumber}  •  {FormattingUtilities.Money(original.Total, App.StoreSettings)}";
 
-        var returned = BuildReturnedQuantityMap(original.Items, priorRefunds.SelectMany(refund => refund.Items));
+        var returned = RefundQuantityUtilities.BuildReturnedByLine(
+            original.Items, priorRefunds.SelectMany(refund => refund.Items));
         foreach (var item in original.Items.OrderBy(item => item.Id))
         {
             var previouslyRefunded = returned.GetValueOrDefault(item.Id);
@@ -41,29 +42,6 @@ public partial class CustomRefundDialog : Window
         PaymentMethodCombo.SelectedIndex = FindPaymentMethodIndex(
             original.Payments.FirstOrDefault()?.Method ?? PaymentMethod.Cash);
         UpdateTotal();
-    }
-
-    private static Dictionary<int, decimal> BuildReturnedQuantityMap(
-        IEnumerable<SaleItem> originalItems,
-        IEnumerable<SaleItem> refundItems)
-    {
-        var originals = originalItems.ToList();
-        var result = originals.ToDictionary(item => item.Id, _ => 0m);
-        foreach (var refundItem in refundItems)
-        {
-            var originalId = refundItem.RefundedSaleItemId;
-            if (!originalId.HasValue || !result.ContainsKey(originalId.Value))
-            {
-                originalId = originals
-                    .Where(item => item.ProductId == refundItem.ProductId &&
-                                   Math.Abs(item.UnitPrice - refundItem.UnitPrice) < 0.0001m)
-                    .OrderBy(item => item.Id)
-                    .Select(item => (int?)item.Id)
-                    .FirstOrDefault();
-            }
-            if (originalId.HasValue) result[originalId.Value] += Math.Abs(refundItem.Quantity);
-        }
-        return result;
     }
 
     private static int FindPaymentMethodIndex(PaymentMethod method) => method switch

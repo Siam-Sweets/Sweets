@@ -35,12 +35,12 @@
                     <DataGridTemplateColumn Header="{DynamicResource Usr_Active}" Width="80">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <CheckBox IsChecked="{Binding IsActive, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                <CheckBox IsChecked="{Binding IsActive, Mode=OneWay}"
                                           Tag="{Binding}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
                                           Focusable="False"
-                                          Click="Active_Click"/>
+                                          PreviewMouseLeftButtonDown="Active_PreviewMouseLeftButtonDown"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>

@@ -383,8 +383,8 @@
     <sys:String x:Key="POS_Weight">ওজন</sys:String>
     <sys:String x:Key="POS_Volume">আয়তন</sys:String>
     <sys:String x:Key="POS_Length">দৈর্ঘ্য</sys:String>
-    <sys:String x:Key="POS_EnterMeasuredAmount">{1} এককে {0}-এর পরিমাণ লিখুন। মূল্য: প্রতি {1}-এ {2}।</sys:String>
-    <sys:String x:Key="POS_AdjustMeasuredAmount">{1} এককে {0}-এর সঠিক পরিমাণ লিখুন। মূল্য: প্রতি {1}-এ {2}।</sys:String>
+    <sys:String x:Key="POS_EnterMeasuredAmount">{1} এককে {0}-এর পরিমাণ লিখুন। একক মূল্য: {2}।</sys:String>
+    <sys:String x:Key="POS_AdjustMeasuredAmount">{1} এককে {0}-এর সঠিক পরিমাণ লিখুন। একক মূল্য: {2}।</sys:String>
     <sys:String x:Key="POS_AdjustItemQuantity">{0}-এর পূর্ণ আইটেম সংখ্যা লিখুন।</sys:String>
     <sys:String x:Key="POS_WholeQuantityRequired">কমপক্ষে ১টি পূর্ণ আইটেম লিখুন।</sys:String>
     <sys:String x:Key="POS_MinimumMeasuredAmount">কমপক্ষে {0:0.###} পরিমাণ লিখুন।</sys:String>

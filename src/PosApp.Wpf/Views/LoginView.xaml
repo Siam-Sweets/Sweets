@@ -37,11 +37,11 @@
                            HorizontalAlignment="Center" Margin="0,0,0,20"/>
 
                 <TextBlock Text="{DynamicResource Login_Username}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                <TextBox x:Name="UsernameBox" Margin="0,0,0,12" FontSize="15"
+                <TextBox x:Name="UsernameBox" Margin="0,0,0,12" FontSize="15" MaxLength="60"
                          Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"/>
 
                 <TextBlock Text="{DynamicResource Login_Password}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                <PasswordBox x:Name="PinBox" Margin="0,0,0,8" FontSize="15"
+                <PasswordBox x:Name="PinBox" Margin="0,0,0,8" FontSize="15" MaxLength="12"
                              KeyDown="PinBox_KeyDown"/>
 
                 <TextBlock x:Name="ErrorText" Text="{Binding Error}"

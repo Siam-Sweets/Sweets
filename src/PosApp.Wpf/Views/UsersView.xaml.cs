@@ -57,13 +57,15 @@ public partial class UsersView : UserControl, IRefreshable
     }
 
 
-    private async void Active_Click(object sender, RoutedEventArgs e)
+    private async void Active_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (sender is not CheckBox checkBox || checkBox.Tag is not User user)
             return;
 
-        var requestedState = checkBox.IsChecked == true;
-        var previousState = !requestedState;
+        e.Handled = true;
+        var previousState = user.IsActive;
+        var requestedState = !previousState;
+        checkBox.IsChecked = requestedState;
 
         if (!requestedState && user.Id == App.CurrentUser?.Id)
         {
@@ -74,22 +76,22 @@ public partial class UsersView : UserControl, IRefreshable
             return;
         }
 
-        if (!requestedState && user.Role == UserRole.Admin)
-        {
-            var activeAdminCount = await _db.Users.CountAsync(x => x.Role == UserRole.Admin && x.IsActive);
-            if (activeAdminCount <= 1)
-            {
-                user.IsActive = previousState;
-                checkBox.IsChecked = previousState;
-                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("At least one active administrator account is required.",
-                    "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-        }
-
         checkBox.IsEnabled = false;
         try
         {
+            if (!requestedState && user.Role == UserRole.Admin)
+            {
+                var activeAdminCount = await _db.Users.CountAsync(x => x.Role == UserRole.Admin && x.IsActive);
+                if (activeAdminCount <= 1)
+                {
+                    user.IsActive = previousState;
+                    checkBox.IsChecked = previousState;
+                    PosApp.Wpf.Helpers.LocalizedMessageBox.Show("At least one active administrator account is required.",
+                        "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
             var updatedAt = DateTime.UtcNow;
             var trackedUser = _db.Users.Local.FirstOrDefault(x => x.Id == user.Id);
 
@@ -147,14 +149,18 @@ public partial class UsersView : UserControl, IRefreshable
 
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is User u)
+        if (sender is not Button { Tag: User user }) return;
+
+        if (user.Id == App.CurrentUser?.Id)
         {
-            if (u.Id == App.CurrentUser?.Id)
-            {
-                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Cannot delete your own account.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (u.Role == UserRole.Admin && u.IsActive)
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Cannot delete your own account.", "Error",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            if (user.Role == UserRole.Admin && user.IsActive)
             {
                 var adminCount = await _db.Users.CountAsync(x => x.Role == UserRole.Admin && x.IsActive);
                 if (adminCount <= 1)
@@ -163,38 +169,37 @@ public partial class UsersView : UserControl, IRefreshable
                     return;
                 }
             }
-            var confirm = PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Delete user '{u.Username}'?", "Confirm",
+
+            var confirm = PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Delete user '{user.Username}'?", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (confirm != MessageBoxResult.Yes) return;
-            try
+
+            var hasHistory = await _db.Sales.AnyAsync(sale => sale.UserId == user.Id) ||
+                             await _db.PurchaseDocuments.AnyAsync(purchase => purchase.UserId == user.Id) ||
+                             await _db.CashSessions.AnyAsync(session =>
+                                 session.OpenedByUserId == user.Id || session.ClosedByUserId == user.Id) ||
+                             await _db.CashMovements.AnyAsync(movement => movement.UserId == user.Id) ||
+                             await _db.StockTransactions.AnyAsync(transaction => transaction.UserId == user.Id);
+            var tracked = await _db.Users.FindAsync(user.Id)
+                ?? throw new InvalidOperationException("User not found.");
+            if (hasHistory)
             {
-                var hasHistory = await _db.Sales.AnyAsync(sale => sale.UserId == u.Id) ||
-                                 await _db.PurchaseDocuments.AnyAsync(purchase => purchase.UserId == u.Id) ||
-                                 await _db.CashSessions.AnyAsync(session =>
-                                     session.OpenedByUserId == u.Id || session.ClosedByUserId == u.Id) ||
-                                 await _db.CashMovements.AnyAsync(movement => movement.UserId == u.Id) ||
-                                 await _db.StockTransactions.AnyAsync(transaction => transaction.UserId == u.Id);
-                if (hasHistory)
-                {
-                    // Keep historical receipts valid while removing login access.
-                    var tracked = await _db.Users.FindAsync(u.Id)
-                        ?? throw new InvalidOperationException("User not found.");
-                    tracked.IsActive = false;
-                    tracked.UpdatedAt = DateTime.UtcNow;
-                }
-                else
-                {
-                    var tracked = await _db.Users.FindAsync(u.Id)
-                        ?? throw new InvalidOperationException("User not found.");
-                    _db.Users.Remove(tracked);
-                }
-                await _db.SaveChangesAsync();
-                await RefreshAsync();
+                // Keep historical receipts valid while removing login access.
+                tracked.IsActive = false;
+                tracked.UpdatedAt = DateTime.UtcNow;
             }
-            catch (Exception ex)
+            else
             {
-                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to delete user", MessageBoxButton.OK, MessageBoxImage.Error);
+                _db.Users.Remove(tracked);
             }
+
+            await _db.SaveChangesAsync();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                "Unable to delete user", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }
@@ -208,9 +213,9 @@ public class UserEditDialog : Window
     private readonly bool _isNew;
     private readonly ComboBox _roleCombo = new();
     private readonly CheckBox _activeCheckbox = new() { Content = "Active" };
-    private readonly TextBox _usernameBox = new();
-    private readonly TextBox _fullnameBox = new();
-    private readonly PasswordBox _pinBox = new();
+    private readonly TextBox _usernameBox = new() { MaxLength = 60 };
+    private readonly TextBox _fullnameBox = new() { MaxLength = 100 };
+    private readonly PasswordBox _pinBox = new() { MaxLength = 12 };
 
     public UserEditDialog(Data.AppDbContext db, User? existing)
     {
@@ -278,12 +283,13 @@ public class UserEditDialog : Window
             PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Username cannot contain spaces.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (await _db.Users.AsNoTracking().AnyAsync(u => u.Id != _userId && u.Username.ToLower() == username.ToLower()))
+        if (username.Length > 60 || fullName.Length > 100)
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Another user already has this username.", "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                "Username cannot exceed 60 characters and full name cannot exceed 100 characters.",
+                "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-
         var role = (UserRole)((ComboBoxItem)_roleCombo.SelectedItem).Tag!;
         var isActive = _activeCheckbox.IsChecked == true;
         if (!_isNew && _userId == App.CurrentUser?.Id && (!isActive || role != _originalRole))
@@ -292,21 +298,30 @@ public class UserEditDialog : Window
                 "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        if (!_isNew && _originalRole == UserRole.Admin && _originalActive && (!isActive || role != UserRole.Admin))
-        {
-            var otherActiveAdmins = await _db.Users.AsNoTracking().CountAsync(u =>
-                u.Id != _userId && u.Role == UserRole.Admin && u.IsActive);
-            if (otherActiveAdmins == 0)
-            {
-                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("At least one active administrator account is required.",
-                    "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-        }
-
+        IsEnabled = false;
         try
         {
-            IsEnabled = false;
+            if (await _db.Users.AsNoTracking().AnyAsync(u =>
+                    u.Id != _userId && u.Username.ToLower() == username.ToLower()))
+            {
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Another user already has this username.",
+                    "Invalid user", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!_isNew && _originalRole == UserRole.Admin && _originalActive &&
+                (!isActive || role != UserRole.Admin))
+            {
+                var otherActiveAdmins = await _db.Users.AsNoTracking().CountAsync(u =>
+                    u.Id != _userId && u.Role == UserRole.Admin && u.IsActive);
+                if (otherActiveAdmins == 0)
+                {
+                    PosApp.Wpf.Helpers.LocalizedMessageBox.Show("At least one active administrator account is required.",
+                        "Unable to update user", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
             if (_isNew)
             {
                 Data.DbSeeder.ValidatePin(_pinBox.Password);

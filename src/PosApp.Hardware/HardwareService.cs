@@ -24,7 +24,6 @@ public class HardwareService : IHardwareService
 
     public Task<bool> PrintTextAsync(string text) => _printer.PrintTextAsync(text);
 
-
     public Task<bool> IsScannerConnected() => Task.FromResult(_scanner.IsConnected);
 
     public Task StartScannerAsync(Action<string> onScan) => _scanner.StartAsync(onScan);

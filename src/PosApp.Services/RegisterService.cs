@@ -25,6 +25,7 @@ public class RegisterService : IRegisterService
 
     public async Task<IReadOnlyList<CashMovement>> GetMovementsAsync(int sessionId)
     {
+        if (sessionId <= 0) return Array.Empty<CashMovement>();
         return await _db.CashMovements.AsNoTracking()
             .Where(movement => movement.CashSessionId == sessionId)
             .OrderByDescending(movement => movement.CreatedAt)
@@ -33,8 +34,13 @@ public class RegisterService : IRegisterService
 
     public async Task<CashSession> OpenSessionAsync(decimal openingFloat, int userId, string? note = null)
     {
+        var normalizedNote = NormalizeAndValidate(note, 500, "Register note");
         if (openingFloat < 0m)
             throw new InvalidOperationException("Opening cash cannot be negative.");
+        if (userId <= 0)
+            throw new InvalidOperationException("A signed-in user is required.");
+        _db.ChangeTracker.Clear();
+        await EnsureActiveUserAsync(userId);
         if (await _db.CashSessions.AnyAsync(session => session.ClosedAt == null))
             throw new InvalidOperationException("A register session is already open.");
 
@@ -43,7 +49,7 @@ public class RegisterService : IRegisterService
             OpenedAt = DateTime.UtcNow,
             OpenedByUserId = userId,
             OpeningFloat = openingFloat,
-            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
+            Note = normalizedNote
         };
         _db.CashSessions.Add(session);
         try
@@ -65,9 +71,16 @@ public class RegisterService : IRegisterService
     {
         if (amount <= 0m)
             throw new InvalidOperationException("Cash amount must be greater than zero.");
+        if (!Enum.IsDefined(type))
+            throw new InvalidOperationException("Select a valid cash movement type.");
+        if (userId <= 0)
+            throw new InvalidOperationException("A signed-in user is required.");
         if (string.IsNullOrWhiteSpace(description))
             throw new InvalidOperationException("Enter a reason for the cash movement.");
+        var normalizedDescription = NormalizeAndValidate(description, 300, "Cash movement reason")!;
 
+        _db.ChangeTracker.Clear();
+        await EnsureActiveUserAsync(userId);
         var session = await _db.CashSessions
             .FirstOrDefaultAsync(item => item.ClosedAt == null)
             ?? throw new InvalidOperationException("Open the register before adding or removing cash.");
@@ -77,7 +90,7 @@ public class RegisterService : IRegisterService
             CashSession = session,
             Type = type,
             Amount = amount,
-            Description = description.Trim(),
+            Description = normalizedDescription,
             UserId = userId,
             CreatedAt = DateTime.UtcNow
         };
@@ -88,6 +101,8 @@ public class RegisterService : IRegisterService
 
     public async Task<RegisterSummary> GetSummaryAsync(int sessionId, DateTime? through = null)
     {
+        if (sessionId <= 0)
+            throw new InvalidOperationException("Select a valid register session.");
         var session = await _db.CashSessions.AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == sessionId)
             ?? throw new InvalidOperationException("Register session not found.");
@@ -100,7 +115,7 @@ public class RegisterService : IRegisterService
 
         var payments = await _db.SalePayments.AsNoTracking()
             .Where(payment => payment.Sale != null &&
-                              payment.Sale.CashSessionId == sessionId &&
+                              payment.Sale!.CashSessionId == sessionId &&
                               payment.Sale.SaleDate <= end &&
                               (payment.Sale.Status == SaleStatus.Completed ||
                                payment.Sale.Status == SaleStatus.Refunded))
@@ -156,30 +171,77 @@ public class RegisterService : IRegisterService
     public async Task<RegisterSummary> CloseSessionAsync(
         int sessionId, decimal countedCash, int userId, string? note = null)
     {
+        var normalizedNote = NormalizeAndValidate(note, 500, "Register note");
         if (countedCash < 0m)
             throw new InvalidOperationException("Counted cash cannot be negative.");
+        if (userId <= 0)
+            throw new InvalidOperationException("A signed-in user is required.");
+        if (sessionId <= 0)
+            throw new InvalidOperationException("Select a valid register session.");
 
-        var session = await _db.CashSessions.FindAsync(sessionId)
-            ?? throw new InvalidOperationException("Register session not found.");
-        if (session.ClosedAt.HasValue)
-            throw new InvalidOperationException("This register session is already closed.");
+        _db.ChangeTracker.Clear();
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            await EnsureActiveUserAsync(userId);
+            var session = await _db.CashSessions.FirstOrDefaultAsync(item => item.Id == sessionId)
+                ?? throw new InvalidOperationException("Register session not found.");
+            if (session.ClosedAt.HasValue)
+                throw new InvalidOperationException("This register session is already closed.");
 
-        var closedAt = DateTime.UtcNow;
-        var summary = await GetSummaryAsync(sessionId, closedAt);
-        session.ClosedAt = closedAt;
-        session.ClosedByUserId = userId;
-        session.ExpectedCash = summary.ExpectedCash;
-        session.CountedCash = countedCash;
-        session.Variance = countedCash - summary.ExpectedCash;
-        if (!string.IsNullOrWhiteSpace(note))
-            session.Note = string.IsNullOrWhiteSpace(session.Note)
-                ? note.Trim()
-                : $"{session.Note}\nClose: {note.Trim()}";
-        await _db.SaveChangesAsync();
+            var closedAt = DateTime.UtcNow;
+            var summary = await GetSummaryAsync(sessionId, closedAt);
+            session.ClosedAt = closedAt;
+            session.ClosedByUserId = userId;
+            session.ExpectedCash = summary.ExpectedCash;
+            session.CountedCash = countedCash;
+            session.Variance = countedCash - summary.ExpectedCash;
+            if (normalizedNote != null)
+                session.Note = string.IsNullOrWhiteSpace(session.Note)
+                    ? normalizedNote
+                    : CombineNotes(session.Note, normalizedNote);
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
 
-        summary.ClosedAt = closedAt;
-        summary.CountedCash = countedCash;
-        summary.Variance = session.Variance;
-        return summary;
+            summary.ClosedAt = closedAt;
+            summary.CountedCash = countedCash;
+            summary.Variance = session.Variance;
+            _db.ChangeTracker.Clear();
+            return summary;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            _db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    private static string CombineNotes(string existing, string closingNote)
+    {
+        const string prefix = "Close: ";
+        var closeEntry = prefix + closingNote;
+        if (closeEntry.Length >= 500) return closeEntry[..500];
+
+        var combined = $"{existing}\n{closeEntry}";
+        if (combined.Length <= 500) return combined;
+
+        var available = Math.Max(0, 500 - closeEntry.Length - 1);
+        var preserved = existing[..Math.Min(existing.Length, available)];
+        return preserved.Length == 0 ? closeEntry : $"{preserved}\n{closeEntry}";
+    }
+
+    private static string? NormalizeAndValidate(string? value, int maxLength, string field)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (normalized?.Length > maxLength)
+            throw new InvalidOperationException($"{field} cannot exceed {maxLength} characters.");
+        return normalized;
+    }
+
+    private async Task EnsureActiveUserAsync(int userId)
+    {
+        if (!await _db.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.IsActive))
+            throw new InvalidOperationException("The signed-in user no longer exists or is inactive. Sign in again.");
     }
 }

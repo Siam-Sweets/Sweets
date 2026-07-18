@@ -1,5 +1,6 @@
 using System.IO.Ports;
 using System.Text;
+using System.Threading;
 using System.Windows.Input;
 using PosApp.Core.Interfaces;
 
@@ -19,14 +20,15 @@ public class HidBarcodeScanner : IBarcodeScanner, IDisposable
     private DateTime _lastKey = DateTime.MinValue;
     private const int InterKeyTimeoutMs = 80; // scanners type fast
 
-    public HidBarcodeScanner() { }
-
     /// <summary>True after <see cref="StartAsync"/> until <see cref="StopAsync"/>.</summary>
     public bool IsConnected { get; private set; }
 
     public Task StartAsync(Action<string> onScan)
     {
+        ArgumentNullException.ThrowIfNull(onScan);
         _onScan = onScan;
+        if (IsConnected) return Task.CompletedTask;
+
         IsConnected = true;
         // Subscribe at the WPF InputManager level so we get keys regardless of focus
         InputManager.Current.PreProcessInput += OnPreProcessInput;
@@ -38,6 +40,8 @@ public class HidBarcodeScanner : IBarcodeScanner, IDisposable
         IsConnected = false;
         InputManager.Current.PreProcessInput -= OnPreProcessInput;
         _buffer.Clear();
+        _onScan = null;
+        _lastKey = DateTime.MinValue;
         return Task.CompletedTask;
     }
 
@@ -46,12 +50,6 @@ public class HidBarcodeScanner : IBarcodeScanner, IDisposable
         if (e.StagingItem.Input is KeyEventArgs keyArgs && keyArgs.RoutedEvent == Keyboard.KeyDownEvent)
         {
             var key = keyArgs.Key;
-            // If buffer is empty and last key was long ago, this is likely a human
-            if (_buffer.Length == 0 && (DateTime.UtcNow - _lastKey).TotalMilliseconds > 1500)
-            {
-                // Mark the start of a possible scan
-            }
-
             if (key == Key.Enter)
             {
                 if (_buffer.Length > 0)
@@ -71,8 +69,13 @@ public class HidBarcodeScanner : IBarcodeScanner, IDisposable
                 var ch = KeyToChar(key, Keyboard.Modifiers);
                 if (ch.HasValue)
                 {
+                    var now = DateTime.UtcNow;
+                    if (_buffer.Length > 0 &&
+                        (now - _lastKey).TotalMilliseconds > InterKeyTimeoutMs)
+                        _buffer.Clear();
+
                     _buffer.Append(ch.Value);
-                    _lastKey = DateTime.UtcNow;
+                    _lastKey = now;
                 }
             }
         }
@@ -119,7 +122,11 @@ public class HidBarcodeScanner : IBarcodeScanner, IDisposable
 
     public void Dispose()
     {
-        if (IsConnected) StopAsync().GetAwaiter().GetResult();
+        if (!IsConnected) return;
+        InputManager.Current.PreProcessInput -= OnPreProcessInput;
+        IsConnected = false;
+        _buffer.Clear();
+        _onScan = null;
     }
 }
 
@@ -132,39 +139,107 @@ public class SerialBarcodeScanner : IBarcodeScanner, IDisposable
     private readonly string _portName;
     private SerialPort? _port;
     private Action<string>? _onScan;
+    private SynchronizationContext? _callbackContext;
 
-    public SerialBarcodeScanner(string portName) => _portName = portName;
+    public SerialBarcodeScanner(string portName)
+    {
+        if (string.IsNullOrWhiteSpace(portName))
+            throw new ArgumentException("A serial port name is required.", nameof(portName));
+        _portName = portName.Trim();
+    }
 
     public bool IsConnected => _port?.IsOpen == true;
 
     public Task StartAsync(Action<string> onScan)
     {
+        ArgumentNullException.ThrowIfNull(onScan);
         _onScan = onScan;
-        _port = new SerialPort(_portName, 9600, Parity.None, 8, StopBits.One) { NewLine = "\r" };
-        _port.DataReceived += (_, __) =>
+        // SerialPort raises DataReceived on a worker thread. Remember the caller's
+        // context so a scanner configured by WPF never mutates UI state cross-thread.
+        _callbackContext = SynchronizationContext.Current;
+        if (IsConnected) return Task.CompletedTask;
+
+        StopPort();
+        var port = new SerialPort(_portName, 9600, Parity.None, 8, StopBits.One) { NewLine = "\r" };
+        port.DataReceived += OnDataReceived;
+        try
         {
-            try
-            {
-                var line = _port.ReadLine().Trim();
-                if (!string.IsNullOrEmpty(line)) _onScan?.Invoke(line);
-            }
-            catch { /* ignore */ }
-        };
-        _port.Open();
+            port.Open();
+            _port = port;
+        }
+        catch
+        {
+            port.DataReceived -= OnDataReceived;
+            port.Dispose();
+            _onScan = null;
+            _callbackContext = null;
+            throw;
+        }
         return Task.CompletedTask;
     }
 
     public Task StopAsync()
     {
-        if (_port?.IsOpen == true) _port.Close();
-        _port?.Dispose();
-        _port = null;
+        StopPort();
+        _onScan = null;
+        _callbackContext = null;
         return Task.CompletedTask;
+    }
+
+    private void OnDataReceived(object sender, SerialDataReceivedEventArgs e)
+    {
+        if (sender is not SerialPort port) return;
+        try
+        {
+            var line = port.ReadLine().Trim();
+            var callback = _onScan;
+            if (line.Length == 0 || callback == null) return;
+
+            var context = _callbackContext;
+            if (context == null)
+            {
+                callback(line);
+            }
+            else
+            {
+                context.Post(static state =>
+                {
+                    var (scanner, handler, code) =
+                        ((SerialBarcodeScanner, Action<string>, string))state!;
+                    // A read can already be queued when the scanner is stopped or
+                    // restarted. Do not deliver that stale scan to the next screen.
+                    if (ReferenceEquals(scanner._onScan, handler)) handler(code);
+                }, (this, callback, line));
+            }
+        }
+        catch (InvalidOperationException) { }
+        catch (IOException) { }
+        catch (TimeoutException) { }
+    }
+
+    private void StopPort()
+    {
+        var port = _port;
+        _port = null;
+        if (port == null) return;
+        port.DataReceived -= OnDataReceived;
+        try
+        {
+            if (port.IsOpen) port.Close();
+        }
+        catch (InvalidOperationException) { }
+        catch (IOException) { }
+        finally
+        {
+            port.Dispose();
+        }
     }
 
     public void Dispose()
     {
-        _port?.Dispose();
+        StopPort();
+        _onScan = null;
+        _callbackContext = null;
     }
 }
 
@@ -175,6 +250,10 @@ public class SerialBarcodeScanner : IBarcodeScanner, IDisposable
 public class NullBarcodeScanner : IBarcodeScanner
 {
     public bool IsConnected => false;
-    public Task StartAsync(Action<string> onScan) => Task.CompletedTask;
+    public Task StartAsync(Action<string> onScan)
+    {
+        ArgumentNullException.ThrowIfNull(onScan);
+        return Task.CompletedTask;
+    }
     public Task StopAsync() => Task.CompletedTask;
 }

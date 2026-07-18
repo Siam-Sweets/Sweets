@@ -19,7 +19,14 @@ public class EscPosPrinter : IReceiptPrinter
     private readonly ISettingsService _settings;
     public EscPosPrinter(ISettingsService settings) => _settings = settings;
 
-    public bool IsConnected => PrinterSettings.InstalledPrinters.Count > 0;
+    public bool IsConnected
+    {
+        get
+        {
+            try { return PrinterSettings.InstalledPrinters.Count > 0; }
+            catch { return false; }
+        }
+    }
 
     public async Task<bool> PrintAsync(Sale sale)
     {
@@ -36,12 +43,20 @@ public class EscPosPrinter : IReceiptPrinter
     private static Task<bool> SendAsync(string text, string? configuredPrinter, string documentName)
         => Task.Run(() =>
         {
-            var printerName = string.IsNullOrWhiteSpace(configuredPrinter)
-                ? (PrinterSettings.InstalledPrinters.Count > 0 ? new PrinterSettings().PrinterName : string.Empty)
-                : configuredPrinter;
-            if (string.IsNullOrWhiteSpace(printerName)) return false;
-            try { return RawPrinterHelper.SendRawToPrinter(printerName, Encoding.UTF8.GetBytes(text), documentName); }
-            catch { return false; }
+            try
+            {
+                var printerName = string.IsNullOrWhiteSpace(configuredPrinter)
+                    ? (PrinterSettings.InstalledPrinters.Count > 0 ? new PrinterSettings().PrinterName : string.Empty)
+                    : configuredPrinter;
+                return !string.IsNullOrWhiteSpace(printerName) &&
+                       RawPrinterHelper.SendRawToPrinter(
+                           printerName, Encoding.UTF8.GetBytes(text), documentName);
+            }
+            catch
+            {
+                // The Windows spooler may be stopped or unavailable.
+                return false;
+            }
         });
 
     private static string BuildReceipt(Sale sale, StoreSettings store)
@@ -182,7 +197,7 @@ internal static class RawPrinterHelper
     private static extern bool ClosePrinter(IntPtr hPrinter);
 
     [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true)]
-    private static extern bool StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+    private static extern int StartDocPrinter(IntPtr hPrinter, int level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
 
     [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true)]
     private static extern bool EndDocPrinter(IntPtr hPrinter);
@@ -198,29 +213,46 @@ internal static class RawPrinterHelper
 
     public static bool SendRawToPrinter(string szPrinterName, byte[] data, string docName)
     {
+        if (string.IsNullOrWhiteSpace(szPrinterName) || data.Length == 0) return false;
+
         IntPtr hPrinter;
         var di = new DOCINFOA { pDocName = docName, pDataType = "RAW" };
         if (!OpenPrinter(szPrinterName.Normalize(), out hPrinter, IntPtr.Zero)) return false;
         try
         {
-            if (!StartDocPrinter(hPrinter, 1, di)) return false;
+            if (StartDocPrinter(hPrinter, 1, di) <= 0) return false;
+            var documentSucceeded = false;
             try
             {
                 if (!StartPagePrinter(hPrinter)) return false;
-                var pUnmanagedBytes = Marshal.AllocCoTaskMem(data.Length);
+                var pageSucceeded = false;
                 try
                 {
-                    Marshal.Copy(data, 0, pUnmanagedBytes, data.Length);
-                    bool success = WritePrinter(hPrinter, pUnmanagedBytes, data.Length, out _);
-                    EndPagePrinter(hPrinter);
-                    return success;
+                    var pUnmanagedBytes = Marshal.AllocCoTaskMem(data.Length);
+                    try
+                    {
+                        Marshal.Copy(data, 0, pUnmanagedBytes, data.Length);
+                        pageSucceeded = WritePrinter(hPrinter, pUnmanagedBytes, data.Length, out var written)
+                                        && written == data.Length;
+                    }
+                    finally
+                    {
+                        Marshal.FreeCoTaskMem(pUnmanagedBytes);
+                    }
                 }
                 finally
                 {
-                    Marshal.FreeCoTaskMem(pUnmanagedBytes);
+                    pageSucceeded = EndPagePrinter(hPrinter) && pageSucceeded;
                 }
+
+                documentSucceeded = pageSucceeded;
             }
-            finally { EndDocPrinter(hPrinter); }
+            finally
+            {
+                documentSucceeded = EndDocPrinter(hPrinter) && documentSucceeded;
+            }
+
+            return documentSucceeded;
         }
         finally { ClosePrinter(hPrinter); }
     }
@@ -235,37 +267,22 @@ public class WindowsPrinter : IReceiptPrinter
     private readonly ISettingsService _settings;
     public WindowsPrinter(ISettingsService settings) => _settings = settings;
 
-    public bool IsConnected => PrinterSettings.InstalledPrinters.Count > 0;
+    public bool IsConnected
+    {
+        get
+        {
+            try { return PrinterSettings.InstalledPrinters.Count > 0; }
+            catch { return false; }
+        }
+    }
 
     public async Task<bool> PrintAsync(Sale sale)
     {
         var store = await _settings.GetStoreSettingsAsync();
         return await Task.Run(() =>
         {
-            try
-            {
-                var pd = new PrintDocument
-                {
-                    PrinterSettings = { PrinterName = string.IsNullOrEmpty(store.ReceiptPrinterName)
-                        ? new PrinterSettings().PrinterName
-                        : store.ReceiptPrinterName }
-                };
-                var lines = BuildPlainLines(sale, store);
-                pd.PrintPage += (_, e) =>
-                {
-                    var font = new Font("Consolas", 8);
-                    float y = 20;
-                    foreach (var line in lines)
-                    {
-                        e.Graphics!.DrawString(line, font, Brushes.Black, 20, y);
-                        y += font.GetHeight(e.Graphics) + 2;
-                    }
-                    e.HasMorePages = false;
-                };
-                pd.Print();
-                return true;
-            }
-            catch { return false; }
+            var printerName = ResolvePrinterName(store.ReceiptPrinterName);
+            return printerName != null && PrintLines(printerName, BuildPlainLines(sale, store), 8f);
         });
     }
 
@@ -274,31 +291,63 @@ public class WindowsPrinter : IReceiptPrinter
         var store = await _settings.GetStoreSettingsAsync();
         return await Task.Run(() =>
         {
-            try
-            {
-                var pd = new PrintDocument
-                {
-                    PrinterSettings = { PrinterName = string.IsNullOrEmpty(store.ReceiptPrinterName)
-                        ? new PrinterSettings().PrinterName
-                        : store.ReceiptPrinterName }
-                };
-                var lines = text.Split('\n');
-                pd.PrintPage += (_, e) =>
-                {
-                    var font = new Font("Consolas", 9);
-                    float y = 20;
-                    foreach (var line in lines)
-                    {
-                        e.Graphics!.DrawString(line, font, Brushes.Black, 20, y);
-                        y += font.GetHeight(e.Graphics) + 2;
-                    }
-                    e.HasMorePages = false;
-                };
-                pd.Print();
-                return true;
-            }
-            catch { return false; }
+            var printerName = ResolvePrinterName(store.ReceiptPrinterName);
+            return printerName != null && PrintLines(printerName, text.Replace("\r\n", "\n").Split('\n'), 9f);
         });
+    }
+
+    private static string? ResolvePrinterName(string? configuredPrinter)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(configuredPrinter)) return configuredPrinter;
+            return PrinterSettings.InstalledPrinters.Count == 0
+                ? null
+                : new PrinterSettings().PrinterName;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool PrintLines(string printerName, IReadOnlyList<string> lines, float fontSize)
+    {
+        try
+        {
+            using var document = new PrintDocument();
+            document.PrinterSettings.PrinterName = printerName;
+            if (!document.PrinterSettings.IsValid) return false;
+
+            var lineIndex = 0;
+            document.PrintPage += (_, e) =>
+            {
+                if (e.Graphics == null)
+                {
+                    e.HasMorePages = false;
+                    return;
+                }
+
+                using var font = new Font(FontFamily.GenericMonospace, fontSize);
+                var lineHeight = font.GetHeight(e.Graphics) + 2f;
+                var y = e.MarginBounds.Top;
+                while (lineIndex < lines.Count && y + lineHeight <= e.MarginBounds.Bottom)
+                {
+                    e.Graphics.DrawString(lines[lineIndex], font, Brushes.Black, e.MarginBounds.Left, y);
+                    lineIndex++;
+                    y += lineHeight;
+                }
+
+                e.HasMorePages = lineIndex < lines.Count;
+            };
+
+            document.Print();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static List<string> BuildPlainLines(Sale sale, StoreSettings store)

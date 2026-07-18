@@ -3,7 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using PosApp.Core.Entities;
-using PosApp.Localization;
 
 namespace PosApp.Wpf.Views;
 
@@ -77,11 +76,6 @@ public partial class MainWindow : Window
         DrawerReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
 
         NavigateTo("pos");
-    }
-
-    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
-    {
-        LocalizationManager.Instance.CultureChanged += (_, _) => { };
     }
 
     private void Nav_Click(object sender, RoutedEventArgs e)
@@ -320,12 +314,30 @@ public partial class MainWindow : Window
 
     public void SignOut()
     {
-        App.CurrentUser = null;
-        var login = App.Services.GetService(typeof(LoginView)) as LoginView;
-        if (login == null) return;
-        Application.Current.MainWindow = login;
-        login.Show();
-        Close();
+        var signedInUser = App.CurrentUser;
+        Microsoft.Extensions.DependencyInjection.IServiceScope? previousSession = null;
+        var newSessionCreated = false;
+        try
+        {
+            var login = App.CreateLoginSession(out previousSession);
+            newSessionCreated = true;
+            App.CurrentUser = null;
+            Application.Current.MainWindow = login;
+            login.Show();
+            Close();
+            App.DisposePreviousSession(previousSession);
+        }
+        catch (Exception ex)
+        {
+            App.CurrentUser = signedInUser;
+            if (newSessionCreated) App.RestorePreviousSession(previousSession);
+            App.LogError("Sign out", ex);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                ex.GetBaseException().Message,
+                "Unable to sign out",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 }
 

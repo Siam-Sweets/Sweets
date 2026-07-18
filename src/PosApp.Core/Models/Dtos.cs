@@ -262,7 +262,9 @@ public class DailySalesReport
     public decimal TaxTotal { get; set; }
     public decimal NetSales { get; set; }
     public decimal CostOfGoods { get; set; }
-    public decimal GrossProfit => NetSales - CostOfGoods;
+    // Collected tax belongs to the tax authority, not to the store. Profit is
+    // therefore based on merchandise revenue after discounts, before tax.
+    public decimal GrossProfit => GrossSales - DiscountTotal - CostOfGoods;
     public Dictionary<PaymentMethod, decimal> ByPaymentMethod { get; set; } = new();
     public int RefundCount { get; set; }
     public decimal RefundTotal { get; set; }
@@ -279,7 +281,9 @@ public class DateRangeReport
     public decimal TaxTotal { get; set; }
     public decimal NetSales { get; set; }
     public decimal CostOfGoods { get; set; }
-    public decimal GrossProfit => NetSales - CostOfGoods;
+    // NetSales includes tax for receipt reconciliation; do not report that tax
+    // as profit.
+    public decimal GrossProfit => GrossSales - DiscountTotal - CostOfGoods;
     public List<DailySalesReport> Daily { get; set; } = new();
 }
 

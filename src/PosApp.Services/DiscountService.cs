@@ -27,8 +27,10 @@ public sealed class DiscountService : IDiscountService
 
     public async Task<Discount> SaveAsync(Discount discount)
     {
+        ArgumentNullException.ThrowIfNull(discount);
         Validate(discount);
         var normalizedCode = Normalize(discount.Code);
+        var normalizedDescription = Normalize(discount.Description);
         if (normalizedCode != null && await _db.Discounts.AsNoTracking().AnyAsync(d =>
                 d.Id != discount.Id && d.Code != null && d.Code.ToLower() == normalizedCode.ToLower()))
             throw new InvalidOperationException("Another promotion already uses this code.");
@@ -36,6 +38,7 @@ public sealed class DiscountService : IDiscountService
         if (discount.Id == 0)
         {
             discount.Name = discount.Name.Trim();
+            discount.Description = normalizedDescription;
             discount.Code = normalizedCode;
             discount.CreatedAt = DateTime.UtcNow;
             _db.Discounts.Add(discount);
@@ -46,7 +49,7 @@ public sealed class DiscountService : IDiscountService
         var tracked = await _db.Discounts.FindAsync(discount.Id)
             ?? throw new InvalidOperationException("Promotion not found.");
         tracked.Name = discount.Name.Trim();
-        tracked.Description = Normalize(discount.Description);
+        tracked.Description = normalizedDescription;
         tracked.Code = normalizedCode;
         tracked.Type = discount.Type;
         tracked.Value = discount.Value;
@@ -60,6 +63,7 @@ public sealed class DiscountService : IDiscountService
 
     public async Task SetActiveAsync(int id, bool isActive)
     {
+        if (id <= 0) throw new InvalidOperationException("Select a valid promotion.");
         var discount = await _db.Discounts.FindAsync(id)
             ?? throw new InvalidOperationException("Promotion not found.");
         discount.IsActive = isActive;
@@ -72,6 +76,14 @@ public sealed class DiscountService : IDiscountService
     {
         if (string.IsNullOrWhiteSpace(discount.Name))
             throw new InvalidOperationException("Promotion name is required.");
+        if (discount.Name.Trim().Length > 60)
+            throw new InvalidOperationException("Promotion name cannot exceed 60 characters.");
+        if (Normalize(discount.Description)?.Length > 200)
+            throw new InvalidOperationException("Promotion description cannot exceed 200 characters.");
+        if (Normalize(discount.Code)?.Length > 40)
+            throw new InvalidOperationException("Promotion code cannot exceed 40 characters.");
+        if (!Enum.IsDefined(discount.Type))
+            throw new InvalidOperationException("Select a valid promotion type.");
         if (discount.Value <= 0m || discount.Type == DiscountType.Percentage && discount.Value > 100m)
             throw new InvalidOperationException("Enter a valid promotion value.");
         if (discount.ValidFrom.HasValue && discount.ValidTo.HasValue && discount.ValidTo < discount.ValidFrom)

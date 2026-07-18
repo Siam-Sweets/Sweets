@@ -12,9 +12,14 @@ public class AuthService : IAuthService
 
     public async Task<User?> LoginAsync(string username, string password)
     {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password)) return null;
         var normalized = username.Trim();
+        // Reject oversized input before it reaches SQLite or the password hasher.
+        // The same limits are enforced by the setup/user editors, but service-level
+        // validation also protects callers outside the login window.
+        if (normalized.Length > 60 || password.Length > 12) return null;
         var user = await _db.Users.FirstOrDefaultAsync(u =>
-            u.Username.ToLower() == normalized.ToLower() && u.IsActive);
+            EF.Functions.Collate(u.Username, "NOCASE") == normalized && u.IsActive);
         if (user == null || !DbSeeder.VerifyPin(password, user.PasswordHash, user.PasswordSalt))
             return null;
 
@@ -32,6 +37,7 @@ public class AuthService : IAuthService
 
     public async Task<bool> ChangePasswordAsync(int userId, string newPassword)
     {
+        if (userId <= 0) return false;
         DbSeeder.ValidatePin(newPassword);
         var user = await _db.Users.FindAsync(userId);
         if (user == null) return false;

@@ -92,33 +92,49 @@ public partial class SalesView : UserControl, IRefreshable
 
     private async Task ViewSaleAsync(Sale sale)
     {
-        // Load full sale with items
-        var full = await _db.Sales.AsNoTracking()
-            .Include(x => x.Items)
-            .Include(x => x.Payments)
-            .Include(x => x.Customer)
-            .Include(x => x.User)
-            .FirstOrDefaultAsync(x => x.Id == sale.Id);
-        if (full == null) return;
-        var dlg = new SaleDetailDialog(full) { Owner = Window.GetWindow(this) };
-        dlg.ShowDialog();
+        try
+        {
+            var full = await _db.Sales.AsNoTracking()
+                .Include(x => x.Items)
+                .Include(x => x.Payments)
+                .Include(x => x.Customer)
+                .Include(x => x.User)
+                .FirstOrDefaultAsync(x => x.Id == sale.Id)
+                ?? throw new InvalidOperationException("Sale not found.");
+
+            new SaleDetailDialog(full) { Owner = Window.GetWindow(this) }.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            App.LogError("Load sale details", ex);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                "Unable to load sale", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private async void Print_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button btn && btn.Tag is Sale s)
+        if (sender is not Button { Tag: Sale sale }) return;
+
+        try
         {
             var full = await _db.Sales.AsNoTracking()
                 .Include(x => x.Items)
                 .Include(x => x.Payments)
                 .Include(x => x.User)
-                .FirstOrDefaultAsync(x => x.Id == s.Id);
-            if (full != null)
-            {
-                var ok = await _hardware.PrintReceiptAsync(full);
-                PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ok ? "Receipt sent to the printer." : "Printer not available. Sale remains saved.",
-                    "Print", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
-            }
+                .FirstOrDefaultAsync(x => x.Id == sale.Id)
+                ?? throw new InvalidOperationException("Sale not found.");
+
+            var ok = await _hardware.PrintReceiptAsync(full);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                ok ? "Receipt sent to the printer." : "Printer not available. Sale remains saved.",
+                "Print", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            App.LogError("Print sale receipt", ex);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                "Print failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -196,30 +212,39 @@ public partial class SalesView : UserControl, IRefreshable
             FileName = $"sales_{DateTime.Today:yyyyMMdd}.csv"
         };
         if (dlg.ShowDialog() != true) return;
-        var sb = new StringBuilder();
-        sb.AppendLine("Receipt,Date,Customer,Cashier,Items,Subtotal,Discount,Tax,Total,Status");
-        foreach (var sale in _all)
+        try
         {
-            var localDate = DateTimeUtilities.ToLocal(sale.SaleDate);
-            var values = new[]
+            var sb = new StringBuilder();
+            sb.AppendLine("Receipt,Date,Customer,Cashier,Items,Subtotal,Discount,Tax,Total,Status");
+            foreach (var sale in _all)
             {
-                FormattingUtilities.CsvField(sale.ReceiptNumber),
-                FormattingUtilities.CsvField(localDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)),
-                FormattingUtilities.CsvField(sale.Customer?.Name),
-                FormattingUtilities.CsvField(sale.User?.FullName),
-                sale.Items.Sum(item => item.Quantity).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-                FormattingUtilities.CsvDecimal(sale.Subtotal),
-                FormattingUtilities.CsvDecimal(sale.DiscountTotal),
-                FormattingUtilities.CsvDecimal(sale.TaxTotal),
-                FormattingUtilities.CsvDecimal(sale.Total),
-                FormattingUtilities.CsvField(sale.Status.ToString())
-            };
-            sb.AppendLine(string.Join(',', values));
+                var localDate = DateTimeUtilities.ToLocal(sale.SaleDate);
+                var values = new[]
+                {
+                    FormattingUtilities.CsvField(sale.ReceiptNumber),
+                    FormattingUtilities.CsvField(localDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)),
+                    FormattingUtilities.CsvField(sale.Customer?.Name),
+                    FormattingUtilities.CsvField(sale.User?.FullName),
+                    sale.Items.Sum(item => item.Quantity).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
+                    FormattingUtilities.CsvDecimal(sale.Subtotal),
+                    FormattingUtilities.CsvDecimal(sale.DiscountTotal),
+                    FormattingUtilities.CsvDecimal(sale.TaxTotal),
+                    FormattingUtilities.CsvDecimal(sale.Total),
+                    FormattingUtilities.CsvField(sale.Status.ToString())
+                };
+                sb.AppendLine(string.Join(',', values));
+            }
+            File.WriteAllText(dlg.FileName, sb.ToString());
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Exported {_all.Count} sales to:\n{dlg.FileName}", "Export",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            try { Process.Start(new ProcessStartInfo(dlg.FileName) { UseShellExecute = true }); } catch { }
         }
-        File.WriteAllText(dlg.FileName, sb.ToString());
-        PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Exported {_all.Count} sales to:\n{dlg.FileName}", "Export",
-            MessageBoxButton.OK, MessageBoxImage.Information);
-        try { Process.Start(new ProcessStartInfo(dlg.FileName) { UseShellExecute = true }); } catch { }
+        catch (Exception ex)
+        {
+            App.LogError("Sales CSV export", ex);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Export failed",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }
 

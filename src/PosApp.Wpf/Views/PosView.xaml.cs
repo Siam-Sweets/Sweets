@@ -219,10 +219,17 @@ public partial class PosView : UserControl, IRefreshable
     {
         if (sender is Button btn && btn.Tag is Product p && DataContext is PosViewModel vm)
         {
-            await vm.AddToCartAsync(p);
-            BarcodeBox.Clear();
-            ProductSearchBox.Clear();
-            CloseSearch();
+            try
+            {
+                await vm.AddToCartAsync(p);
+                BarcodeBox.Clear();
+                ProductSearchBox.Clear();
+                CloseSearch();
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex, "Unable to add product");
+            }
         }
     }
 
@@ -263,10 +270,20 @@ public partial class PosView : UserControl, IRefreshable
 
     private async Task OpenPaymentAsync()
     {
-        if (DataContext is PosViewModel vm)
-            await vm.CheckoutAsync();
-
-        BarcodeBox.Focus();
+        try
+        {
+            if (DataContext is PosViewModel vm)
+                await vm.CheckoutAsync();
+        }
+        catch (Exception ex)
+        {
+            App.LogError("Open checkout payment", ex);
+            ShowError(ex.GetBaseException(), "Unable to start checkout");
+        }
+        finally
+        {
+            BarcodeBox.Focus();
+        }
     }
 
     private async void PosView_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -352,10 +369,18 @@ public partial class PosView : UserControl, IRefreshable
             PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Select a receipt line first.", "Discount", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var promotions = await vm.GetActivePromotionsAsync();
-        var dialog = new DiscountEntryDialog(line, promotions) { Owner = Window.GetWindow(this) };
-        if (dialog.ShowDialog() == true)
-            vm.ApplyLineDiscount(line, dialog.DiscountAmount, dialog.Reason, dialog.PromotionId);
+        try
+        {
+            var promotions = await vm.GetActivePromotionsAsync();
+            var dialog = new DiscountEntryDialog(line, promotions) { Owner = Window.GetWindow(this) };
+            if (dialog.ShowDialog() == true)
+                vm.ApplyLineDiscount(line, dialog.DiscountAmount, dialog.Reason, dialog.PromotionId);
+        }
+        catch (Exception ex)
+        {
+            App.LogError("Load line discounts", ex);
+            ShowError(ex.GetBaseException(), "Unable to load discounts");
+        }
     }
 
     private void Comment_Click(object sender, RoutedEventArgs e)
@@ -811,65 +836,78 @@ public class PosViewModel : ViewModelBase
 
     public async Task ShowSuspendedAsync()
     {
-        var suspended = await _sales.GetSuspendedSalesAsync();
-        if (suspended.Count == 0)
+        try
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("No suspended sales to recall.", "Recall", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        var dlg = new SuspendedSalesDialog(suspended, _sales) { Owner = Application.Current.MainWindow };
-        if (dlg.ShowDialog() == true && dlg.SelectedSale != null)
-        {
-            var catalog = (await _inventory.SearchProductsAsync(null, includeInactive: true))
-                .ToDictionary(product => product.Id);
+            var suspended = await _sales.GetSuspendedSalesAsync();
+            if (suspended.Count == 0)
+            {
+                PosApp.Wpf.Helpers.LocalizedMessageBox.Show("No suspended sales to recall.", "Recall",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
 
-            ClearCart();
-            foreach (var item in dlg.SelectedSale.Items)
+            var dlg = new SuspendedSalesDialog(suspended) { Owner = Application.Current.MainWindow };
+            if (dlg.ShowDialog() == true && dlg.SelectedSale != null)
             {
-                catalog.TryGetValue(item.ProductId, out var product);
-                CartLines.Add(new SaleDraftLine
+                var catalog = (await _inventory.SearchProductsAsync(null, includeInactive: true))
+                    .ToDictionary(product => product.Id);
+
+                ClearCart();
+                foreach (var item in dlg.SelectedSale.Items)
                 {
-                    ProductId = item.ProductId,
-                    ProductName = item.ProductName,
-                    Sku = item.Sku,
-                    Quantity = item.Quantity,
-                    Unit = product?.EffectiveUnit ?? item.Unit,
-                    UnitPrice = item.UnitPrice,
-                    CostPrice = item.CostPrice,
-                    TaxRate = item.TaxRate,
-                    DiscountAmount = item.DiscountAmount,
-                    DiscountReason = item.DiscountReason,
-                    PromotionId = item.PromotionId,
-                    AllowDiscount = product?.AllowDiscount ?? true,
-                    IsWeighted = product?.RequiresMeasuredQuantity ?? item.Unit.IsMeasuredUnit()
-                });
+                    catalog.TryGetValue(item.ProductId, out var product);
+                    CartLines.Add(new SaleDraftLine
+                    {
+                        ProductId = item.ProductId,
+                        ProductName = item.ProductName,
+                        Sku = item.Sku,
+                        Quantity = item.Quantity,
+                        Unit = product?.EffectiveUnit ?? item.Unit,
+                        UnitPrice = item.UnitPrice,
+                        CostPrice = item.CostPrice,
+                        TaxRate = item.TaxRate,
+                        DiscountAmount = item.DiscountAmount,
+                        DiscountReason = item.DiscountReason,
+                        PromotionId = item.PromotionId,
+                        AllowDiscount = product?.AllowDiscount ?? true,
+                        IsWeighted = product?.RequiresMeasuredQuantity ?? item.Unit.IsMeasuredUnit()
+                    });
+                }
+
+                _suspendedSaleId = dlg.SelectedSale.Id;
+                _selectedCustomer = dlg.SelectedSale.Customer;
+                var recalledNote = dlg.SelectedSale.Note ?? string.Empty;
+                var recalledServiceType = string.IsNullOrWhiteSpace(dlg.SelectedSale.ServiceType)
+                    ? "Retail" : dlg.SelectedSale.ServiceType;
+                // Older versions embedded the service type in the note. Strip every
+                // legacy prefix during recall so saving again cannot duplicate it.
+                while (recalledNote.StartsWith("Service type:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var lineBreak = recalledNote.IndexOfAny(new[] { '\r', '\n' });
+                    var firstLine = lineBreak < 0 ? recalledNote : recalledNote[..lineBreak];
+                    var legacyType = firstLine["Service type:".Length..].Trim();
+                    if (!string.IsNullOrWhiteSpace(legacyType) &&
+                        (string.IsNullOrWhiteSpace(dlg.SelectedSale.ServiceType) ||
+                         string.Equals(recalledServiceType, "Retail", StringComparison.OrdinalIgnoreCase)))
+                        recalledServiceType = legacyType;
+                    recalledNote = lineBreak < 0
+                        ? string.Empty
+                        : recalledNote[(lineBreak + 1)..].TrimStart('\r', '\n');
+                }
+
+                Note = recalledNote;
+                ServiceType = recalledServiceType;
+                OnPropertyChanged(nameof(CustomerDisplay));
+                OnPropertyChanged(nameof(SaleContextDisplay));
+                OnPropertyChanged(nameof(ActiveSaleDisplay));
+                RecalcTotals();
             }
-            _suspendedSaleId = dlg.SelectedSale.Id;
-            _selectedCustomer = dlg.SelectedSale.Customer;
-            var recalledNote = dlg.SelectedSale.Note ?? string.Empty;
-            var recalledServiceType = string.IsNullOrWhiteSpace(dlg.SelectedSale.ServiceType)
-                ? "Retail" : dlg.SelectedSale.ServiceType;
-            // Older versions embedded the service type in the note. Strip every
-            // legacy prefix during recall so saving again cannot duplicate it.
-            while (recalledNote.StartsWith("Service type:", StringComparison.OrdinalIgnoreCase))
-            {
-                var lineBreak = recalledNote.IndexOfAny(new[] { '\r', '\n' });
-                var firstLine = lineBreak < 0 ? recalledNote : recalledNote[..lineBreak];
-                var legacyType = firstLine["Service type:".Length..].Trim();
-                if (!string.IsNullOrWhiteSpace(legacyType) &&
-                    (string.IsNullOrWhiteSpace(dlg.SelectedSale.ServiceType) ||
-                     string.Equals(recalledServiceType, "Retail", StringComparison.OrdinalIgnoreCase)))
-                    recalledServiceType = legacyType;
-                recalledNote = lineBreak < 0
-                    ? string.Empty
-                    : recalledNote[(lineBreak + 1)..].TrimStart('\r', '\n');
-            }
-            Note = recalledNote;
-            ServiceType = recalledServiceType;
-            OnPropertyChanged(nameof(CustomerDisplay));
-            OnPropertyChanged(nameof(SaleContextDisplay));
-            OnPropertyChanged(nameof(ActiveSaleDisplay));
-            RecalcTotals();
+        }
+        catch (Exception ex)
+        {
+            App.LogError("Recall suspended sale", ex);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                "Recall failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -951,6 +989,7 @@ public class CustomerPickerDialog : Window
 
         Content = grid;
         Loaded += async (_, _) => await Reload();
+        Closed += (_, _) => _searchTimer.Stop();
     }
 
     private async Task Reload()
@@ -980,12 +1019,10 @@ public class CustomerPickerDialog : Window
 public class SuspendedSalesDialog : Window
 {
     public Sale? SelectedSale { get; private set; }
-    private readonly ISaleService _svc;
     private readonly ObservableCollection<Sale> _list = new();
 
-    public SuspendedSalesDialog(System.Collections.Generic.IReadOnlyList<Sale> suspended, ISaleService svc)
+    public SuspendedSalesDialog(System.Collections.Generic.IReadOnlyList<Sale> suspended)
     {
-        _svc = svc;
         Title = "Recall Suspended Sale";
         Width = 540; Height = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -1036,8 +1073,9 @@ public class NumericValueDialog : Window
         bool wholeNumbersOnly = false)
     {
         Title = title;
-        Width = 390;
-        Height = 235;
+        Width = 520;
+        MinHeight = 235;
+        SizeToContent = System.Windows.SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
@@ -1053,6 +1091,7 @@ public class NumericValueDialog : Window
         var label = new TextBlock
         {
             Text = prompt,
+            TextWrapping = TextWrapping.Wrap,
             Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextDarkBrush"),
             FontSize = 15,
             Margin = new Thickness(0, 0, 0, 10)
@@ -1063,7 +1102,8 @@ public class NumericValueDialog : Window
         {
             Text = value.ToString("0.###", CultureInfo.CurrentCulture),
             Padding = new Thickness(10, 8, 10, 8),
-            FontSize = 20
+            FontSize = 20,
+            MaxLength = 32
         };
         Grid.SetRow(_valueBox, 1);
         grid.Children.Add(_valueBox);
@@ -1114,18 +1154,21 @@ internal static class MeasurementUi
 
     public static string AddPrompt(string productName, UnitOfMeasure unit, decimal price)
         => string.Format(
-            DialogLayout.Text("POS_EnterMeasuredAmount", "Enter the amount of {0} in {1}. Price: {2} per {1}."),
-            productName, unit.ToSymbol(), FormattingUtilities.Money(price, App.StoreSettings));
+            DialogLayout.Text("POS_EnterMeasuredAmount", "Enter the amount of {0} in {1}. Unit price: {2}."),
+            productName, unit.ToSymbol(), UnitPrice(price, unit));
 
     public static string AdjustPrompt(
         string productName, UnitOfMeasure unit, decimal price, bool measured)
         => measured
             ? string.Format(
-                DialogLayout.Text("POS_AdjustMeasuredAmount", "Enter the exact amount of {0} in {1}. Price: {2} per {1}."),
-                productName, unit.ToSymbol(), FormattingUtilities.Money(price, App.StoreSettings))
+                DialogLayout.Text("POS_AdjustMeasuredAmount", "Enter the exact amount of {0} in {1}. Unit price: {2}."),
+                productName, unit.ToSymbol(), UnitPrice(price, unit))
             : string.Format(
                 DialogLayout.Text("POS_AdjustItemQuantity", "Enter the whole-item quantity for {0}."),
                 productName);
+
+    private static string UnitPrice(decimal price, UnitOfMeasure unit)
+        => $"{FormattingUtilities.Money(price, App.StoreSettings)} / {unit.ToSymbol()}";
 }
 
 public class TextEntryDialog : Window
@@ -1162,7 +1205,8 @@ public class TextEntryDialog : Window
             Padding = new Thickness(10),
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            MaxLength = 500
         };
         Grid.SetRow(_textBox, 1);
         grid.Children.Add(_textBox);
@@ -1300,7 +1344,8 @@ public class DiscountEntryDialog : Window
         {
             Padding = new Thickness(10, 8, 10, 8),
             FontSize = 18,
-            MinHeight = 44
+            MinHeight = 44,
+            MaxLength = 32
         };
         valuePanel.Children.Add(_valueBox);
         Grid.SetRow(valuePanel, 3);
@@ -1313,7 +1358,8 @@ public class DiscountEntryDialog : Window
         {
             Padding = new Thickness(10, 8, 10, 8),
             MinHeight = 40,
-            Text = line.DiscountReason ?? string.Empty
+            Text = line.DiscountReason ?? string.Empty,
+            MaxLength = 200
         };
         reasonPanel.Children.Add(_reasonBox);
         Grid.SetRow(reasonPanel, 4);

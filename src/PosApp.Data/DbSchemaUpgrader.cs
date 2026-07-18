@@ -131,6 +131,12 @@ public static class DbSchemaUpgrader
         // intact while bringing older databases up to the current checkout schema.
         await EnsureColumnAsync(db, "Sales", "Change",
             "\"Change\" decimal(18,4) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Sales", "RefundedSaleId",
+            "\"RefundedSaleId\" INTEGER NULL");
+        var productUnitColumnAdded = await EnsureColumnAsync(db, "Products", "Unit",
+            "\"Unit\" INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Products", "AllowDiscount",
+            "\"AllowDiscount\" INTEGER NOT NULL DEFAULT 1");
         await EnsureColumnAsync(db, "SaleItems", "DiscountReason",
             "\"DiscountReason\" TEXT NULL");
         await EnsureColumnAsync(db, "StockTransactions", "SaleItemId",
@@ -141,7 +147,9 @@ public static class DbSchemaUpgrader
             "\"Unit\" INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SaleItems", "PromotionId",
             "\"PromotionId\" INTEGER NULL");
-        var refundedSaleItemColumnAdded = await EnsureColumnAsync(db, "SaleItems", "RefundedSaleItemId",
+        await EnsureColumnAsync(db, "SaleItems", "IsRefunded",
+            "\"IsRefunded\" INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "SaleItems", "RefundedSaleItemId",
             "\"RefundedSaleItemId\" INTEGER NULL");
         await EnsureColumnAsync(db, "Sales", "ServiceType",
             "\"ServiceType\" TEXT NOT NULL DEFAULT 'Retail'");
@@ -149,6 +157,14 @@ public static class DbSchemaUpgrader
             "\"CashSessionId\" INTEGER NULL REFERENCES \"CashSessions\"(\"Id\") ON DELETE RESTRICT");
         await EnsureColumnAsync(db, "Customers", "IsActive",
             "\"IsActive\" INTEGER NOT NULL DEFAULT 1");
+
+        // Releases that stored only IsWeighted implicitly meant kilograms. Keep
+        // that behaviour when adding the explicit unit column to those databases.
+        if (productUnitColumnAdded)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE Products SET Unit = 1 WHERE IsWeighted = 1;");
+        }
 
         // Existing sale rows predate cost snapshots. Backfill once from the current
         // catalog so later product-cost edits no longer change those reports.
@@ -176,31 +192,31 @@ public static class DbSchemaUpgrader
         // those legacy documents first, then link each negative line to the best
         // matching original line. On later starts, the link also identifies modern
         // partial refunds so legacy repair never overwrites their tender or rounding.
-        if (refundedSaleItemColumnAdded)
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                """
-                UPDATE "SaleItems" AS refundItem
-                SET "RefundedSaleItemId" = (
-                    SELECT originalItem."Id"
-                    FROM "Sales" AS refundSale
-                    JOIN "SaleItems" AS originalItem
-                      ON originalItem."SaleId" = refundSale."RefundedSaleId"
-                    WHERE refundSale."Id" = refundItem."SaleId"
-                      AND originalItem."ProductId" = refundItem."ProductId"
-                      AND ABS(originalItem."UnitPrice" - refundItem."UnitPrice") < 0.0001
-                    ORDER BY originalItem."Id"
-                    LIMIT 1
-                )
-                WHERE refundItem."RefundedSaleItemId" IS NULL
-                  AND EXISTS (
-                    SELECT 1 FROM "Sales" AS refundSale
-                    WHERE refundSale."Id" = refundItem."SaleId"
-                      AND refundSale."Status" = 3
-                      AND refundSale."RefundedSaleId" IS NOT NULL
-                  );
-                """);
-        }
+        // Run this repair on every start, not only when the column is first
+        // introduced. That also heals a database copied from an interrupted or
+        // experimental build where the column existed but legacy links did not.
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "SaleItems" AS refundItem
+            SET "RefundedSaleItemId" = (
+                SELECT originalItem."Id"
+                FROM "Sales" AS refundSale
+                JOIN "SaleItems" AS originalItem
+                  ON originalItem."SaleId" = refundSale."RefundedSaleId"
+                WHERE refundSale."Id" = refundItem."SaleId"
+                  AND originalItem."ProductId" = refundItem."ProductId"
+                  AND ABS(originalItem."UnitPrice" - refundItem."UnitPrice") < 0.0001
+                ORDER BY originalItem."Id"
+                LIMIT 1
+            )
+            WHERE refundItem."RefundedSaleItemId" IS NULL
+              AND EXISTS (
+                SELECT 1 FROM "Sales" AS refundSale
+                WHERE refundSale."Id" = refundItem."SaleId"
+                  AND refundSale."Status" = 3
+                  AND refundSale."RefundedSaleId" IS NOT NULL
+              );
+            """);
 
         // Legacy releases inferred register ownership from timestamps. Persist
         // that ownership once so later refunds cannot alter a closed session.
@@ -228,6 +244,7 @@ public static class DbSchemaUpgrader
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Sku_NOCASE", "Products", "Sku");
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Barcode_NOCASE", "Products", "Barcode");
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Discounts_Code_NOCASE", "Discounts", "Code");
+        await CreateProductIdentifierGuardsAsync(db);
         // Partial refunds legitimately create several reversal documents for one
         // sale. Remove the old one-refund-only constraint before publishing the
         // normal lookup indexes.
@@ -287,6 +304,40 @@ public static class DbSchemaUpgrader
             UPDATE "Products" SET "Barcode" = NULL
             WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
             """,
+            // SKU and barcode are both accepted by the scanner, so they share one
+            // namespace even though SQLite can only put a unique index on each
+            // individual column. Preserve the oldest occurrence of an identifier
+            // across both fields and clear every later ambiguous copy.
+            """
+            WITH identifiers AS (
+                SELECT "Id", 'Sku' AS field, LOWER(TRIM("Sku")) AS value, 0 AS priority
+                FROM "Products" WHERE "Sku" IS NOT NULL AND TRIM("Sku") <> ''
+                UNION ALL
+                SELECT "Id", 'Barcode' AS field, LOWER(TRIM("Barcode")) AS value, 1 AS priority
+                FROM "Products" WHERE "Barcode" IS NOT NULL AND TRIM("Barcode") <> ''
+            ), ranked AS (
+                SELECT "Id", field, ROW_NUMBER() OVER (
+                    PARTITION BY value ORDER BY "Id", priority) AS rn
+                FROM identifiers
+            )
+            UPDATE "Products" SET "Sku" = NULL
+            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE field = 'Sku' AND rn > 1);
+            """,
+            """
+            WITH identifiers AS (
+                SELECT "Id", 'Sku' AS field, LOWER(TRIM("Sku")) AS value, 0 AS priority
+                FROM "Products" WHERE "Sku" IS NOT NULL AND TRIM("Sku") <> ''
+                UNION ALL
+                SELECT "Id", 'Barcode' AS field, LOWER(TRIM("Barcode")) AS value, 1 AS priority
+                FROM "Products" WHERE "Barcode" IS NOT NULL AND TRIM("Barcode") <> ''
+            ), ranked AS (
+                SELECT "Id", field, ROW_NUMBER() OVER (
+                    PARTITION BY value ORDER BY "Id", priority) AS rn
+                FROM identifiers
+            )
+            UPDATE "Products" SET "Barcode" = NULL
+            WHERE "Id" IN (SELECT "Id" FROM ranked WHERE field = 'Barcode' AND rn > 1);
+            """,
             """
             WITH ranked AS (
                 SELECT "Id", ROW_NUMBER() OVER (
@@ -329,7 +380,13 @@ public static class DbSchemaUpgrader
             SET "Subtotal" = -ABS("Subtotal"),
                 "DiscountTotal" = -ABS("DiscountTotal"),
                 "TaxTotal" = -ABS("TaxTotal"),
-                "Rounding" = -ABS("Rounding"),
+                -- Make the reversal reconcile exactly to the original receipt.
+                -- Negating ABS(Rounding) was wrong when the original receipt had
+                -- negative rounding and could leave the refund a few cents short.
+                "Rounding" = -ABS(
+                    (SELECT original."Subtotal" - original."DiscountTotal" + original."TaxTotal" + original."Rounding"
+                     FROM "Sales" AS original WHERE original."Id" = "Sales"."RefundedSaleId")
+                ) - (-ABS("Subtotal") + ABS("DiscountTotal") - ABS("TaxTotal")),
                 "AmountPaid" = -ABS(
                     (SELECT original."Subtotal" - original."DiscountTotal" + original."TaxTotal" + original."Rounding"
                      FROM "Sales" AS original WHERE original."Id" = "Sales"."RefundedSaleId")
@@ -359,6 +416,52 @@ public static class DbSchemaUpgrader
               AND NOT EXISTS (
                   SELECT 1 FROM "SalePayments" AS existing WHERE existing."SaleId" = refund."Id"
               );
+            """
+        };
+
+        foreach (var command in commands)
+            await db.Database.ExecuteSqlRawAsync(command);
+    }
+
+    private static async Task CreateProductIdentifierGuardsAsync(AppDbContext db)
+    {
+        // The per-column unique indexes above cannot stop product A's SKU from
+        // matching product B's barcode. These local SQLite triggers close that
+        // gap for every writer, including future import tools and manual SQL.
+        var commands = new[]
+        {
+            """
+            CREATE TRIGGER IF NOT EXISTS "TR_Products_IdentifierNamespace_Insert"
+            BEFORE INSERT ON "Products"
+            WHEN EXISTS (
+                SELECT 1 FROM "Products" AS existing
+                WHERE (NEW."Sku" IS NOT NULL AND TRIM(NEW."Sku") <> '' AND
+                       (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Sku")) OR
+                        LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Sku"))))
+                   OR (NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> '' AND
+                       (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Barcode")) OR
+                        LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode"))))
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product');
+            END;
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS "TR_Products_IdentifierNamespace_Update"
+            BEFORE UPDATE OF "Sku", "Barcode" ON "Products"
+            WHEN EXISTS (
+                SELECT 1 FROM "Products" AS existing
+                WHERE existing."Id" <> NEW."Id" AND
+                      ((NEW."Sku" IS NOT NULL AND TRIM(NEW."Sku") <> '' AND
+                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Sku")) OR
+                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Sku"))))
+                       OR (NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> '' AND
+                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Barcode")) OR
+                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode")))))
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product');
+            END;
             """
         };
 
