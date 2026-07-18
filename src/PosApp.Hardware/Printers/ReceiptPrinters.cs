@@ -330,7 +330,7 @@ public class WindowsPrinter : IReceiptPrinter
 
                 using var font = new Font(FontFamily.GenericMonospace, fontSize);
                 var lineHeight = font.GetHeight(e.Graphics) + 2f;
-                var y = e.MarginBounds.Top;
+                var y = (float)e.MarginBounds.Top;
                 while (lineIndex < lines.Count && y + lineHeight <= e.MarginBounds.Bottom)
                 {
                     e.Graphics.DrawString(lines[lineIndex], font, Brushes.Black, e.MarginBounds.Left, y);

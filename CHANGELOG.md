@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.14 — Hardware project build fixes
+
+- Added the missing `System.IO` namespace import required by serial barcode-scanner `IOException` handling.
+- Corrected receipt-printer page-position arithmetic to use a floating-point Y coordinate, matching the measured font line height.
+- Restored successful compilation of the `PosApp.Hardware` project under the release GitHub Actions build.
+
 ## 1.4.13 — Reliability and data-integrity hardening
 
 - Corrected partial-refund allocation when a receipt contains duplicate product lines, including legacy refunds without an original-line link.
