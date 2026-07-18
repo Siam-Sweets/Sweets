@@ -42,9 +42,11 @@ public class SaleDraftLine : INotifyPropertyChanged
             if (_quantity == value) return;
             _quantity = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(QuantityDisplay));
             OnPropertyChanged(nameof(LineTotal));
         }
     }
+    public UnitOfMeasure Unit { get; set; } = UnitOfMeasure.Piece;
     public decimal UnitPrice { get; set; }
     public decimal TaxRate { get; set; }
     public decimal DiscountAmount
@@ -63,6 +65,9 @@ public class SaleDraftLine : INotifyPropertyChanged
     public decimal CostPrice { get; set; }
     public bool AllowDiscount { get; set; } = true;
     public bool IsWeighted { get; set; }
+    public bool RequiresMeasuredQuantity => IsWeighted || Unit.IsMeasuredUnit();
+    public string UnitSymbol => Unit.ToSymbol();
+    public string QuantityDisplay => $"{Quantity:0.###} {UnitSymbol}";
     public decimal LineTotal => (UnitPrice * Quantity) - DiscountAmount;
 
     public event PropertyChangedEventHandler? PropertyChanged;

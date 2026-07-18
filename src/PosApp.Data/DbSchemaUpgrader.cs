@@ -137,6 +137,8 @@ public static class DbSchemaUpgrader
             "\"SaleItemId\" INTEGER NULL");
         var costPriceColumnAdded = await EnsureColumnAsync(db, "SaleItems", "CostPrice",
             "\"CostPrice\" decimal(18,4) NOT NULL DEFAULT 0");
+        var unitColumnAdded = await EnsureColumnAsync(db, "SaleItems", "Unit",
+            "\"Unit\" INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SaleItems", "PromotionId",
             "\"PromotionId\" INTEGER NULL");
         var refundedSaleItemColumnAdded = await EnsureColumnAsync(db, "SaleItems", "RefundedSaleItemId",
@@ -154,6 +156,15 @@ public static class DbSchemaUpgrader
         {
             await db.Database.ExecuteSqlRawAsync(
                 "UPDATE SaleItems SET CostPrice = COALESCE((SELECT CostPrice FROM Products WHERE Products.Id = SaleItems.ProductId), 0);");
+        }
+
+        // Sale-item units are immutable receipt facts. When upgrading a database
+        // created before unit snapshots existed, copy the product's current unit
+        // once so historical weighted/volume lines do not all appear as pieces.
+        if (unitColumnAdded)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE SaleItems SET Unit = COALESCE((SELECT Unit FROM Products WHERE Products.Id = SaleItems.ProductId), 0);");
         }
 
         // Older databases could contain identifiers that differ only by letter case.

@@ -146,7 +146,7 @@ public sealed class SafeUpdateService : IUpdateService
             return Invalid(fullPath, "The installer does not contain a valid PosApp version resource.");
 
         // Development packages encode the Actions run in both the filename
-        // (1.4.5-dev.27) and the Windows resource (1.4.5.27). Compare the complete
+        // (1.4.7-dev.27) and the Windows resource (1.4.7.27). Compare the complete
         // build identity so a second dev package is not mistaken for the same build.
         if (!SameBuildVersion(fileNameVersion, resourceVersion))
             return Invalid(fullPath,

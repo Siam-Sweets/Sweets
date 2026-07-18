@@ -133,6 +133,7 @@ public class AppDbContext : DbContext
             b.Property(i => i.TaxRate).HasColumnType("decimal(6,3)");
             b.Property(i => i.DiscountAmount).HasColumnType("decimal(18,4)");
             b.Property(i => i.Quantity).HasColumnType("decimal(18,4)");
+            b.Property(i => i.Unit).HasConversion<int>();
             b.HasOne(i => i.Sale)
                 .WithMany(s => s.Items)
                 .HasForeignKey(i => i.SaleId)

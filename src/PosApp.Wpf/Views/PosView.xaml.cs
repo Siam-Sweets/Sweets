@@ -243,7 +243,13 @@ public partial class PosView : UserControl, IRefreshable
             return;
         }
 
-        var dialog = new NumericValueDialog("Quantity", "Enter the new quantity", line.Quantity, 0.001m)
+        var measured = line.RequiresMeasuredQuantity;
+        var dialog = new NumericValueDialog(
+            MeasurementUi.Title(line.Unit, measured),
+            MeasurementUi.AdjustPrompt(line.ProductName, line.Unit, line.UnitPrice, measured),
+            line.Quantity,
+            measured ? 0.001m : 1m,
+            wholeNumbersOnly: !measured)
         {
             Owner = Window.GetWindow(this)
         };
@@ -600,9 +606,22 @@ public class PosViewModel : ViewModelBase
 
     public Task AddToCartAsync(Product product)
     {
-        // Weighted products remain supported through decimal quantities.
-        // Quantity can be entered with F4; no weighing-scale hardware is required.
-        const decimal qty = 1m;
+        var measured = product.RequiresMeasuredQuantity;
+        var unit = product.EffectiveUnit;
+        var qty = 1m;
+        if (measured)
+        {
+            var dialog = new NumericValueDialog(
+                MeasurementUi.Title(unit, measured),
+                MeasurementUi.AddPrompt(product.Name, unit, product.Price),
+                MeasurementUi.DefaultAmount(unit),
+                0.001m)
+            {
+                Owner = Application.Current.MainWindow
+            };
+            if (dialog.ShowDialog() != true) return Task.CompletedTask;
+            qty = dialog.Value;
+        }
 
         var existing = CartLines.FirstOrDefault(l => l.ProductId == product.Id);
         if (existing != null)
@@ -617,11 +636,12 @@ public class PosViewModel : ViewModelBase
                 ProductName = product.Name,
                 Sku = product.Sku,
                 Quantity = qty,
+                Unit = unit,
                 UnitPrice = product.Price,
                 CostPrice = product.CostPrice,
                 TaxRate = product.TaxRate,
                 AllowDiscount = product.AllowDiscount,
-                IsWeighted = product.IsWeighted
+                IsWeighted = measured
             });
         }
         RecalcTotals();
@@ -813,6 +833,7 @@ public class PosViewModel : ViewModelBase
                     ProductName = item.ProductName,
                     Sku = item.Sku,
                     Quantity = item.Quantity,
+                    Unit = product?.EffectiveUnit ?? item.Unit,
                     UnitPrice = item.UnitPrice,
                     CostPrice = item.CostPrice,
                     TaxRate = item.TaxRate,
@@ -820,7 +841,7 @@ public class PosViewModel : ViewModelBase
                     DiscountReason = item.DiscountReason,
                     PromotionId = item.PromotionId,
                     AllowDiscount = product?.AllowDiscount ?? true,
-                    IsWeighted = product?.IsWeighted ?? false
+                    IsWeighted = product?.RequiresMeasuredQuantity ?? item.Unit.IsMeasuredUnit()
                 });
             }
             _suspendedSaleId = dlg.SelectedSale.Id;
@@ -1007,9 +1028,12 @@ public class NumericValueDialog : Window
 {
     private readonly TextBox _valueBox;
     private readonly decimal _minimum;
+    private readonly bool _wholeNumbersOnly;
     public decimal Value { get; private set; }
 
-    public NumericValueDialog(string title, string prompt, decimal value, decimal minimum = 0m)
+    public NumericValueDialog(
+        string title, string prompt, decimal value, decimal minimum = 0m,
+        bool wholeNumbersOnly = false)
     {
         Title = title;
         Width = 390;
@@ -1018,6 +1042,7 @@ public class NumericValueDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
         _minimum = minimum;
+        _wholeNumbersOnly = wholeNumbersOnly;
         Value = value;
 
         var grid = DialogLayout.CreateRoot();
@@ -1049,9 +1074,15 @@ public class NumericValueDialog : Window
 
     private void Accept()
     {
-        if (!DialogLayout.TryParseDecimal(_valueBox.Text, out var value) || value < _minimum)
+        if (!DialogLayout.TryParseDecimal(_valueBox.Text, out var value) || value < _minimum ||
+            (_wholeNumbersOnly && decimal.Truncate(value) != value))
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"Enter a value of at least {_minimum:0.###}.", Title,
+            var message = _wholeNumbersOnly
+                ? DialogLayout.Text("POS_WholeQuantityRequired", "Enter a whole-item quantity of at least 1.")
+                : string.Format(
+                    DialogLayout.Text("POS_MinimumMeasuredAmount", "Enter an amount of at least {0:0.###}."),
+                    _minimum);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(message, Title,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -1059,6 +1090,42 @@ public class NumericValueDialog : Window
         DialogResult = true;
         Close();
     }
+}
+
+internal static class MeasurementUi
+{
+    public static decimal DefaultAmount(UnitOfMeasure unit) => unit switch
+    {
+        UnitOfMeasure.Gram or UnitOfMeasure.Milliliter => 100m,
+        _ => 1m
+    };
+
+    public static string Title(UnitOfMeasure unit, bool measured)
+    {
+        if (!measured) return DialogLayout.Text("POS_Quantity", "Quantity");
+        return unit.GetSaleMode(true) switch
+        {
+            ProductSaleMode.Weight => DialogLayout.Text("POS_Weight", "Weight"),
+            ProductSaleMode.Volume => DialogLayout.Text("POS_Volume", "Volume"),
+            ProductSaleMode.Length => DialogLayout.Text("POS_Length", "Length"),
+            _ => DialogLayout.Text("POS_Quantity", "Quantity")
+        };
+    }
+
+    public static string AddPrompt(string productName, UnitOfMeasure unit, decimal price)
+        => string.Format(
+            DialogLayout.Text("POS_EnterMeasuredAmount", "Enter the amount of {0} in {1}. Price: {2} per {1}."),
+            productName, unit.ToSymbol(), FormattingUtilities.Money(price, App.StoreSettings));
+
+    public static string AdjustPrompt(
+        string productName, UnitOfMeasure unit, decimal price, bool measured)
+        => measured
+            ? string.Format(
+                DialogLayout.Text("POS_AdjustMeasuredAmount", "Enter the exact amount of {0} in {1}. Price: {2} per {1}."),
+                productName, unit.ToSymbol(), FormattingUtilities.Money(price, App.StoreSettings))
+            : string.Format(
+                DialogLayout.Text("POS_AdjustItemQuantity", "Enter the whole-item quantity for {0}."),
+                productName);
 }
 
 public class TextEntryDialog : Window

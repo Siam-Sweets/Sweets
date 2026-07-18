@@ -3,8 +3,8 @@ using System.ComponentModel.DataAnnotations;
 namespace PosApp.Core.Entities;
 
 /// <summary>
-/// A sellable item. Supports both barcode-tracked goods and open/weighted items
-/// (e.g. produce sold by kilogram).
+/// A sellable item. Supports fixed-count goods and variable measured amounts
+/// priced by weight, volume, or length.
 /// </summary>
 public class Product
 {
@@ -27,7 +27,7 @@ public class Product
     public int CategoryId { get; set; }
     public Category? Category { get; set; }
 
-    /// <summary>Selling price per unit (or per kg for weighted items).</summary>
+    /// <summary>Selling price per selected unit of measure.</summary>
     public decimal Price { get; set; }
 
     /// <summary>Cost price used for profit calculations.</summary>
@@ -48,7 +48,22 @@ public class Product
     [MaxLength(2048)]
     public string? ImagePath { get; set; }
 
+    /// <summary>
+    /// Legacy storage flag for variable-quantity products. Weight, volume, and
+    /// length units all use decimal quantities; the exact mode is derived from Unit.
+    /// </summary>
     public bool IsWeighted { get; set; } = false;
+
+    public bool RequiresMeasuredQuantity => IsWeighted || Unit.IsMeasuredUnit();
+
+    /// <summary>
+    /// Resolves the unit used at checkout. Databases created by early versions
+    /// stored only IsWeighted, so those legacy rows are treated as kilograms
+    /// until the product is edited and saved with an explicit unit.
+    /// </summary>
+    public UnitOfMeasure EffectiveUnit => Unit.GetEffectiveUnit(IsWeighted);
+    public ProductSaleMode SaleMode => EffectiveUnit.GetSaleMode();
+    public string UnitSymbol => EffectiveUnit.ToSymbol();
 
     public bool IsActive { get; set; } = true;
 
@@ -70,4 +85,46 @@ public enum UnitOfMeasure
     Milliliter = 4,
     Meter = 5,
     Pack = 6
+}
+
+public enum ProductSaleMode
+{
+    PerItem = 0,
+    Weight = 1,
+    Volume = 2,
+    Length = 3
+}
+
+public static class UnitOfMeasureExtensions
+{
+    public static bool IsMeasuredUnit(this UnitOfMeasure unit) => unit is
+        UnitOfMeasure.Kilogram or UnitOfMeasure.Gram or
+        UnitOfMeasure.Liter or UnitOfMeasure.Milliliter or UnitOfMeasure.Meter;
+
+    public static ProductSaleMode GetSaleMode(this UnitOfMeasure unit, bool legacyMeasuredFlag = false)
+        => unit switch
+        {
+            UnitOfMeasure.Kilogram or UnitOfMeasure.Gram => ProductSaleMode.Weight,
+            UnitOfMeasure.Liter or UnitOfMeasure.Milliliter => ProductSaleMode.Volume,
+            UnitOfMeasure.Meter => ProductSaleMode.Length,
+            _ when legacyMeasuredFlag => ProductSaleMode.Weight,
+            _ => ProductSaleMode.PerItem
+        };
+
+    public static UnitOfMeasure GetEffectiveUnit(
+        this UnitOfMeasure unit, bool legacyMeasuredFlag = false)
+        => legacyMeasuredFlag && !unit.IsMeasuredUnit()
+            ? UnitOfMeasure.Kilogram
+            : unit;
+
+    public static string ToSymbol(this UnitOfMeasure unit) => unit switch
+    {
+        UnitOfMeasure.Kilogram => "kg",
+        UnitOfMeasure.Gram => "g",
+        UnitOfMeasure.Liter => "L",
+        UnitOfMeasure.Milliliter => "mL",
+        UnitOfMeasure.Meter => "m",
+        UnitOfMeasure.Pack => "pack",
+        _ => "pc"
+    };
 }

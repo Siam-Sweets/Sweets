@@ -27,6 +27,9 @@ public class SaleItem
 
     public decimal Quantity { get; set; }
 
+    /// <summary>Unit-of-measure snapshot retained for receipt reprints.</summary>
+    public UnitOfMeasure Unit { get; set; } = UnitOfMeasure.Piece;
+
     /// <summary>Unit price at sale time.</summary>
     public decimal UnitPrice { get; set; }
 
@@ -53,6 +56,9 @@ public class SaleItem
     public decimal LineTotal => (UnitPrice * Quantity) - DiscountAmount;
 
     public decimal LineTax => LineTotal * TaxRate / 100m;
+
+    public string UnitSymbol => Unit.ToSymbol();
+    public string QuantityDisplay => $"{Quantity:0.###} {UnitSymbol}";
 
     public bool IsRefunded { get; set; } = false;
 }

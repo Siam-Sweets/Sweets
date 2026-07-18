@@ -22,6 +22,7 @@ public interface IInventoryService
     Task<Product?> GetProductBySkuAsync(string sku);
     Task<Product> CreateOrUpdateProductAsync(Product product, int? userId = null);
     Task SetProductWeightedAsync(int productId, bool isWeighted);
+    Task SetProductActiveAsync(int productId, bool isActive);
     Task AdjustStockAsync(int productId, decimal delta, StockTransactionType type, string? note = null, int? userId = null, decimal? unitCost = null);
     Task<IReadOnlyList<StockTransaction>> GetStockHistoryAsync(int productId);
     Task<IReadOnlyList<Product>> GetLowStockProductsAsync();

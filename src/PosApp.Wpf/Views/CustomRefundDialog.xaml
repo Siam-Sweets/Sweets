@@ -29,15 +29,24 @@
 
         <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0">
             <DataGrid x:Name="RefundGrid" AutoGenerateColumns="False" CanUserAddRows="False"
-                      CanUserDeleteRows="False" SelectionMode="Single"
+                      CanUserDeleteRows="False" SelectionMode="Single" IsReadOnly="False"
                       CellEditEnding="RefundGrid_CellEditEnding">
                 <DataGrid.Columns>
-                    <DataGridCheckBoxColumn Header="{DynamicResource Refund_Return}" Width="70"
-                        Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Refund_Return}" Width="70" IsReadOnly="True">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Tag="{Binding}"
+                                          PreviewMouseLeftButtonDown="RefundSelection_PreviewMouseLeftButtonDown"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Focusable="False"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="{DynamicResource POS_ProductName}" Binding="{Binding ProductName}" Width="*" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="{DynamicResource Refund_Sold}" Binding="{Binding SoldQuantity, StringFormat={}{0:0.###}}" Width="80" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="{DynamicResource Refund_PreviouslyReturned}" Binding="{Binding PreviouslyRefunded, StringFormat={}{0:0.###}}" Width="120" IsReadOnly="True"/>
-                    <DataGridTextColumn Header="{DynamicResource Refund_Remaining}" Binding="{Binding RemainingQuantity, StringFormat={}{0:0.###}}" Width="95" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="{DynamicResource Refund_Sold}" Binding="{Binding SoldDisplay}" Width="90" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="{DynamicResource Refund_PreviouslyReturned}" Binding="{Binding PreviouslyRefundedDisplay}" Width="130" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="{DynamicResource Refund_Remaining}" Binding="{Binding RemainingDisplay}" Width="105" IsReadOnly="True"/>
                     <DataGridTextColumn Header="{DynamicResource Refund_Quantity}" Width="105">
                         <DataGridTextColumn.Binding>
                             <Binding Path="Quantity" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged"

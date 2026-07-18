@@ -143,6 +143,22 @@ public class InventoryService : IInventoryService
             throw new InvalidOperationException("Product not found");
 
         tracked.IsWeighted = isWeighted;
+        if (isWeighted && !tracked.Unit.IsMeasuredUnit())
+            tracked.Unit = UnitOfMeasure.Kilogram;
+        else if (!isWeighted && tracked.Unit.IsMeasuredUnit())
+            tracked.Unit = UnitOfMeasure.Piece;
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+    }
+
+    public async Task SetProductActiveAsync(int productId, bool isActive)
+    {
+        var tracked = _db.Products.Local.FirstOrDefault(product => product.Id == productId);
+        tracked ??= await _db.Products.FirstOrDefaultAsync(product => product.Id == productId);
+        if (tracked is null)
+            throw new InvalidOperationException("Product not found");
+
+        tracked.IsActive = isActive;
         tracked.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
     }
@@ -182,6 +198,9 @@ public class InventoryService : IInventoryService
         product.Sku = string.IsNullOrWhiteSpace(product.Sku) ? null : product.Sku.Trim();
         product.Barcode = string.IsNullOrWhiteSpace(product.Barcode) ? null : product.Barcode.Trim();
         product.Description = string.IsNullOrWhiteSpace(product.Description) ? null : product.Description.Trim();
+        if (product.IsWeighted && !product.Unit.IsMeasuredUnit())
+            product.Unit = UnitOfMeasure.Kilogram;
+        product.IsWeighted = product.Unit.IsMeasuredUnit();
         if (product.Name.Length is < 1 or > 100)
             throw new InvalidOperationException("Product name is required and cannot exceed 100 characters.");
         if (product.CategoryId <= 0) throw new InvalidOperationException("Select a category.");

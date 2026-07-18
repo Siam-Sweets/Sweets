@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Win32;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
@@ -127,8 +128,8 @@ public partial class ProductsView : UserControl, IRefreshable
             var previous = p.IsActive;
             try
             {
+                await _inventory.SetProductActiveAsync(p.Id, activating);
                 p.IsActive = activating;
-                await _inventory.CreateOrUpdateProductAsync(p, App.CurrentUser?.Id);
                 await RefreshAsync();
             }
             catch (Exception ex)
@@ -139,25 +140,27 @@ public partial class ProductsView : UserControl, IRefreshable
         }
     }
 
-    private async void Weighted_Click(object sender, RoutedEventArgs e)
+    private async void Active_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not CheckBox checkBox || checkBox.Tag is not Product product) return;
 
-        var previousValue = product.IsWeighted;
-        var requestedValue = checkBox.IsChecked == true;
-        if (previousValue == requestedValue) return;
+        e.Handled = true;
+        var previousValue = product.IsActive;
+        var requestedValue = !previousValue;
 
+        checkBox.IsChecked = requestedValue;
         checkBox.IsEnabled = false;
         try
         {
-            await _inventory.SetProductWeightedAsync(product.Id, requestedValue);
-            product.IsWeighted = requestedValue;
+            await _inventory.SetProductActiveAsync(product.Id, requestedValue);
+            product.IsActive = requestedValue;
+            ProductsGrid.Items.Refresh();
         }
         catch (Exception ex)
         {
-            product.IsWeighted = previousValue;
+            product.IsActive = previousValue;
             checkBox.IsChecked = previousValue;
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to update weighted product",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to update product status",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -320,9 +323,18 @@ public class ProductEditDialog : Window
     private readonly TextBox _thresholdBox = new();
     private readonly TextBox _taxBox = new();
     private readonly ComboBox _categoryBox = new();
+    private readonly ComboBox _saleModeBox = new();
     private readonly ComboBox _unitBox = new();
-    private readonly CheckBox _weightedBox = new() { Content = "Weighted (sold by kg/liter)" };
     private readonly CheckBox _allowDiscountBox = new() { Content = "Allow discounts" };
+    private readonly TextBlock _priceLabel = CreateEditorLabel(string.Empty);
+    private readonly TextBlock _costLabel = CreateEditorLabel(string.Empty);
+    private readonly TextBlock _stockLabel = CreateEditorLabel(string.Empty);
+    private readonly TextBlock _thresholdLabel = CreateEditorLabel(string.Empty);
+    private readonly TextBlock _measurementHelp = new()
+    {
+        TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(0, -2, 0, 12)
+    };
 
     public ProductEditDialog(IInventoryService svc, IReadOnlyList<Category> categories, Product? existing = null)
     {
@@ -334,20 +346,21 @@ public class ProductEditDialog : Window
 
         Title = _isNew ? "Add Product" : "Edit Product";
         Width = 540;
-        Height = 720;
+        Height = 780;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
 
         _nameBox.Text = _product.Name;
         _skuBox.Text = _product.Sku ?? string.Empty;
         _barcodeBox.Text = _product.Barcode ?? string.Empty;
-        _priceBox.Text = _product.Price.ToString("0.00", CultureInfo.CurrentCulture);
-        _costBox.Text = _product.CostPrice.ToString("0.00", CultureInfo.CurrentCulture);
+        _priceBox.Text = _product.Price.ToString("0.####", CultureInfo.CurrentCulture);
+        _costBox.Text = _product.CostPrice.ToString("0.####", CultureInfo.CurrentCulture);
         _stockBox.Text = _product.StockQuantity?.ToString("0.###", CultureInfo.CurrentCulture) ?? string.Empty;
         _thresholdBox.Text = _product.LowStockThreshold?.ToString("0.###", CultureInfo.CurrentCulture) ?? string.Empty;
         _taxBox.Text = _product.TaxRate.ToString("0.###", CultureInfo.CurrentCulture);
-        _weightedBox.IsChecked = _product.IsWeighted;
         _allowDiscountBox.IsChecked = _product.AllowDiscount;
+        _allowDiscountBox.Content = DialogLayout.Text("Prod_AllowDiscount", "Allow discounts");
+        _measurementHelp.Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush");
 
         foreach (var category in categories)
             _categoryBox.Items.Add(new ComboBoxItem { Content = category.Name, Tag = category });
@@ -362,24 +375,29 @@ public class ProductEditDialog : Window
         if (_categoryBox.SelectedIndex < 0 && _categoryBox.Items.Count > 0)
             _categoryBox.SelectedIndex = 0;
 
-        foreach (var unit in Enum.GetValues<UnitOfMeasure>())
-            _unitBox.Items.Add(unit);
-        _unitBox.SelectedItem = _product.Unit;
+        AddSaleModeChoice(ProductSaleMode.PerItem, DialogLayout.Text("Prod_SoldPerItem", "Per item"));
+        AddSaleModeChoice(ProductSaleMode.Weight, DialogLayout.Text("Prod_SoldByWeight", "By weight"));
+        AddSaleModeChoice(ProductSaleMode.Volume, DialogLayout.Text("Prod_SoldByVolume", "By volume"));
+        AddSaleModeChoice(ProductSaleMode.Length, DialogLayout.Text("Prod_SoldByLength", "By length"));
+        SelectSaleMode(_product.SaleMode);
+        PopulateUnitChoices(_product.Unit);
+        _saleModeBox.SelectionChanged += (_, _) => PopulateUnitChoices(null);
+        _unitBox.SelectionChanged += (_, _) => UpdateMeasurementLabels();
 
         var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(MakeRow("Name", _nameBox));
-        panel.Children.Add(MakeRow("SKU", _skuBox));
-        panel.Children.Add(MakeRow("Barcode", _barcodeBox));
-        panel.Children.Add(MakeRow("Category", _categoryBox));
-        panel.Children.Add(MakeRow("Unit", _unitBox));
-        panel.Children.Add(MakeRow("Price", _priceBox));
-        panel.Children.Add(MakeRow("Cost Price", _costBox));
-        panel.Children.Add(MakeRow("Stock Quantity (blank = untracked)", _stockBox));
-        panel.Children.Add(MakeRow("Low Stock Threshold (blank = none)", _thresholdBox));
-        panel.Children.Add(MakeRow("Tax Rate %", _taxBox));
-        _weightedBox.Margin = new Thickness(0, 4, 0, 10);
+        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Name", "Name"), _nameBox));
+        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_SkuOnly", "SKU"), _skuBox));
+        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Barcode", "Barcode"), _barcodeBox));
+        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Category", "Category"), _categoryBox));
+        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_SaleMode", "Sale mode"), _saleModeBox));
+        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Unit", "Pricing unit"), _unitBox));
+        panel.Children.Add(_measurementHelp);
+        panel.Children.Add(MakeRow(_priceLabel, _priceBox));
+        panel.Children.Add(MakeRow(_costLabel, _costBox));
+        panel.Children.Add(MakeRow(_stockLabel, _stockBox));
+        panel.Children.Add(MakeRow(_thresholdLabel, _thresholdBox));
+        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_TaxRate", "Tax rate %"), _taxBox));
         _allowDiscountBox.Margin = new Thickness(0, 0, 0, 16);
-        panel.Children.Add(_weightedBox);
         panel.Children.Add(_allowDiscountBox);
 
         var buttons = new StackPanel
@@ -390,7 +408,7 @@ public class ProductEditDialog : Window
         };
         var cancel = new Button
         {
-            Content = "Cancel",
+            Content = DialogLayout.Text("Common_Cancel", "Cancel"),
             Style = (Style)Application.Current.FindResource("OutlineButton"),
             Padding = new Thickness(20, 10, 20, 10),
             Margin = new Thickness(0, 0, 8, 0)
@@ -398,7 +416,7 @@ public class ProductEditDialog : Window
         cancel.Click += (_, _) => { DialogResult = false; Close(); };
         var save = new Button
         {
-            Content = "Save",
+            Content = DialogLayout.Text("Prod_Save", "Save"),
             Style = (Style)Application.Current.FindResource("PrimaryButton"),
             Padding = new Thickness(20, 10, 20, 10)
         };
@@ -440,13 +458,16 @@ public class ProductEditDialog : Window
         _product.Barcode = NormalizeOptional(_barcodeBox.Text);
         _product.CategoryId = category.Id;
         _product.Category = null;
-        _product.Unit = _unitBox.SelectedItem is UnitOfMeasure unit ? unit : UnitOfMeasure.Piece;
+        var saleMode = SelectedSaleMode;
+        _product.Unit = _unitBox.SelectedItem is ComboBoxItem { Tag: UnitOfMeasure unit }
+            ? unit
+            : UnitOfMeasure.Piece;
         _product.Price = price;
         _product.CostPrice = cost;
         _product.StockQuantity = stock;
         _product.LowStockThreshold = threshold;
         _product.TaxRate = tax;
-        _product.IsWeighted = _weightedBox.IsChecked == true;
+        _product.IsWeighted = saleMode != ProductSaleMode.PerItem;
         _product.AllowDiscount = _allowDiscountBox.IsChecked == true;
 
         try
@@ -495,6 +516,90 @@ public class ProductEditDialog : Window
     private static string? NormalizeOptional(string value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private ProductSaleMode SelectedSaleMode =>
+        _saleModeBox.SelectedItem is ComboBoxItem { Tag: ProductSaleMode mode }
+            ? mode
+            : ProductSaleMode.PerItem;
+
+    private void AddSaleModeChoice(ProductSaleMode mode, string label)
+        => _saleModeBox.Items.Add(new ComboBoxItem { Content = label, Tag = mode });
+
+    private void SelectSaleMode(ProductSaleMode mode)
+    {
+        for (var index = 0; index < _saleModeBox.Items.Count; index++)
+        {
+            if (_saleModeBox.Items[index] is ComboBoxItem { Tag: ProductSaleMode candidate } && candidate == mode)
+            {
+                _saleModeBox.SelectedIndex = index;
+                return;
+            }
+        }
+        _saleModeBox.SelectedIndex = 0;
+    }
+
+    private void PopulateUnitChoices(UnitOfMeasure? preferred)
+    {
+        var units = SelectedSaleMode switch
+        {
+            ProductSaleMode.Weight => new[] { UnitOfMeasure.Kilogram, UnitOfMeasure.Gram },
+            ProductSaleMode.Volume => new[] { UnitOfMeasure.Liter, UnitOfMeasure.Milliliter },
+            ProductSaleMode.Length => new[] { UnitOfMeasure.Meter },
+            _ => new[] { UnitOfMeasure.Piece, UnitOfMeasure.Pack }
+        };
+
+        _unitBox.Items.Clear();
+        foreach (var unit in units)
+        {
+            _unitBox.Items.Add(new ComboBoxItem
+            {
+                Content = $"{UnitName(unit)} ({unit.ToSymbol()})",
+                Tag = unit
+            });
+        }
+        var selected = preferred.HasValue && units.Contains(preferred.Value) ? preferred.Value : units[0];
+        for (var index = 0; index < _unitBox.Items.Count; index++)
+        {
+            if (_unitBox.Items[index] is ComboBoxItem { Tag: UnitOfMeasure unit } && unit == selected)
+            {
+                _unitBox.SelectedIndex = index;
+                break;
+            }
+        }
+        UpdateMeasurementLabels();
+    }
+
+    private void UpdateMeasurementLabels()
+    {
+        var unit = _unitBox.SelectedItem is ComboBoxItem { Tag: UnitOfMeasure selected }
+            ? selected
+            : UnitOfMeasure.Piece;
+        var symbol = unit.ToSymbol();
+        _priceLabel.Text = string.Format(
+            DialogLayout.Text("Prod_PricePer", "Selling price per {0}"), symbol);
+        _costLabel.Text = string.Format(
+            DialogLayout.Text("Prod_CostPer", "Cost price per {0}"), symbol);
+        _stockLabel.Text = string.Format(
+            DialogLayout.Text("Prod_StockIn", "Stock quantity in {0} (blank = untracked)"), symbol);
+        _thresholdLabel.Text = string.Format(
+            DialogLayout.Text("Prod_ThresholdIn", "Low-stock threshold in {0} (blank = none)"), symbol);
+        _measurementHelp.Text = SelectedSaleMode == ProductSaleMode.PerItem
+            ? DialogLayout.Text("Prod_PerItemHelp", "The price applies to one piece or pack.")
+            : string.Format(
+                DialogLayout.Text("Prod_MeasuredHelp", "The price applies to 1 {0}. The cashier enters the exact amount at checkout."),
+                symbol);
+    }
+
+    private static string UnitName(UnitOfMeasure unit) => unit switch
+    {
+        UnitOfMeasure.Kilogram => DialogLayout.Text("Unit_Kilogram", "Kilogram"),
+        UnitOfMeasure.Gram => DialogLayout.Text("Unit_Gram", "Gram"),
+        UnitOfMeasure.Liter => DialogLayout.Text("Unit_Liter", "Liter"),
+        UnitOfMeasure.Milliliter => DialogLayout.Text("Unit_Milliliter", "Milliliter"),
+        UnitOfMeasure.Meter => DialogLayout.Text("Unit_Meter", "Meter"),
+        UnitOfMeasure.Pack => DialogLayout.Text("Unit_Pack", "Pack"),
+        _ => DialogLayout.Text("Unit_Piece", "Piece")
+    };
+
     private static Product CopyProduct(Product source) => new()
     {
         Id = source.Id,
@@ -517,19 +622,23 @@ public class ProductEditDialog : Window
         UpdatedAt = source.UpdatedAt
     };
 
+    private static TextBlock CreateEditorLabel(string text) => new()
+    {
+        Text = text,
+        FontSize = 12,
+        Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush"),
+        Margin = new Thickness(0, 0, 0, 4)
+    };
+
     private static Border MakeRow(string label, FrameworkElement control)
+        => MakeRow(CreateEditorLabel(label), control);
+
+    private static Border MakeRow(TextBlock label, FrameworkElement control)
     {
         var stack = new StackPanel();
-        stack.Children.Add(new TextBlock
-        {
-            Text = label,
-            FontSize = 12,
-            Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush"),
-            Margin = new Thickness(0, 0, 0, 4)
-        });
+        stack.Children.Add(label);
         control.Margin = new Thickness(0, 0, 0, 12);
         stack.Children.Add(control);
         return new Border { Child = stack };
     }
 }
-

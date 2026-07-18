@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using PosApp.Core.Entities;
 using PosApp.Core.Utilities;
 
 namespace PosApp.Wpf.Converters;
@@ -169,6 +170,23 @@ public class ActiveActionConverter : IValueConverter
         => value is bool active && active
             ? ConverterText.Get("Common_Deactivate", "Deactivate")
             : ConverterText.Get("Common_Restore", "Restore");
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
+public class ProductSaleModeConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is ProductSaleMode mode
+            ? mode switch
+            {
+                ProductSaleMode.Weight => ConverterText.Get("Prod_SoldByWeight", "By weight"),
+                ProductSaleMode.Volume => ConverterText.Get("Prod_SoldByVolume", "By volume"),
+                ProductSaleMode.Length => ConverterText.Get("Prod_SoldByLength", "By length"),
+                _ => ConverterText.Get("Prod_SoldPerItem", "Per item")
+            }
+            : string.Empty;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => Binding.DoNothing;

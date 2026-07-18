@@ -14,7 +14,7 @@ public class CatalogTransferService : ICatalogTransferService
     private static readonly string[] Headers =
     {
         "Name", "SKU", "Barcode", "Category", "Price", "CostPrice", "TaxRate",
-        "StockQuantity", "LowStockThreshold", "Unit", "IsWeighted", "AllowDiscount", "IsActive"
+        "StockQuantity", "LowStockThreshold", "SaleMode", "Unit", "IsWeighted", "AllowDiscount", "IsActive"
     };
 
     public CatalogTransferService(AppDbContext db) => _db = db;
@@ -42,6 +42,7 @@ public class CatalogTransferService : ICatalogTransferService
                 Format(product.TaxRate),
                 product.StockQuantity.HasValue ? Format(product.StockQuantity.Value) : "",
                 product.LowStockThreshold.HasValue ? Format(product.LowStockThreshold.Value) : "",
+                product.SaleMode.ToString(),
                 product.Unit.ToString(),
                 product.IsWeighted.ToString(),
                 product.AllowDiscount.ToString(),
@@ -69,6 +70,7 @@ public class CatalogTransferService : ICatalogTransferService
         var hasSkuColumn = headerMap.ContainsKey("sku");
         var hasBarcodeColumn = headerMap.ContainsKey("barcode");
         var hasUnitColumn = headerMap.ContainsKey("unit");
+        var hasSaleModeColumn = headerMap.ContainsKey("salemode");
 
         var result = new CatalogImportResult();
         await using var transaction = await _db.Database.BeginTransactionAsync();
@@ -95,6 +97,13 @@ public class CatalogTransferService : ICatalogTransferService
                 var rowTax = DecimalField(row, headerMap, "taxrate");
                 var rowStock = DecimalField(row, headerMap, "stockquantity");
                 var rowThreshold = DecimalField(row, headerMap, "lowstockthreshold");
+                var rowUnit = hasUnitColumn && HasValue(row, headerMap, "unit")
+                    ? UnitField(row, headerMap, rowNumber + 1)
+                    : (UnitOfMeasure?)null;
+                var rowSaleMode = hasSaleModeColumn && HasValue(row, headerMap, "salemode")
+                    ? SaleModeField(row, headerMap, rowNumber + 1)
+                    : (ProductSaleMode?)null;
+                var rowWeighted = BoolField(row, headerMap, "isweighted");
                 if ((rowPrice.HasValue && rowPrice.Value < 0m) ||
                     (rowCost.HasValue && rowCost.Value < 0m) ||
                     (rowStock.HasValue && rowStock.Value < 0m) ||
@@ -143,13 +152,12 @@ public class CatalogTransferService : ICatalogTransferService
                         CostPrice = rowCost ?? 0m,
                         TaxRate = rowTax ?? 0m,
                         LowStockThreshold = rowThreshold,
-                        Unit = UnitField(row, headerMap, rowNumber + 1),
-                        IsWeighted = BoolField(row, headerMap, "isweighted") ?? false,
                         AllowDiscount = BoolField(row, headerMap, "allowdiscount") ?? true,
                         IsActive = BoolField(row, headerMap, "isactive") ?? true,
                         StockQuantity = rowStock,
                         CreatedAt = DateTime.UtcNow
                     };
+                    ApplyMeasurement(product, rowSaleMode, rowUnit, rowWeighted);
                     products.Add(product);
                     _db.Products.Add(product);
                     result.Created++;
@@ -186,9 +194,7 @@ public class CatalogTransferService : ICatalogTransferService
                 SetDecimal(row, headerMap, "price", value => product.Price = value);
                 SetDecimal(row, headerMap, "taxrate", value => product.TaxRate = value);
                 SetDecimal(row, headerMap, "lowstockthreshold", value => product.LowStockThreshold = value);
-                if (hasUnitColumn && HasValue(row, headerMap, "unit")) product.Unit = UnitField(row, headerMap, rowNumber + 1);
-                var weighted = BoolField(row, headerMap, "isweighted");
-                if (weighted.HasValue) product.IsWeighted = weighted.Value;
+                ApplyMeasurement(product, rowSaleMode, rowUnit, rowWeighted);
                 var allowDiscount = BoolField(row, headerMap, "allowdiscount");
                 if (allowDiscount.HasValue) product.AllowDiscount = allowDiscount.Value;
                 var active = BoolField(row, headerMap, "isactive");
@@ -326,6 +332,63 @@ public class CatalogTransferService : ICatalogTransferService
         if (string.IsNullOrWhiteSpace(raw)) return UnitOfMeasure.Piece;
         if (Enum.TryParse<UnitOfMeasure>(raw.Trim(), ignoreCase: true, out var unit)) return unit;
         throw new InvalidOperationException($"Row {rowNumber}: '{raw}' is not a supported unit of measure.");
+    }
+
+    private static ProductSaleMode SaleModeField(
+        IReadOnlyList<string> row, IReadOnlyDictionary<string, int> headers, int rowNumber)
+    {
+        var raw = Field(row, headers, "salemode");
+        if (Enum.TryParse<ProductSaleMode>(raw?.Trim(), ignoreCase: true, out var mode)) return mode;
+        throw new InvalidOperationException($"Row {rowNumber}: '{raw}' is not a supported sale mode.");
+    }
+
+    private static void ApplyMeasurement(
+        Product product, ProductSaleMode? mode, UnitOfMeasure? unit, bool? legacyWeighted)
+    {
+        if (mode.HasValue)
+        {
+            product.Unit = CompatibleUnit(mode.Value, unit) ?? mode.Value switch
+            {
+                ProductSaleMode.Weight => UnitOfMeasure.Kilogram,
+                ProductSaleMode.Volume => UnitOfMeasure.Liter,
+                ProductSaleMode.Length => UnitOfMeasure.Meter,
+                _ => UnitOfMeasure.Piece
+            };
+            product.IsWeighted = mode.Value != ProductSaleMode.PerItem;
+            return;
+        }
+
+        if (unit.HasValue)
+        {
+            product.Unit = unit.Value;
+            product.IsWeighted = unit.Value.IsMeasuredUnit();
+            if (legacyWeighted == true && !product.IsWeighted)
+            {
+                product.Unit = UnitOfMeasure.Kilogram;
+                product.IsWeighted = true;
+            }
+            return;
+        }
+
+        if (!legacyWeighted.HasValue) return;
+        product.IsWeighted = legacyWeighted.Value;
+        if (product.IsWeighted && !product.Unit.IsMeasuredUnit())
+            product.Unit = UnitOfMeasure.Kilogram;
+        else if (!product.IsWeighted && product.Unit.IsMeasuredUnit())
+            product.Unit = UnitOfMeasure.Piece;
+    }
+
+    private static UnitOfMeasure? CompatibleUnit(ProductSaleMode mode, UnitOfMeasure? unit)
+    {
+        if (!unit.HasValue) return null;
+        return mode switch
+        {
+            ProductSaleMode.PerItem when unit is UnitOfMeasure.Piece or UnitOfMeasure.Pack => unit,
+            ProductSaleMode.Weight when unit is UnitOfMeasure.Kilogram or UnitOfMeasure.Gram => unit,
+            ProductSaleMode.Volume when unit is UnitOfMeasure.Liter or UnitOfMeasure.Milliliter => unit,
+            ProductSaleMode.Length when unit == UnitOfMeasure.Meter => unit,
+            _ => null
+        };
     }
 
     private static List<List<string>> ParseCsv(string text)

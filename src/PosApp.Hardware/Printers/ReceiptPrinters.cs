@@ -64,8 +64,7 @@ public class EscPosPrinter : IReceiptPrinter
 
         foreach (var item in sale.Items)
         {
-            var qty = item.Quantity.ToString("0.###");
-            var line = $"{qty} x {item.ProductName}";
+            var line = $"{item.QuantityDisplay} x {item.ProductName}";
             sb.AppendLine(line);
             sb.Append(EscPosConst.AlignRight);
             sb.AppendLine(FormattingUtilities.Money(item.LineTotal + item.LineTax, store));
@@ -316,7 +315,7 @@ public class WindowsPrinter : IReceiptPrinter
         };
         foreach (var item in sale.Items)
         {
-            lines.Add($"{item.Quantity:0.###} x {item.ProductName}");
+            lines.Add($"{item.QuantityDisplay} x {item.ProductName}");
             lines.Add($"      {FormattingUtilities.Money(item.LineTotal + item.LineTax, store)}");
         }
         lines.Add(new string('-', 40));

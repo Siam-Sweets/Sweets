@@ -255,8 +255,8 @@ public class SaleDetailDialog : Window
             Margin = new Thickness(0, 0, 0, 16)
         };
         dg.Columns.Add(new DataGridTextColumn { Header = "Product", Binding = new System.Windows.Data.Binding("ProductName"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-        dg.Columns.Add(new DataGridTextColumn { Header = "Qty", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "0.###" }, Width = 70 });
-        dg.Columns.Add(new DataGridTextColumn { Header = "Price", Binding = new System.Windows.Data.Binding("UnitPrice") { Converter = new PosApp.Wpf.Converters.MoneyConverter() }, Width = 80 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "Qty", Binding = new System.Windows.Data.Binding("QuantityDisplay"), Width = 90 });
+        dg.Columns.Add(new DataGridTextColumn { Header = "Price / unit", Binding = new System.Windows.Data.Binding("UnitPrice") { Converter = new PosApp.Wpf.Converters.MoneyConverter() }, Width = 100 });
         dg.Columns.Add(new DataGridTextColumn { Header = "Disc", Binding = new System.Windows.Data.Binding("DiscountAmount") { Converter = new PosApp.Wpf.Converters.MoneyConverter() }, Width = 80 });
         dg.Columns.Add(new DataGridTextColumn { Header = "Total", Binding = new System.Windows.Data.Binding("LineTotal") { Converter = new PosApp.Wpf.Converters.MoneyConverter() }, Width = 100 });
         panel.Children.Add(dg);

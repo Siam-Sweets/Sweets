@@ -211,9 +211,16 @@
                         <DataGridTextColumn Header="{DynamicResource POS_ProductName}"
                                             Binding="{Binding ProductName, Mode=OneWay}" Width="*"/>
                         <DataGridTextColumn Header="{DynamicResource POS_Quantity}"
-                                            Binding="{Binding Quantity, Mode=OneWay, StringFormat=0.###}" Width="120"/>
-                        <DataGridTextColumn Header="{DynamicResource POS_Price}"
-                                            Binding="{Binding UnitPrice, Mode=OneWay, Converter={StaticResource Money}}" Width="135"/>
+                                            Binding="{Binding QuantityDisplay, Mode=OneWay}" Width="120"/>
+                        <DataGridTemplateColumn Header="{DynamicResource POS_Price}" Width="150">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock VerticalAlignment="Center">
+                                        <Run Text="{Binding UnitPrice, Mode=OneWay, Converter={StaticResource Money}}"/><Run Text=" / "/><Run Text="{Binding UnitSymbol, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="{DynamicResource POS_Amount}"
                                             Binding="{Binding LineTotal, Mode=OneWay, Converter={StaticResource Money}}" Width="150"/>
                     </DataGrid.Columns>
@@ -447,8 +454,12 @@
                                             </StackPanel>
                                             <Grid Grid.Row="1" Margin="0,8,0,0">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding Price, Converter={StaticResource Money}}" Foreground="{DynamicResource PrimaryBrush}" FontWeight="Bold"/>
-                                                <TextBlock Grid.Column="1" Text="{Binding StockQuantity, StringFormat='Stock {0:0.###}'}" Foreground="{DynamicResource TextMutedBrush}" FontSize="11"/>
+                                                <TextBlock Foreground="{DynamicResource PrimaryBrush}" FontWeight="Bold">
+                                                    <Run Text="{Binding Price, Converter={StaticResource Money}}"/><Run Text=" / "/><Run Text="{Binding UnitSymbol}"/>
+                                                </TextBlock>
+                                                <TextBlock Grid.Column="1" Foreground="{DynamicResource TextMutedBrush}" FontSize="11">
+                                                    <Run Text="{Binding StockQuantity, StringFormat='Stock {0:0.###}'}"/><Run Text=" "/><Run Text="{Binding UnitSymbol}"/>
+                                                </TextBlock>
                                             </Grid>
                                         </Grid>
                                     </Button>

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using PosApp.Core.Entities;
 using PosApp.Core.Models;
@@ -80,6 +81,20 @@ public partial class CustomRefundDialog : Window
 
     private void RefundGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         => Dispatcher.BeginInvoke(new Action(UpdateTotal), DispatcherPriority.Background);
+
+    private void RefundSelection_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not CheckBox checkBox || checkBox.Tag is not RefundLineRow line) return;
+
+        // DataGrid normally consumes the first click to select/edit its cell. Toggle
+        // the draft row explicitly so one click always changes the refund selection.
+        e.Handled = true;
+        line.IsSelected = !line.IsSelected;
+        checkBox.IsChecked = line.IsSelected;
+        if (line.IsSelected && line.Quantity <= 0m)
+            line.Quantity = line.RemainingQuantity;
+        UpdateTotal();
+    }
 
     private void SelectAll_Click(object sender, RoutedEventArgs e)
     {
@@ -161,6 +176,11 @@ public sealed class RefundLineRow : INotifyPropertyChanged
     public decimal UnitPrice { get; }
     public decimal DiscountAmount { get; }
     public decimal TaxRate { get; }
+    public UnitOfMeasure Unit { get; }
+    public string UnitSymbol => Unit.ToSymbol();
+    public string SoldDisplay => $"{SoldQuantity:0.###} {UnitSymbol}";
+    public string PreviouslyRefundedDisplay => $"{PreviouslyRefunded:0.###} {UnitSymbol}";
+    public string RemainingDisplay => $"{RemainingQuantity:0.###} {UnitSymbol}";
 
     public bool IsSelected
     {
@@ -213,6 +233,7 @@ public sealed class RefundLineRow : INotifyPropertyChanged
         UnitPrice = item.UnitPrice;
         DiscountAmount = item.DiscountAmount;
         TaxRate = item.TaxRate;
+        Unit = item.Unit;
         _quantity = remainingQuantity;
     }
 

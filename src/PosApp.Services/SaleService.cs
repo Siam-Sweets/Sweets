@@ -162,6 +162,7 @@ public class SaleService : ISaleService
                 var item = BuildSaleItem(line, sale);
                 // Always use the current catalog cost and discount permission at checkout.
                 item.CostPrice = product.CostPrice;
+                item.Unit = product.EffectiveUnit;
                 sale.Items.Add(item);
 
                 if (line.DiscountAmount > 0m && !product.AllowDiscount)
@@ -462,6 +463,7 @@ public class SaleService : ISaleService
                     ProductName = item.ProductName,
                     Sku = item.Sku,
                     Quantity = -selection.Quantity,
+                    Unit = item.Unit,
                     UnitPrice = item.UnitPrice,
                     CostPrice = item.CostPrice,
                     TaxRate = item.TaxRate,
@@ -581,6 +583,7 @@ public class SaleService : ISaleService
         ProductName = line.ProductName,
         Sku = line.Sku,
         Quantity = line.Quantity,
+        Unit = line.Unit,
         UnitPrice = line.UnitPrice,
         CostPrice = line.CostPrice,
         TaxRate = line.TaxRate,

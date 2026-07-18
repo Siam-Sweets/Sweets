@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.7 — Weight and volume pricing
+
+- Added explicit per-item, weight, volume, and length sale modes to the product editor.
+- Added compatible pricing units including kg, g, L, mL, m, piece, and pack, with price/cost/stock labels that follow the selected unit.
+- Prompted the cashier for the exact measured amount when a weight-, volume-, or length-based product is added, and allowed F4 to adjust it later.
+- Calculated line totals automatically as measured amount multiplied by the stored price per selected unit.
+- Stored the unit on every completed sale line so receipts, history, refunds, and reprints retain the original measurement.
+- Extended product CSV import/export with a backward-compatible SaleMode column and measurement validation.
+- Added English and Bengali text for measurement modes, units, prompts, and validation.
+- Added an upgrade-safe sale-item unit snapshot migration without changing or deleting existing business data.
+
+## 1.4.6 — Reliable product and custom-refund checkboxes
+
+- Made custom-refund item selection respond on the first click instead of being consumed by DataGrid cell selection.
+- Restored editing for custom-refund quantities while keeping receipt facts read-only.
+- Replaced the product Weighted and Active cells with direct single-click controls.
+- Added a focused product-status persistence operation so Active changes save without rewriting unrelated product fields.
+- Restored the previous visual value automatically if any product checkbox update fails.
+
 ## 1.4.5 — Custom refunds, quieter checkout, and reliable scrolling
 
 - Removed the Lock command from the receipt-screen home actions.

@@ -210,6 +210,26 @@
     <sys:String x:Key="Prod_Stock">Stock</sys:String>
     <sys:String x:Key="Prod_TaxRate">Tax %</sys:String>
     <sys:String x:Key="Prod_Weighted">Weighted</sys:String>
+    <sys:String x:Key="Prod_SaleMode">Sale mode</sys:String>
+    <sys:String x:Key="Prod_Unit">Pricing unit</sys:String>
+    <sys:String x:Key="Prod_SoldPerItem">Per item</sys:String>
+    <sys:String x:Key="Prod_SoldByWeight">By weight</sys:String>
+    <sys:String x:Key="Prod_SoldByVolume">By volume</sys:String>
+    <sys:String x:Key="Prod_SoldByLength">By length</sys:String>
+    <sys:String x:Key="Prod_PricePer">Selling price per {0}</sys:String>
+    <sys:String x:Key="Prod_CostPer">Cost price per {0}</sys:String>
+    <sys:String x:Key="Prod_StockIn">Stock quantity in {0} (blank = untracked)</sys:String>
+    <sys:String x:Key="Prod_ThresholdIn">Low-stock threshold in {0} (blank = none)</sys:String>
+    <sys:String x:Key="Prod_PerItemHelp">The price applies to one piece or pack.</sys:String>
+    <sys:String x:Key="Prod_MeasuredHelp">The price applies to 1 {0}. The cashier enters the exact amount at checkout.</sys:String>
+    <sys:String x:Key="Prod_AllowDiscount">Allow discounts</sys:String>
+    <sys:String x:Key="Unit_Kilogram">Kilogram</sys:String>
+    <sys:String x:Key="Unit_Gram">Gram</sys:String>
+    <sys:String x:Key="Unit_Liter">Liter</sys:String>
+    <sys:String x:Key="Unit_Milliliter">Milliliter</sys:String>
+    <sys:String x:Key="Unit_Meter">Meter</sys:String>
+    <sys:String x:Key="Unit_Pack">Pack</sys:String>
+    <sys:String x:Key="Unit_Piece">Piece</sys:String>
     <sys:String x:Key="Prod_Save">Save</sys:String>
     <sys:String x:Key="Prod_Cancel">Cancel</sys:String>
     <sys:String x:Key="Prod_LowStock">Low</sys:String>
@@ -360,6 +380,14 @@
     <sys:String x:Key="POS_DiscountAmountLimit">Discount cannot exceed the line amount.</sys:String>
     <sys:String x:Key="POS_ProductName">Product name</sys:String>
     <sys:String x:Key="POS_Quantity">Quantity</sys:String>
+    <sys:String x:Key="POS_Weight">Weight</sys:String>
+    <sys:String x:Key="POS_Volume">Volume</sys:String>
+    <sys:String x:Key="POS_Length">Length</sys:String>
+    <sys:String x:Key="POS_EnterMeasuredAmount">Enter the amount of {0} in {1}. Price: {2} per {1}.</sys:String>
+    <sys:String x:Key="POS_AdjustMeasuredAmount">Enter the exact amount of {0} in {1}. Price: {2} per {1}.</sys:String>
+    <sys:String x:Key="POS_AdjustItemQuantity">Enter the whole-item quantity for {0}.</sys:String>
+    <sys:String x:Key="POS_WholeQuantityRequired">Enter a whole-item quantity of at least 1.</sys:String>
+    <sys:String x:Key="POS_MinimumMeasuredAmount">Enter an amount of at least {0:0.###}.</sys:String>
     <sys:String x:Key="POS_Price">Price</sys:String>
     <sys:String x:Key="POS_Amount">Amount</sys:String>
     <sys:String x:Key="POS_NoItems">No items</sys:String>

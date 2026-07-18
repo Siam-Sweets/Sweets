@@ -6,6 +6,7 @@
     <UserControl.Resources>
         <conv:MoneyConverter x:Key="Money"/>
         <conv:ActiveActionConverter x:Key="ActiveAction"/>
+        <conv:ProductSaleModeConverter x:Key="SaleMode"/>
     </UserControl.Resources>
     <Grid Margin="{StaticResource PagePadding}">
         <Grid.RowDefinitions>
@@ -56,17 +57,20 @@
                     <DataGridTextColumn Header="{DynamicResource Prod_Price}" Binding="{Binding Price, Converter={StaticResource Money}}" Width="100"/>
                     <DataGridTextColumn Header="{DynamicResource Prod_Cost}" Binding="{Binding CostPrice, Converter={StaticResource Money}}" Width="100"/>
                     <DataGridTextColumn Header="{DynamicResource Prod_Stock}" Binding="{Binding StockQuantity, StringFormat=' {0:0.###}'}" Width="80"/>
-                    <DataGridTemplateColumn Header="{DynamicResource Prod_Weighted}" Width="80">
+                    <DataGridTextColumn Header="{DynamicResource Prod_SaleMode}"
+                                        Binding="{Binding SaleMode, Converter={StaticResource SaleMode}}" Width="100"/>
+                    <DataGridTextColumn Header="{DynamicResource Prod_Unit}" Binding="{Binding UnitSymbol}" Width="65"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Usr_Active}" Width="65">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <CheckBox IsChecked="{Binding IsWeighted, Mode=OneWay}"
-                                          Tag="{Binding}" Click="Weighted_Click"
+                                <CheckBox IsChecked="{Binding IsActive, Mode=OneWay}"
+                                          Tag="{Binding}"
+                                          PreviewMouseLeftButtonDown="Active_PreviewMouseLeftButtonDown"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                          Focusable="False" ToolTip="{DynamicResource Prod_WeightedHint}"/>
+                                          Focusable="False"/>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridCheckBoxColumn Header="{DynamicResource Usr_Active}" Binding="{Binding IsActive, Mode=OneWay}" Width="65" IsReadOnly="True"/>
                     <DataGridTemplateColumn Header="{DynamicResource Common_Actions}" Width="175">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
