@@ -58,13 +58,15 @@ public sealed class DiscountService : IDiscountService
         return tracked;
     }
 
-    public async Task DeactivateAsync(int id)
+    public async Task SetActiveAsync(int id, bool isActive)
     {
         var discount = await _db.Discounts.FindAsync(id)
             ?? throw new InvalidOperationException("Promotion not found.");
-        discount.IsActive = false;
+        discount.IsActive = isActive;
         await _db.SaveChangesAsync();
     }
+
+    public Task DeactivateAsync(int id) => SetActiveAsync(id, false);
 
     private static void Validate(Discount discount)
     {

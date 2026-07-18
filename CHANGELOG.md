@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.10 — Product search binding stability
+- Displays computed product units and sale modes using explicit one-way bindings, preventing the product finder from trying to write into read-only properties.
+- Prevents a single UI failure from recursively opening a stack of identical error dialogs.
+
+## 1.4.9 — Reliable status checkboxes
+- Makes the Active checkboxes in Customers & Suppliers update customer and supplier status immediately and persist it locally.
+- Makes promotion Active checkboxes reliably activate or deactivate discount rules and refresh their row state.
+- Uses explicit click handling so read-only management grids no longer swallow checkbox changes.
+
+## 1.4.8 — Visible product names
+
+- Keeps the product-name column at a readable width instead of allowing it to collapse after the sale-mode and unit columns are added.
+- Freezes the product-name column while the remaining catalog columns scroll horizontally.
+
 ## 1.4.7 — Weight and volume pricing
 
 - Added explicit per-item, weight, volume, and length sale modes to the product editor.

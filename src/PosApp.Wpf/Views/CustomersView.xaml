@@ -36,7 +36,17 @@
                     <DataGridTextColumn Header="{DynamicResource Cust_Name}" Binding="{Binding Name}" Width="*"/>
                     <DataGridTextColumn Header="{DynamicResource Cust_Phone}" Binding="{Binding Phone}" Width="150"/>
                     <DataGridTextColumn Header="{DynamicResource Cust_Email}" Binding="{Binding Email}" Width="210"/>
-                    <DataGridCheckBoxColumn Header="{DynamicResource Usr_Active}" Binding="{Binding IsActive, Mode=OneWay}" Width="65"/>
+                    <DataGridTemplateColumn Header="{DynamicResource Usr_Active}" Width="65">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsActive, Mode=OneWay}"
+                                          Tag="{Binding}"
+                                          PreviewMouseLeftButtonDown="Active_PreviewMouseLeftButtonDown"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Focusable="False"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="{DynamicResource Common_Actions}" Width="260">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>

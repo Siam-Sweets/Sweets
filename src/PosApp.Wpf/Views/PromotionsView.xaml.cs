@@ -62,25 +62,26 @@ public partial class PromotionsView : UserControl, IRefreshable
         }
     }
 
-    private async void Active_Click(object sender, RoutedEventArgs e)
+    private async void Active_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not CheckBox checkBox || checkBox.Tag is not PromotionRow row)
             return;
 
+        e.Handled = true;
         var previousState = row.IsActive;
-        var requestedState = checkBox.IsChecked == true;
-        if (requestedState == previousState) return;
+        var requestedState = !previousState;
 
+        checkBox.IsChecked = requestedState;
         checkBox.IsEnabled = false;
         try
         {
-            var updated = Clone(row.Discount);
-            updated.IsActive = requestedState;
-            await _discounts.SaveAsync(updated);
-            await LoadAsync();
+            await _discounts.SetActiveAsync(row.Discount.Id, requestedState);
+            row.Discount.IsActive = requestedState;
+            PromotionGrid.Items.Refresh();
         }
         catch (Exception ex)
         {
+            row.Discount.IsActive = previousState;
             checkBox.IsChecked = previousState;
             PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to update promotion",
                 MessageBoxButton.OK, MessageBoxImage.Error);

@@ -455,10 +455,10 @@
                                             <Grid Grid.Row="1" Margin="0,8,0,0">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                                 <TextBlock Foreground="{DynamicResource PrimaryBrush}" FontWeight="Bold">
-                                                    <Run Text="{Binding Price, Converter={StaticResource Money}}"/><Run Text=" / "/><Run Text="{Binding UnitSymbol}"/>
+                                                    <Run Text="{Binding Price, Mode=OneWay, Converter={StaticResource Money}}"/><Run Text=" / "/><Run Text="{Binding UnitSymbol, Mode=OneWay}"/>
                                                 </TextBlock>
                                                 <TextBlock Grid.Column="1" Foreground="{DynamicResource TextMutedBrush}" FontSize="11">
-                                                    <Run Text="{Binding StockQuantity, StringFormat='Stock {0:0.###}'}"/><Run Text=" "/><Run Text="{Binding UnitSymbol}"/>
+                                                    <Run Text="{Binding StockQuantity, Mode=OneWay, StringFormat='Stock {0:0.###}'}"/><Run Text=" "/><Run Text="{Binding UnitSymbol, Mode=OneWay}"/>
                                                 </TextBlock>
                                             </Grid>
                                         </Grid>

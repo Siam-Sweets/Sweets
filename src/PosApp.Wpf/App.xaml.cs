@@ -33,6 +33,7 @@ public partial class App : Application
     }
     public static string? StartupError { get; private set; }
     private bool _startupCompleted;
+    private bool _dispatcherErrorDialogOpen;
 
     public App()
     {
@@ -82,20 +83,31 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
+        // Mark the exception handled before displaying a modal dialog. MessageBox
+        // runs a nested dispatcher loop, so another UI exception can otherwise
+        // recursively create a stack of identical dialogs.
+        e.Handled = true;
+        Log($"DISPATCHER EXCEPTION: {e.Exception}");
+        if (_dispatcherErrorDialogOpen) return;
+
         try
         {
-            Log($"DISPATCHER EXCEPTION: {e.Exception}");
+            _dispatcherErrorDialogOpen = true;
             PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 $"An error occurred:\n\n{e.Exception.Message}\n\n" +
                 $"Technical details were written to:\n{LogFilePath}",
                 "PosApp - Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            e.Handled = true;
         }
         catch
         {
-            e.Handled = false;
+            // The original exception is already logged. Error reporting must not
+            // terminate the register if the dialog itself cannot be displayed.
+        }
+        finally
+        {
+            _dispatcherErrorDialogOpen = false;
         }
     }
 

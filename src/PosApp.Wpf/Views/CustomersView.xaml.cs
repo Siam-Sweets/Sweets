@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Utilities;
@@ -90,6 +91,40 @@ public partial class CustomersView : UserControl, IRefreshable
         if (dialog.ShowDialog() == true) _ = RefreshAsync();
     }
 
+    private async void Active_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not CheckBox checkBox || checkBox.Tag is not ContactListItem item) return;
+
+        e.Handled = true;
+        var previousState = item.IsActive;
+        var requestedState = !previousState;
+
+        checkBox.IsChecked = requestedState;
+        checkBox.IsEnabled = false;
+        try
+        {
+            if (item.IsCustomer)
+                await _customers.SetCustomerActiveAsync(item.Id, requestedState);
+            else
+                await _purchases.SetSupplierActiveAsync(item.Id, requestedState);
+
+            item.IsActive = requestedState;
+            ContactsGrid.Items.Refresh();
+        }
+        catch (Exception ex)
+        {
+            item.IsActive = previousState;
+            checkBox.IsChecked = previousState;
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                $"Unable to update {item.TypeLabel.ToLowerInvariant()} status",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            checkBox.IsEnabled = true;
+        }
+    }
+
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: ContactListItem item }) return;
@@ -136,7 +171,7 @@ public sealed class ContactListItem
     public required ContactRecordType RecordType { get; init; }
     public Customer? Customer { get; init; }
     public Supplier? Supplier { get; init; }
-    public bool IsActive { get; init; }
+    public bool IsActive { get; set; }
 
     public bool IsCustomer => RecordType == ContactRecordType.Customer;
     public string TypeLabel => IsCustomer

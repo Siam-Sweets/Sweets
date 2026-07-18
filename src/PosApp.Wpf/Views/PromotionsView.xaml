@@ -27,7 +27,8 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <CheckBox IsChecked="{Binding IsActive, Mode=OneWay}"
-                                          Tag="{Binding}" Click="Active_Click"
+                                          Tag="{Binding}"
+                                          PreviewMouseLeftButtonDown="Active_PreviewMouseLeftButtonDown"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"
                                           Focusable="False" ToolTip="{DynamicResource Promo_ActiveHint}"/>
                             </DataTemplate>
