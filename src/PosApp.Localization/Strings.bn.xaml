@@ -434,7 +434,7 @@
     <!-- ব্যবস্থাপনা ড্যাশবোর্ড -->
     <sys:String x:Key="Dash_Title">ব্যবস্থাপনা ড্যাশবোর্ড</sys:String>
     <sys:String x:Key="Dash_Refresh">রিফ্রেশ</sys:String>
-    <sys:String x:Key="Dash_TotalSales">মাসিক বিক্রয়</sys:String>
+    <sys:String x:Key="Dash_TotalSales">বিক্রয়</sys:String>
     <sys:String x:Key="Dash_Today">আজ</sys:String>
     <sys:String x:Key="Dash_DailySales">দৈনিক বিক্রয়</sys:String>
     <sys:String x:Key="Dash_Method">পদ্ধতি</sys:String>

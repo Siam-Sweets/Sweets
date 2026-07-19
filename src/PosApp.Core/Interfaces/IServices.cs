@@ -107,6 +107,7 @@ public interface IReportService
     Task<DateRangeReport> GetRangeReportAsync(DateTime from, DateTime to);
     Task<IReadOnlyList<TopProductRow>> GetTopProductsAsync(DateTime from, DateTime to, int top = 10);
     Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime date);
+    Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime from, DateTime to);
     Task<IReadOnlyList<SalesByCategoryRow>> GetSalesByCategoryAsync(DateTime from, DateTime to);
     Task<IReadOnlyList<PaymentBreakdownRow>> GetPaymentBreakdownAsync(DateTime from, DateTime to);
 }

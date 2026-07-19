@@ -18,17 +18,44 @@ public partial class DashboardView : UserControl, IRefreshable
     private IReadOnlyList<TopProductRow> _topProducts = Array.Empty<TopProductRow>();
     private IReadOnlyList<SalesByHourRow> _hourly = Array.Empty<SalesByHourRow>();
     private IReadOnlyList<PaymentBreakdownRow> _payments = Array.Empty<PaymentBreakdownRow>();
+    private DateTime _selectedFrom;
+    private DateTime _selectedTo;
 
     public DashboardView(IReportService reports, IHardwareService hardware)
     {
         InitializeComponent();
         _reports = reports;
         _hardware = hardware;
+
+        var today = DateTime.Today;
+        _selectedFrom = new DateTime(today.Year, today.Month, 1);
+        _selectedTo = _selectedFrom.AddMonths(1).AddDays(-1);
+        FromDate.SelectedDate = _selectedFrom;
+        ToDate.SelectedDate = _selectedTo;
     }
 
     public async Task RefreshAsync() => await LoadAsync();
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadAsync();
+
+    private async void ApplyDateFilter_Click(object sender, RoutedEventArgs e)
+    {
+        var from = (FromDate.SelectedDate ?? _selectedFrom).Date;
+        var to = (ToDate.SelectedDate ?? _selectedTo).Date;
+        if (to < from)
+        {
+            LocalizedMessageBox.Show(
+                "The To date cannot be earlier than the From date.",
+                "Invalid date range",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        _selectedFrom = from;
+        _selectedTo = to;
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -37,15 +64,14 @@ public partial class DashboardView : UserControl, IRefreshable
         IsEnabled = false;
         try
         {
-            var now = DateTime.Now;
-            var from = new DateTime(now.Year, now.Month, 1);
-            var to = from.AddMonths(1).AddTicks(-1);
+            var from = _selectedFrom.Date;
+            var to = _selectedTo.Date;
             // ReportService owns one EF Core DbContext. Keep these reads
             // sequential because a DbContext cannot execute concurrent queries.
             var range = await _reports.GetRangeReportAsync(from, to);
-            var today = await _reports.GetDailyReportAsync(now.Date);
+            var today = await _reports.GetDailyReportAsync(DateTime.Today);
             var top = await _reports.GetTopProductsAsync(from, to, 10);
-            var hourly = await _reports.GetSalesByHourAsync(now.Date);
+            var hourly = await _reports.GetSalesByHourAsync(from, to);
             var payments = await _reports.GetPaymentBreakdownAsync(from, to);
 
             _range = range;
@@ -91,32 +117,32 @@ public partial class DashboardView : UserControl, IRefreshable
         var builder = new StringBuilder();
         PageReportPrinter.AppendHeader(builder, "MANAGEMENT DASHBOARD",
             $"Period: {range.From:dd MMM yyyy} - {range.To:dd MMM yyyy}");
-        PageReportPrinter.AppendMetric(builder, "Monthly sales", PageReportPrinter.Money(range.NetSales));
+        PageReportPrinter.AppendMetric(builder, "Sales", PageReportPrinter.Money(range.NetSales));
         PageReportPrinter.AppendMetric(builder, "Transactions", range.TransactionCount.ToString());
         PageReportPrinter.AppendMetric(builder, "Gross profit", PageReportPrinter.Money(range.GrossProfit));
         PageReportPrinter.AppendMetric(builder, "Today", PageReportPrinter.Money(today.NetSales));
 
         PageReportPrinter.AppendSection(builder, "Daily sales");
-        if (range.Daily.Count == 0) PageReportPrinter.AppendWrapped(builder, "No sales this month.");
+        if (range.Daily.Count == 0) PageReportPrinter.AppendWrapped(builder, "No sales in the selected period.");
         foreach (var row in range.Daily.OrderBy(item => item.Date))
             PageReportPrinter.AppendEntry(builder, row.Date.ToString("dd MMM yyyy"),
                 $"Txns {row.TransactionCount} | Net {PageReportPrinter.Money(row.NetSales)}",
                 $"Gross profit {PageReportPrinter.Money(row.GrossProfit)}");
 
         PageReportPrinter.AppendSection(builder, "Payment breakdown");
-        if (_payments.Count == 0) PageReportPrinter.AppendWrapped(builder, "No payments this month.");
+        if (_payments.Count == 0) PageReportPrinter.AppendWrapped(builder, "No payments in the selected period.");
         foreach (var row in _payments)
             PageReportPrinter.AppendEntry(builder, PageReportPrinter.PaymentMethodName(row.Method),
                 $"Transactions {row.Count} | Total {PageReportPrinter.Money(row.Total)}");
 
         PageReportPrinter.AppendSection(builder, "Top products");
-        if (_topProducts.Count == 0) PageReportPrinter.AppendWrapped(builder, "No products sold this month.");
+        if (_topProducts.Count == 0) PageReportPrinter.AppendWrapped(builder, "No products sold in the selected period.");
         foreach (var row in _topProducts)
             PageReportPrinter.AppendEntry(builder, row.ProductName,
                 $"Qty {row.QuantitySold:0.###} | Revenue {PageReportPrinter.Money(row.Revenue)}");
 
-        PageReportPrinter.AppendSection(builder, "Sales by hour today");
-        if (_hourly.Count == 0) PageReportPrinter.AppendWrapped(builder, "No sales today.");
+        PageReportPrinter.AppendSection(builder, "Sales by hour");
+        if (_hourly.Count == 0) PageReportPrinter.AppendWrapped(builder, "No hourly sales in the selected period.");
         foreach (var row in _hourly)
             PageReportPrinter.AppendEntry(builder, $"{row.Hour:00}:00",
                 $"Transactions {row.TransactionCount} | Revenue {PageReportPrinter.Money(row.Revenue)}");

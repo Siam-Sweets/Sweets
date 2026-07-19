@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.21 — Controlled management scrolling and dashboard date filter
+
+- Fixed Products, Inventory, Purchases & Suppliers, Cash Register, Customers & Suppliers, and Dashboard wheel gestures jumping directly to the end of long grids.
+- Updated nested scrolling so DataGrid surfaces move by configured rows while page ScrollViewers retain bounded pixel scrolling.
+- Added wheel-delta accumulation and large-delta clamping for high-resolution mice and touchpads.
+- Added an inclusive From/To date filter to Management Dashboard and applied it to range KPIs, daily sales, top products, payment breakdown, hourly activity, and printed dashboard output.
+- Preserved the separate Today KPI while custom dashboard ranges are active.
+
 ## 1.4.20 — Stable selected sidebar hover state
 
 - Fixed every management-sidebar item becoming visually blank when the pointer hovered over the currently selected page.

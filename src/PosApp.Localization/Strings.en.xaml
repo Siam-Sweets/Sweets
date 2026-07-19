@@ -434,7 +434,7 @@
     <!-- Management dashboard -->
     <sys:String x:Key="Dash_Title">Management Dashboard</sys:String>
     <sys:String x:Key="Dash_Refresh">Refresh</sys:String>
-    <sys:String x:Key="Dash_TotalSales">Monthly sales</sys:String>
+    <sys:String x:Key="Dash_TotalSales">Sales</sys:String>
     <sys:String x:Key="Dash_Today">Today</sys:String>
     <sys:String x:Key="Dash_DailySales">Daily sales</sys:String>
     <sys:String x:Key="Dash_Method">Method</sys:String>

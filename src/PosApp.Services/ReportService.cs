@@ -54,9 +54,12 @@ public class ReportService : IReportService
             .OrderByDescending(r => r.Revenue).Take(Math.Clamp(top, 1, 100)).ToList();
     }
 
-    public async Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime date)
+    public Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime date)
+        => GetSalesByHourAsync(date, date);
+
+    public async Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime from, DateTime to)
     {
-        var range = DateTimeUtilities.InclusiveLocalDateRange(date, date);
+        var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var sales = await _db.Sales.AsNoTracking()
             .Where(s => s.SaleDate >= range.FromUtc && s.SaleDate < range.ToUtcExclusive &&
                         (s.Status == SaleStatus.Completed || s.Status == SaleStatus.Refunded))
