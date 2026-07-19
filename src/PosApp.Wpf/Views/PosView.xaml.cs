@@ -32,13 +32,36 @@ public partial class PosView : UserControl, IRefreshable
         };
 
         DataContext = vm;
-        Loaded += (_, _) => App.SettingsChanged += SettingsChanged;
+        Loaded += (_, _) =>
+        {
+            App.SettingsChanged += SettingsChanged;
+            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateProductCardMetrics));
+        };
         Unloaded += (_, _) => App.SettingsChanged -= SettingsChanged;
     }
 
     private void SettingsChanged(object? sender, EventArgs e)
     {
-        if (DataContext is PosViewModel vm) vm.ApplySettings();
+        if (DataContext is not PosViewModel vm) return;
+        vm.ApplySettings();
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateProductCardMetrics));
+    }
+
+    private void ProductResultsScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
+        => UpdateProductCardMetrics();
+
+    private void UpdateProductCardMetrics()
+    {
+        if (DataContext is not PosViewModel vm || ProductResultsScrollViewer == null) return;
+
+        var availableWidth = ProductResultsScrollViewer.ViewportWidth > 0
+            ? ProductResultsScrollViewer.ViewportWidth
+            : ProductResultsScrollViewer.ActualWidth;
+        var availableHeight = ProductResultsScrollViewer.ViewportHeight > 0
+            ? ProductResultsScrollViewer.ViewportHeight
+            : ProductResultsScrollViewer.ActualHeight;
+
+        vm.UpdateProductCardMetrics(availableWidth, availableHeight);
     }
 
     public async Task RefreshAsync()
@@ -164,6 +187,7 @@ public partial class PosView : UserControl, IRefreshable
     private void OpenSearch(bool focusSearchBox = true)
     {
         SearchOverlay.Visibility = Visibility.Visible;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(UpdateProductCardMetrics));
         if (focusSearchBox)
             Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => ProductSearchBox.Focus()));
     }
@@ -498,11 +522,48 @@ public class PosViewModel : ViewModelBase
     public decimal Total => Subtotal - DiscountTotal + TaxTotal;
     public bool IsCartEmpty => CartLines.Count == 0;
     public bool VirtualKeyboardVisible => App.StoreSettings.EnableVirtualKeyboard;
-    public double ProductCardWidth => Math.Clamp(
-        (900d - Math.Clamp(App.StoreSettings.ProductGridColumns, 2, 10) * 10d) /
-        Math.Clamp(App.StoreSettings.ProductGridColumns, 2, 10), 120d, 280d);
-    public double ProductCardHeight => Math.Clamp(
-        470d / Math.Clamp(App.StoreSettings.ProductGridRows, 2, 10), 126d, 150d);
+
+    private double _productCardWidth = 210d;
+    private double _productCardHeight = 176d;
+    public double ProductCardWidth => _productCardWidth;
+    public double ProductCardHeight => _productCardHeight;
+
+    public void UpdateProductCardMetrics(double availableWidth, double availableHeight)
+    {
+        if (!double.IsFinite(availableWidth) || availableWidth <= 0) return;
+
+        const double horizontalCardSpace = 10d; // left + right card margin
+        const double minimumReadableWidth = 180d;
+        var requestedColumns = Math.Clamp(App.StoreSettings.ProductGridColumns, 2, 10);
+        var usableWidth = Math.Max(minimumReadableWidth, availableWidth - SystemParameters.VerticalScrollBarWidth - 2d);
+        var columnsThatFit = Math.Max(1,
+            (int)Math.Floor((usableWidth + horizontalCardSpace) / (minimumReadableWidth + horizontalCardSpace)));
+        var actualColumns = Math.Max(1, Math.Min(requestedColumns, columnsThatFit));
+        var nextWidth = Math.Clamp(
+            Math.Floor((usableWidth - (actualColumns * horizontalCardSpace)) / actualColumns),
+            minimumReadableWidth,
+            300d);
+
+        var requestedRows = Math.Clamp(App.StoreSettings.ProductGridRows, 2, 10);
+        var readableRows = Math.Min(requestedRows, 3);
+        var heightFromViewport = double.IsFinite(availableHeight) && availableHeight > 0
+            ? (availableHeight - (readableRows * 10d)) / readableRows
+            : 176d;
+        var narrowCardAllowance = nextWidth < 205d ? 10d : 0d;
+        var nextHeight = Math.Clamp(heightFromViewport + narrowCardAllowance, 170d, 196d);
+
+        if (Math.Abs(_productCardWidth - nextWidth) > 0.5d)
+        {
+            _productCardWidth = nextWidth;
+            OnPropertyChanged(nameof(ProductCardWidth));
+        }
+
+        if (Math.Abs(_productCardHeight - nextHeight) > 0.5d)
+        {
+            _productCardHeight = nextHeight;
+            OnPropertyChanged(nameof(ProductCardHeight));
+        }
+    }
 
     public PosViewModel(IInventoryService inventory, ISaleService sales,
         ICustomerService customers, IRegisterService register,

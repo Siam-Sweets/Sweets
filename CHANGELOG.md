@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.22 — Responsive product-search cards
+
+- Increased the minimum product-card height so names, identifiers, price, unit, and stock remain readable without clipping.
+- Moved price and stock onto separate lines with a consistent divider and spacing, preventing the values from overlapping at narrow widths.
+- Added two-line product-name handling, single-line ellipsis for long SKU/barcode values, and full-value tooltips.
+- Made the product-search panel and card dimensions respond to the actual available WPF viewport instead of fixed 940×650 and 900-pixel assumptions.
+- Automatically reduces the number of visible columns when the requested grid density would make cards unreadable at the current window size or Windows display scaling.
+
 ## 1.4.21 — Controlled management scrolling and dashboard date filter
 
 - Fixed Products, Inventory, Purchases & Suppliers, Cash Register, Customers & Suppliers, and Dashboard wheel gestures jumping directly to the end of long grids.

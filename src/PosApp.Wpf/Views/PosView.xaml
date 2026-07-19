@@ -377,10 +377,11 @@
             </Grid>
         </Border>
 
-        <!-- Product search panel. It is an overlay so result cards keep a stable size. -->
+        <!-- Responsive product-search overlay; cards recalculate from the available viewport. -->
         <Grid x:Name="SearchOverlay" Grid.ColumnSpan="2" Visibility="Collapsed" Panel.ZIndex="20">
             <Border Background="{DynamicResource OverlayScrimBrush}" MouseLeftButtonDown="SearchScrim_MouseLeftButtonDown"/>
-            <Border Width="940" Height="650" HorizontalAlignment="Center" VerticalAlignment="Center"
+            <Border x:Name="ProductSearchPanel" Margin="24" MaxWidth="1100" MaxHeight="760"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                     Background="{DynamicResource BackgroundBrush}" BorderBrush="{DynamicResource PrimaryBrush}"
                     BorderThickness="1" CornerRadius="8" Padding="18">
                 <Grid>
@@ -453,41 +454,63 @@
                         </TextBlock>
                     </Grid>
 
-                    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ScrollViewer x:Name="ProductResultsScrollViewer" Grid.Row="3"
+                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                  SizeChanged="ProductResultsScrollViewer_SizeChanged">
                         <ItemsControl ItemsSource="{Binding Products}">
                             <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Button Style="{StaticResource ProductResultButton}" Tag="{Binding}" Click="Product_Click"
+                                            MinWidth="180" MinHeight="170"
                                             Width="{Binding DataContext.ProductCardWidth, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                             Height="{Binding DataContext.ProductCardHeight, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
                                         <Grid>
                                             <Grid.RowDefinitions>
+                                                <RowDefinition Height="42"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="*"/>
                                                 <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" MaxHeight="42"/>
-                                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11" Margin="0,3,0,0"
-                                                           TextTrimming="CharacterEllipsis">
-                                                    <Run Text="{DynamicResource POS_CodeLabel}"/><Run Text=": "/><Run Text="{Binding Sku, Mode=OneWay}"/>
-                                                </TextBlock>
-                                                <TextBlock Foreground="{DynamicResource TextMutedBrush}" FontSize="11"
-                                                           TextTrimming="CharacterEllipsis">
-                                                    <Run Text="{DynamicResource POS_BarcodeLabel}"/><Run Text=": "/><Run Text="{Binding Barcode, Mode=OneWay}"/>
-                                                </TextBlock>
-                                            </StackPanel>
-                                            <Grid Grid.Row="1" Margin="0,8,0,0">
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                                <TextBlock Foreground="{DynamicResource PrimaryBrush}" FontWeight="Bold">
-                                                    <Run Text="{Binding Price, Mode=OneWay, Converter={StaticResource Money}}"/><Run Text=" / "/><Run Text="{Binding UnitSymbol, Mode=OneWay}"/>
-                                                </TextBlock>
-                                                <TextBlock Grid.Column="1" Foreground="{DynamicResource TextMutedBrush}" FontSize="11">
-                                                    <Run Text="{Binding StockQuantity, Mode=OneWay, StringFormat='Stock {0:0.###}'}"/><Run Text=" "/><Run Text="{Binding UnitSymbol, Mode=OneWay}"/>
-                                                </TextBlock>
-                                            </Grid>
+
+                                            <TextBlock Grid.Row="0" Text="{Binding Name}" ToolTip="{Binding Name}"
+                                                       FontWeight="SemiBold" FontSize="13" LineHeight="18"
+                                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+
+                                            <TextBlock Grid.Row="1" Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Sku}">
+                                                <Run Text="{DynamicResource POS_CodeLabel}"/><Run Text=": "/><Run Text="{Binding Sku, Mode=OneWay}"/>
+                                            </TextBlock>
+
+                                            <TextBlock Grid.Row="2" Foreground="{DynamicResource TextMutedBrush}"
+                                                       FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Barcode}">
+                                                <Run Text="{DynamicResource POS_BarcodeLabel}"/><Run Text=": "/><Run Text="{Binding Barcode, Mode=OneWay}"/>
+                                            </TextBlock>
+
+                                            <Border Grid.Row="4" Margin="0,10,0,0" Padding="0,8,0,0"
+                                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock Grid.Row="0" Foreground="{DynamicResource PrimaryBrush}"
+                                                               FontWeight="Bold" FontSize="13" TextTrimming="CharacterEllipsis">
+                                                        <Run Text="{Binding Price, Mode=OneWay, Converter={StaticResource Money}}"/><Run Text=" / "/><Run Text="{Binding UnitSymbol, Mode=OneWay}"/>
+                                                    </TextBlock>
+                                                    <TextBlock Grid.Row="1" Foreground="{DynamicResource TextMutedBrush}"
+                                                               FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis">
+                                                        <Run Text="{Binding StockQuantity, Mode=OneWay, StringFormat='Stock {0:0.###}'}"/><Run Text=" "/><Run Text="{Binding UnitSymbol, Mode=OneWay}"/>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Border>
                                         </Grid>
                                     </Button>
                                 </DataTemplate>
