@@ -117,6 +117,11 @@
     <sys:String x:Key="Cloud_Username">ইউজারনেম</sys:String>
     <sys:String x:Key="Cloud_Email">ইমেইল</sys:String>
     <sys:String x:Key="Cloud_ConfirmPassword">পাসওয়ার্ড নিশ্চিত করুন</sys:String>
+    <sys:String x:Key="Cloud_PasswordRequirements">১০ থেকে ১২৮টি অক্ষর ব্যবহার করুন এবং অন্তত একটি বর্ণ ও একটি সংখ্যা রাখুন।</sys:String>
+    <sys:String x:Key="Cloud_ValidationTitle">অ্যাকাউন্টের তথ্য পরীক্ষা করুন</sys:String>
+    <sys:String x:Key="Cloud_ValidationUsername">ইউজারনেমে ৩ থেকে ৬০টি বর্ণ, সংখ্যা, ডট, আন্ডারস্কোর বা হাইফেন ব্যবহার করুন।</sys:String>
+    <sys:String x:Key="Cloud_ValidationOfflinePin">অফলাইন পিনে ৪ থেকে ১২টি সংখ্যা থাকতে হবে।</sys:String>
+    <sys:String x:Key="Cloud_ValidationDeviceName">ডিভাইসের নাম ১৬০ অক্ষর বা কম হতে হবে।</sys:String>
     <sys:String x:Key="Cloud_CredentialsProtected">ডেস্কটপ অ্যাপ পাসওয়ার্ড সংরক্ষণ করে না। সেশন টোকেন Windows Data Protection দিয়ে এনক্রিপ্ট করা হয়।</sys:String>
     <sys:String x:Key="Cloud_PasswordMismatch">পাসওয়ার্ড দুটি মিলছে না।</sys:String>
     <sys:String x:Key="Cloud_Connecting">নিরাপদে সংযোগ করা হচ্ছে...</sys:String>
@@ -246,7 +251,7 @@
     <sys:String x:Key="Cloud_ValidationInvalidUserRecordId">সার্ভার একটি অবৈধ সিঙ্ক করা ব্যবহারকারী আইডি দিয়েছে।</sys:String>
     <sys:String x:Key="Cloud_ValidationUserRecordLinkConflict">অনলাইন ব্যবহারকারীটি ইতিমধ্যে ভিন্ন স্থানীয় রেকর্ডের সঙ্গে যুক্ত। আগে সিঙ্ক দ্বন্দ্ব সমাধান করুন।</sys:String>
     <sys:String x:Key="Cloud_ValidationUsernameOrEmail">ব্যবহারকারী নাম বা ইমেইল আবশ্যক।</sys:String>
-    <sys:String x:Key="Cloud_ValidationPasswordLength">অনলাইন পাসওয়ার্ডে ১০ থেকে ১২৮টি অক্ষর থাকতে হবে।</sys:String>
+    <sys:String x:Key="Cloud_ValidationPasswordLength">অনলাইন পাসওয়ার্ডে ১০ থেকে ১২৮টি অক্ষর এবং অন্তত একটি বর্ণ ও একটি সংখ্যা থাকতে হবে।</sys:String>
     <sys:String x:Key="Cloud_ValidationWorkerAddress">কনফিগার করা অনলাইন সার্ভিসের ঠিকানাটি সঠিক নয়।</sys:String>
     <sys:String x:Key="Cloud_ValidationHttpsAddress">অনলাইন সেবার ঠিকানায় HTTPS ব্যবহার করতে হবে।</sys:String>
     <sys:String x:Key="Cloud_ValidationSignInMigration">ডেটা মাইগ্রেশনের আগে অনলাইন অ্যাকাউন্টে সাইন ইন করুন।</sys:String>

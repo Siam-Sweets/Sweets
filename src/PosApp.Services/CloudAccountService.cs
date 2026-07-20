@@ -688,8 +688,10 @@ public sealed class CloudAccountService : ICloudAccountService
 
     private static void ValidateCloudPassword(string password)
     {
-        if (string.IsNullOrWhiteSpace(password) || password.Length is < 10 or > 128)
-            throw new ArgumentException("The online password must contain 10 to 128 characters.");
+        if (string.IsNullOrWhiteSpace(password) || password.Length is < 10 or > 128 ||
+            !password.Any(char.IsLetter) || !password.Any(char.IsDigit))
+            throw new ArgumentException(
+                "The online password must contain 10 to 128 characters and include at least one letter and one number.");
     }
 
     private sealed class OkEnvelope { public bool Ok { get; set; } }

@@ -3,11 +3,17 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{DynamicResource Cloud_AccountTitle}"
         Icon="/PosApp;component/Assets/PosApp.ico"
-        Width="720" Height="790" MinWidth="650" MinHeight="680"
+        Width="720" Height="700" MinWidth="560" MinHeight="500"
         WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
         Background="{DynamicResource BackgroundBrush}">
     <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
         <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}" Padding="26,20">
             <StackPanel>
                 <TextBlock Text="{DynamicResource Cloud_AccountTitle}" Foreground="White" FontSize="25" FontWeight="SemiBold"/>
@@ -15,9 +21,14 @@
             </StackPanel>
         </Border>
 
-        <TabControl x:Name="AccountTabs" Grid.Row="1" Margin="24" Background="Transparent" BorderBrush="{DynamicResource BorderBrush}">
+        <TabControl x:Name="AccountTabs" Grid.Row="1" Margin="24,18" Background="Transparent"
+                    BorderBrush="{DynamicResource BorderBrush}">
             <TabItem Header="{DynamicResource Cloud_SignIn}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              CanContentScroll="False"
+                              PanningMode="VerticalOnly"
+                              IsManipulationEnabled="True">
                     <StackPanel Margin="24">
                         <TextBlock Text="{DynamicResource Cloud_UsernameEmail}" Style="{StaticResource Muted}"/>
                         <TextBox x:Name="LoginIdentifier" Margin="0,5,0,13" Padding="10,8" MaxLength="255"/>
@@ -28,17 +39,25 @@
                         <TextBlock Text="{DynamicResource Cloud_OfflinePinHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                         <TextBlock Text="{DynamicResource Cloud_DeviceName}" Style="{StaticResource Muted}" Margin="0,13,0,0"/>
                         <TextBox x:Name="LoginDeviceName" Margin="0,5,0,18" Padding="10,8" MaxLength="160"/>
-                        <Button Content="{DynamicResource Cloud_SignIn}" Style="{StaticResource PrimaryButton}"
-                                Padding="22,11" HorizontalAlignment="Left" Click="Login_Click"/>
+                        <Button x:Name="LoginButton" Content="{DynamicResource Cloud_SignIn}"
+                                Style="{StaticResource PrimaryButton}" Padding="22,11"
+                                HorizontalAlignment="Left" Click="Login_Click"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
 
             <TabItem Header="{DynamicResource Cloud_CreateOrganization}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              CanContentScroll="False"
+                              PanningMode="VerticalOnly"
+                              IsManipulationEnabled="True">
                     <StackPanel Margin="24">
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,8,12">
                                 <TextBlock Text="{DynamicResource Cloud_OrganizationName}" Style="{StaticResource Muted}"/>
                                 <TextBox x:Name="CreateOrganizationName" Margin="0,5,0,0" Padding="10,8" MaxLength="160"/>
@@ -48,8 +67,12 @@
                                 <TextBox x:Name="CreateStoreName" Margin="0,5,0,0" Padding="10,8" MaxLength="160"/>
                             </StackPanel>
                         </Grid>
+
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,8,12">
                                 <TextBlock Text="{DynamicResource Cloud_FullName}" Style="{StaticResource Muted}"/>
                                 <TextBox x:Name="CreateFullName" Margin="0,5,0,0" Padding="10,8" MaxLength="100"/>
@@ -59,21 +82,32 @@
                                 <TextBox x:Name="CreateUsername" Margin="0,5,0,0" Padding="10,8" MaxLength="60"/>
                             </StackPanel>
                         </Grid>
+
                         <TextBlock Text="{DynamicResource Cloud_Email}" Style="{StaticResource Muted}"/>
                         <TextBox x:Name="CreateEmail" Margin="0,5,0,12" Padding="10,8" MaxLength="255"/>
+
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <StackPanel Margin="0,0,8,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,8,8">
                                 <TextBlock Text="{DynamicResource Cloud_OnlinePassword}" Style="{StaticResource Muted}"/>
                                 <PasswordBox x:Name="CreatePassword" Margin="0,5,0,0" Padding="10,8" MaxLength="128"/>
                             </StackPanel>
-                            <StackPanel Grid.Column="1" Margin="8,0,0,12">
+                            <StackPanel Grid.Column="1" Margin="8,0,0,8">
                                 <TextBlock Text="{DynamicResource Cloud_ConfirmPassword}" Style="{StaticResource Muted}"/>
                                 <PasswordBox x:Name="CreatePasswordConfirm" Margin="0,5,0,0" Padding="10,8" MaxLength="128"/>
                             </StackPanel>
                         </Grid>
+                        <TextBlock Text="{DynamicResource Cloud_PasswordRequirements}" Style="{StaticResource Muted}"
+                                   Margin="0,0,0,12" TextWrapping="Wrap"/>
+
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,8,18">
                                 <TextBlock Text="{DynamicResource Cloud_OfflinePin}" Style="{StaticResource Muted}"/>
                                 <PasswordBox x:Name="CreateOfflinePin" Margin="0,5,0,0" Padding="10,8" MaxLength="12"/>
@@ -83,23 +117,32 @@
                                 <TextBox x:Name="CreateDeviceName" Margin="0,5,0,0" Padding="10,8" MaxLength="160"/>
                             </StackPanel>
                         </Grid>
-                        <Button Content="{DynamicResource Cloud_CreateOrganization}" Style="{StaticResource PrimaryButton}"
-                                Padding="22,11" HorizontalAlignment="Left" Click="Create_Click"/>
+
+                        <Button x:Name="CreateButton" Content="{DynamicResource Cloud_CreateOrganization}"
+                                Style="{StaticResource PrimaryButton}" Padding="22,11"
+                                HorizontalAlignment="Left" Click="Create_Click"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
         </TabControl>
 
-        <Border Grid.Row="2" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="0,1,0,0" Padding="22,13">
+        <Border x:Name="StatusBorder" Grid.Row="2" Background="{DynamicResource CardBrush}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="22,13">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <ProgressBar x:Name="BusyBar" Height="3" IsIndeterminate="True" Visibility="Collapsed" Margin="0,0,0,8"/>
-                    <TextBlock x:Name="StatusText" Text="{DynamicResource Cloud_CredentialsProtected}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                    <ProgressBar x:Name="BusyBar" Height="3" IsIndeterminate="True"
+                                 Visibility="Collapsed" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="StatusText" Text="{DynamicResource Cloud_CredentialsProtected}"
+                               Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
-                <Button Grid.Column="1" Content="{DynamicResource Common_Cancel}" Style="{StaticResource OutlineButton}"
-                        Padding="18,9" Margin="16,0,0,0" VerticalAlignment="Center" Click="Cancel_Click"/>
+                <Button Grid.Column="1" Content="{DynamicResource Common_Cancel}"
+                        Style="{StaticResource OutlineButton}" Padding="18,9" Margin="16,0,0,0"
+                        VerticalAlignment="Center" Click="Cancel_Click"/>
             </Grid>
         </Border>
     </Grid>

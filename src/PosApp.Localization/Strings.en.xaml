@@ -117,6 +117,11 @@
     <sys:String x:Key="Cloud_Username">Username</sys:String>
     <sys:String x:Key="Cloud_Email">Email</sys:String>
     <sys:String x:Key="Cloud_ConfirmPassword">Confirm password</sys:String>
+    <sys:String x:Key="Cloud_PasswordRequirements">Use 10 to 128 characters with at least one letter and one number.</sys:String>
+    <sys:String x:Key="Cloud_ValidationTitle">Check account details</sys:String>
+    <sys:String x:Key="Cloud_ValidationUsername">Username must be 3 to 60 letters, numbers, dots, underscores, or hyphens.</sys:String>
+    <sys:String x:Key="Cloud_ValidationOfflinePin">The offline PIN must contain 4 to 12 digits.</sys:String>
+    <sys:String x:Key="Cloud_ValidationDeviceName">Device name must be 160 characters or fewer.</sys:String>
     <sys:String x:Key="Cloud_CredentialsProtected">Passwords are never saved by the desktop app. Session tokens are encrypted with Windows Data Protection.</sys:String>
     <sys:String x:Key="Cloud_PasswordMismatch">The passwords do not match.</sys:String>
     <sys:String x:Key="Cloud_Connecting">Connecting securely...</sys:String>
@@ -246,7 +251,7 @@
     <sys:String x:Key="Cloud_ValidationInvalidUserRecordId">The server returned an invalid synchronized user ID.</sys:String>
     <sys:String x:Key="Cloud_ValidationUserRecordLinkConflict">The online user is already linked to a different local record. Resolve the synchronization conflict first.</sys:String>
     <sys:String x:Key="Cloud_ValidationUsernameOrEmail">Username or email is required.</sys:String>
-    <sys:String x:Key="Cloud_ValidationPasswordLength">The online password must contain 10 to 128 characters.</sys:String>
+    <sys:String x:Key="Cloud_ValidationPasswordLength">The online password must contain 10 to 128 characters and include at least one letter and one number.</sys:String>
     <sys:String x:Key="Cloud_ValidationWorkerAddress">The configured online service address is invalid.</sys:String>
     <sys:String x:Key="Cloud_ValidationHttpsAddress">The online service address must use HTTPS.</sys:String>
     <sys:String x:Key="Cloud_ValidationSignInMigration">Sign in to the online account before migrating data.</sys:String>

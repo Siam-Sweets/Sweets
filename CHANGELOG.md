@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.8 — Visible online-account validation and responsive creation dialog
+
+- Added immediate field validation before online sign-in or organization creation, including the Worker-compatible username, email, password, offline PIN, and device-name rules.
+- Displayed password requirements directly below the organization password fields: 10–128 characters with at least one letter and one number.
+- Replaced silent footer-only failures with an owner-bound warning or error dialog, while retaining a high-contrast status message and request ID in the account window.
+- Forced the busy indicator to render before network work begins so a slow DNS, TLS, Worker, or Turso request no longer appears as an unresponsive button.
+- Constrained the online-account window to the Windows working area, made it resizable, and enabled mouse-wheel, touchpad, and touch scrolling at high display scaling.
+- Aligned desktop password validation with the Cloudflare Worker password policy and added Bengali localization for all new validation feedback.
+- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.8.
+
 ## 2.0.7 — Build-configured cloud endpoint
 
 - Removed the Cloudflare Worker address fields from online sign-in and organization creation; users now enter only their account, password, offline PIN, device, organization, and store details.
