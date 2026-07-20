@@ -1,4 +1,4 @@
-import type { Client, Transaction } from "@libsql/client/web";
+import type { Client } from "@libsql/client/web";
 import { hashPassword, signAccessToken, verifyAccessToken, verifyPassword, sha256 } from "./crypto";
 import { database, inspectDatabaseReadiness, integer, nowIso } from "./db";
 import { jsonResponse, safeProviderErrorCode } from "./errors";
@@ -192,7 +192,7 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
   const ready = checks.every((check) => check.status === "pass") && accountCreationReady;
   return {
     service: "PosApp Cloud API",
-    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.11",
+    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.12",
     checkedAtUtc: nowIso(),
     requestId,
     ready,
@@ -206,12 +206,15 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
 
 export async function diagnosticsJson(env: Env, requestId: string): Promise<Response> {
   const report = await runCloudDiagnostics(env, requestId);
-  return jsonResponse(report, report.ready ? 200 : 503, requestId);
+  // Readiness is part of the JSON contract. Always return JSON with HTTP 200 so
+  // browsers and CI can read the failed stage instead of discarding the body
+  // through curl --fail when a check reports not ready.
+  return jsonResponse(report, 200, requestId);
 }
 
 export async function diagnosticsPage(request: Request, env: Env, requestId: string): Promise<Response> {
   const origin = new URL(request.url).origin;
-  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.11";
+  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.12";
   const nonce = crypto.randomUUID().replace(/-/g, "");
   const html = `<!doctype html>
 <html lang="en">
@@ -262,7 +265,7 @@ export async function diagnosticsPage(request: Request, env: Env, requestId: str
   <main>
     <section class="hero">
       <h1 class="brand">PosApp Cloud API</h1>
-      <p class="subtitle">Public deployment diagnostics. The check performs a safe organization-creation write test and rolls it back, so it verifies more than basic connectivity.</p>
+      <p class="subtitle">Public deployment diagnostics. The check performs one safe atomic organization-creation batch and forces it to roll back, so it verifies more than basic connectivity.</p>
       <div id="status" class="status checking" role="status">Checking deployment…</div>
       <div class="actions">
         <button id="run" type="button">Run diagnostics again</button>
@@ -273,7 +276,7 @@ export async function diagnosticsPage(request: Request, env: Env, requestId: str
     <section id="checks" class="checks" aria-live="polite">
       <article class="check">
         <div class="icon" aria-hidden="true">…</div>
-        <div><h2>End-to-end verification</h2><p>Testing password hashing, tokens, Turso schema, organization provisioning, and transaction rollback.</p></div>
+        <div><h2>End-to-end verification</h2><p>Testing password hashing, tokens, Turso schema, atomic organization provisioning, and rollback.</p></div>
       </article>
     </section>
     <section class="meta">
@@ -397,8 +400,6 @@ async function inspectSignupSchema(client: Client): Promise<{ missing: string[] 
 
 async function runOrganizationCreationPreflight(env: Env, requestId: string): Promise<DiagnosticCheck> {
   const client = database(env);
-  let transaction: Transaction | undefined;
-  let stage = "begin write transaction";
   const tenantId = crypto.randomUUID();
   const storeId = crypto.randomUUID();
   const userId = crypto.randomUUID();
@@ -417,147 +418,208 @@ async function runOrganizationCreationPreflight(env: Env, requestId: string): Pr
     createdAt: timestamp,
     updatedAt: timestamp,
   });
+  const steps: Array<{ stage: string; sql: string; args: Array<string | number | null> }> = [
+    {
+      stage: "insert organization",
+      sql: `INSERT INTO organizations
+            (id, name, is_active, created_at_utc, updated_at_utc, schema_version)
+            VALUES (?, ?, 1, ?, ?, ?)`,
+      args: [tenantId, "PosApp diagnostics", timestamp, timestamp, Number(env.SCHEMA_VERSION ?? "4")],
+    },
+    {
+      stage: "insert store",
+      sql: `INSERT INTO stores
+            (id, tenant_id, name, code, is_active, created_at_utc, updated_at_utc, version)
+            VALUES (?, ?, ?, ?, 1, ?, ?, 1)`,
+      args: [storeId, tenantId, "Diagnostics", "DIAG", timestamp, timestamp],
+    },
+    {
+      stage: "insert administrator",
+      sql: `INSERT INTO users
+            (id, tenant_id, default_store_id, username, username_normalized, email, email_normalized,
+             full_name, password_hash, password_version, role, permissions_json, is_active,
+             created_at_utc, updated_at_utc, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'admin', '[]', 1, ?, ?, 1)`,
+      args: [userId, tenantId, storeId, `diagnostic-${userId.slice(0, 8)}`, `diagnostic-${userId.slice(0, 8)}`,
+        `diagnostic-${userId.slice(0, 8)}@example.invalid`, `diagnostic-${userId.slice(0, 8)}@example.invalid`,
+        "PosApp diagnostic user", "diagnostic-hash", timestamp, timestamp],
+    },
+    {
+      stage: "assign administrator to store",
+      sql: `INSERT INTO user_store_assignments
+            (tenant_id, user_id, store_id, is_active, created_at_utc)
+            VALUES (?, ?, ?, 1, ?)`,
+      args: [tenantId, userId, storeId, timestamp],
+    },
+    {
+      stage: "register device",
+      sql: `INSERT INTO registered_devices
+            (id, tenant_id, registered_by_user_id, assigned_store_id, name, operating_system,
+             machine_name, status, first_registered_at_utc, last_login_at_utc, updated_at_utc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+      args: [deviceId, tenantId, userId, storeId, "PosApp diagnostics", "Cloudflare Worker", null,
+        timestamp, timestamp, timestamp],
+    },
+    {
+      stage: "create login session",
+      sql: `INSERT INTO login_sessions
+            (id, tenant_id, user_id, device_id, created_at_utc, last_login_at_utc,
+             last_seen_at_utc, expires_at_utc)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [sessionId, tenantId, userId, deviceId, timestamp, timestamp, timestamp, expires],
+    },
+    {
+      stage: "create refresh token",
+      sql: `INSERT INTO refresh_tokens
+            (id, session_id, family_id, parent_token_id, token_hash, created_at_utc, expires_at_utc)
+            VALUES (?, ?, ?, NULL, ?, ?, ?)`,
+      args: [refreshId, sessionId, familyId, "diagnostic-token-hash", timestamp, expires],
+    },
+    {
+      stage: "create synchronized user record",
+      sql: `INSERT INTO user_sync_records
+            (id, tenant_id, store_id, payload_json, created_at_utc, updated_at_utc, deleted_at_utc,
+             version, created_by_user_id, updated_by_user_id, last_modified_device_id)
+            VALUES (?, ?, NULL, ?, ?, ?, NULL, 1, ?, ?, ?)`,
+      args: [userId, tenantId, payload, timestamp, timestamp, userId, userId, deviceId],
+    },
+    {
+      stage: "create synchronization change",
+      sql: `INSERT INTO sync_changes
+            (tenant_id, store_id, entity_type, record_id, version, updated_at_utc, deleted_at_utc,
+             last_modified_device_id, payload_json)
+            VALUES (?, NULL, 'users', ?, 1, ?, NULL, ?, ?)`,
+      args: [tenantId, userId, timestamp, deviceId, payload],
+    },
+    {
+      stage: "create audit event",
+      sql: `INSERT INTO audit_logs
+            (id, tenant_id, store_id, user_id, device_id, timestamp_utc, action, affected_type,
+             affected_id, request_id, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, 'diagnostic.organization_preflight', 'organization', ?, ?, '{}')`,
+      args: [crypto.randomUUID(), tenantId, storeId, userId, deviceId, timestamp, tenantId, requestId],
+    },
+  ];
+
+  // The final duplicate insert is an intentional rollback sentinel. libSQL's
+  // non-interactive batch runs all statements in one atomic transaction; a
+  // failure at this final index proves every preceding provisioning statement
+  // was accepted while also guaranteeing that no diagnostic data is committed.
+  const rollbackSentinelIndex = steps.length;
+  const rollbackSentinel = {
+    stage: "force diagnostic rollback",
+    sql: `INSERT INTO organizations
+          (id, name, is_active, created_at_utc, updated_at_utc, schema_version)
+          VALUES (?, ?, 1, ?, ?, ?)`,
+    args: [tenantId, "PosApp diagnostic rollback", timestamp, timestamp, Number(env.SCHEMA_VERSION ?? "4")],
+  };
 
   try {
-    transaction = await client.transaction("write");
-    const steps: Array<{ stage: string; sql: string; args: Array<string | number | null> }> = [
-      {
-        stage: "insert organization",
-        sql: `INSERT INTO organizations
-              (id, name, is_active, created_at_utc, updated_at_utc, schema_version)
-              VALUES (?, ?, 1, ?, ?, ?)`,
-        args: [tenantId, "PosApp diagnostics", timestamp, timestamp, Number(env.SCHEMA_VERSION ?? "4")],
-      },
-      {
-        stage: "insert store",
-        sql: `INSERT INTO stores
-              (id, tenant_id, name, code, is_active, created_at_utc, updated_at_utc, version)
-              VALUES (?, ?, ?, ?, 1, ?, ?, 1)`,
-        args: [storeId, tenantId, "Diagnostics", "DIAG", timestamp, timestamp],
-      },
-      {
-        stage: "insert administrator",
-        sql: `INSERT INTO users
-              (id, tenant_id, default_store_id, username, username_normalized, email, email_normalized,
-               full_name, password_hash, password_version, role, permissions_json, is_active,
-               created_at_utc, updated_at_utc, version)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'admin', '[]', 1, ?, ?, 1)`,
-        args: [userId, tenantId, storeId, `diagnostic-${userId.slice(0, 8)}`, `diagnostic-${userId.slice(0, 8)}`,
-          `diagnostic-${userId.slice(0, 8)}@example.invalid`, `diagnostic-${userId.slice(0, 8)}@example.invalid`,
-          "PosApp diagnostic user", "diagnostic-hash", timestamp, timestamp],
-      },
-      {
-        stage: "assign administrator to store",
-        sql: `INSERT INTO user_store_assignments
-              (tenant_id, user_id, store_id, is_active, created_at_utc)
-              VALUES (?, ?, ?, 1, ?)`,
-        args: [tenantId, userId, storeId, timestamp],
-      },
-      {
-        stage: "register device",
-        sql: `INSERT INTO registered_devices
-              (id, tenant_id, registered_by_user_id, assigned_store_id, name, operating_system,
-               machine_name, status, first_registered_at_utc, last_login_at_utc, updated_at_utc)
-              VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
-        args: [deviceId, tenantId, userId, storeId, "PosApp diagnostics", "Cloudflare Worker", null,
-          timestamp, timestamp, timestamp],
-      },
-      {
-        stage: "create login session",
-        sql: `INSERT INTO login_sessions
-              (id, tenant_id, user_id, device_id, created_at_utc, last_login_at_utc,
-               last_seen_at_utc, expires_at_utc)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [sessionId, tenantId, userId, deviceId, timestamp, timestamp, timestamp, expires],
-      },
-      {
-        stage: "create refresh token",
-        sql: `INSERT INTO refresh_tokens
-              (id, session_id, family_id, parent_token_id, token_hash, created_at_utc, expires_at_utc)
-              VALUES (?, ?, ?, NULL, ?, ?, ?)`,
-        args: [refreshId, sessionId, familyId, "diagnostic-token-hash", timestamp, expires],
-      },
-      {
-        stage: "create synchronized user record",
-        sql: `INSERT INTO user_sync_records
-              (id, tenant_id, store_id, payload_json, created_at_utc, updated_at_utc, deleted_at_utc,
-               version, created_by_user_id, updated_by_user_id, last_modified_device_id)
-              VALUES (?, ?, NULL, ?, ?, ?, NULL, 1, ?, ?, ?)`,
-        args: [userId, tenantId, payload, timestamp, timestamp, userId, userId, deviceId],
-      },
-      {
-        stage: "create synchronization change",
-        sql: `INSERT INTO sync_changes
-              (tenant_id, store_id, entity_type, record_id, version, updated_at_utc, deleted_at_utc,
-               last_modified_device_id, payload_json)
-              VALUES (?, NULL, 'users', ?, 1, ?, NULL, ?, ?)`,
-        args: [tenantId, userId, timestamp, deviceId, payload],
-      },
-      {
-        stage: "create audit event",
-        sql: `INSERT INTO audit_logs
-              (id, tenant_id, store_id, user_id, device_id, timestamp_utc, action, affected_type,
-               affected_id, request_id, metadata_json)
-              VALUES (?, ?, ?, ?, ?, ?, 'diagnostic.organization_preflight', 'organization', ?, ?, '{}')`,
-        args: [crypto.randomUUID(), tenantId, storeId, userId, deviceId, timestamp, tenantId, requestId],
-      },
-    ];
-
-    for (const step of steps) {
-      stage = step.stage;
-      await transaction.execute({ sql: step.sql, args: step.args });
+    try {
+      await client.batch(
+        [...steps, rollbackSentinel].map(({ sql, args }) => ({ sql, args })),
+        "write",
+      );
+      // This should be unreachable because the sentinel repeats the primary key.
+      await cleanupDiagnosticRows(client, tenantId, userId, deviceId, sessionId);
+      return {
+        id: "organization-creation-preflight",
+        name: "Organization creation preflight",
+        status: "fail",
+        message: "The diagnostic rollback sentinel did not abort the atomic batch.",
+        code: "DIAGNOSTIC_ROLLBACK_SENTINEL_FAILED",
+        stage: rollbackSentinel.stage,
+      };
+    } catch (error) {
+      const statementIndex = batchStatementIndex(error);
+      if (statementIndex !== rollbackSentinelIndex || !isConstraintFailure(error)) {
+        const stage = statementIndex == null
+          ? "execute atomic organization batch"
+          : steps[statementIndex]?.stage ?? rollbackSentinel.stage;
+        return {
+          id: "organization-creation-preflight",
+          name: "Organization creation preflight",
+          status: "fail",
+          message: "The safe atomic organization test failed. Use the stage and request ID when checking Worker logs.",
+          code: "ORGANIZATION_PREFLIGHT_FAILED",
+          stage,
+          providerCode: safeProviderErrorCode(error),
+        };
+      }
     }
 
-    stage = "verify transaction rows";
-    const verification = await transaction.execute({
-      sql: `SELECT
-              (SELECT COUNT(*) FROM organizations WHERE id = ?) AS organizations,
-              (SELECT COUNT(*) FROM users WHERE id = ?) AS users,
-              (SELECT COUNT(*) FROM registered_devices WHERE id = ?) AS devices,
-              (SELECT COUNT(*) FROM login_sessions WHERE id = ?) AS sessions`,
-      args: [tenantId, userId, deviceId, sessionId],
-    });
-    const row = verification.rows[0];
-    if (!row || integer(row.organizations) !== 1 || integer(row.users) !== 1 ||
-        integer(row.devices) !== 1 || integer(row.sessions) !== 1) {
-      throw new Error("DIAGNOSTIC_ROW_VERIFICATION_FAILED");
-    }
-
-    stage = "roll back diagnostic transaction";
-    await transaction.rollback();
-    transaction.close();
-    transaction = undefined;
-
-    stage = "verify rollback";
     const rollback = await client.execute({
       sql: "SELECT COUNT(*) AS count FROM organizations WHERE id = ?",
       args: [tenantId],
     });
-    if (integer(rollback.rows[0]?.count) !== 0) throw new Error("DIAGNOSTIC_ROLLBACK_FAILED");
+    if (integer(rollback.rows[0]?.count) !== 0) {
+      await cleanupDiagnosticRows(client, tenantId, userId, deviceId, sessionId);
+      return {
+        id: "organization-creation-preflight",
+        name: "Organization creation preflight",
+        status: "fail",
+        message: "The diagnostic batch failed as expected, but its rows were not rolled back.",
+        code: "DIAGNOSTIC_ROLLBACK_FAILED",
+        stage: "verify atomic rollback",
+      };
+    }
 
     return {
       id: "organization-creation-preflight",
       name: "Organization creation preflight",
       status: "pass",
-      message: "The Worker created every organization, account, device, session, sync, and audit row inside a transaction and rolled it back successfully.",
+      message: "The Worker accepted every organization, account, device, session, sync, and audit statement in one atomic Turso batch and rolled the batch back successfully.",
     };
   } catch (error) {
-    if (transaction) {
-      try { await transaction.rollback(); } catch { /* preserve the original diagnostic stage */ }
-    }
     return {
       id: "organization-creation-preflight",
       name: "Organization creation preflight",
       status: "fail",
-      message: "The safe write-and-rollback organization test failed. Use the stage and request ID when checking Worker logs.",
+      message: "The diagnostic could not verify the atomic organization batch.",
       code: "ORGANIZATION_PREFLIGHT_FAILED",
-      stage,
+      stage: "verify atomic organization batch",
       providerCode: safeProviderErrorCode(error),
     };
   } finally {
-    transaction?.close();
     client.close();
   }
+}
+
+function batchStatementIndex(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const value = (error as Record<string, unknown>).statementIndex;
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+function isConstraintFailure(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as Record<string, unknown>;
+  const code = String(value.extendedCode ?? value.code ?? "");
+  const message = error instanceof Error ? error.message : "";
+  return /CONSTRAINT|UNIQUE|PRIMARYKEY/i.test(code) || /constraint|unique|primary key/i.test(message);
+}
+
+async function cleanupDiagnosticRows(
+  client: Client,
+  tenantId: string,
+  userId: string,
+  deviceId: string,
+  sessionId: string,
+): Promise<void> {
+  // This is only a last-resort guard for an impossible sentinel success or a
+  // provider rollback defect. Normal diagnostics never commit these rows.
+  await client.batch([
+    { sql: "DELETE FROM audit_logs WHERE tenant_id = ?", args: [tenantId] },
+    { sql: "DELETE FROM sync_changes WHERE tenant_id = ?", args: [tenantId] },
+    { sql: "DELETE FROM user_sync_records WHERE tenant_id = ?", args: [tenantId] },
+    { sql: "DELETE FROM refresh_tokens WHERE session_id = ?", args: [sessionId] },
+    { sql: "DELETE FROM login_sessions WHERE tenant_id = ?", args: [tenantId] },
+    { sql: "DELETE FROM registered_devices WHERE id = ?", args: [deviceId] },
+    { sql: "DELETE FROM user_store_assignments WHERE tenant_id = ?", args: [tenantId] },
+    { sql: "DELETE FROM users WHERE id = ?", args: [userId] },
+    { sql: "DELETE FROM stores WHERE tenant_id = ?", args: [tenantId] },
+    { sql: "DELETE FROM organizations WHERE id = ?", args: [tenantId] },
+  ], "write");
 }
 
 function escapeHtml(value: string): string {

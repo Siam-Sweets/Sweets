@@ -66,7 +66,7 @@ npm test
 npm run dev
 ```
 
-Open `http://127.0.0.1:8787/` to run the public end-to-end status page. It verifies password hashing, JWT/refresh-token cryptography, required tables and columns, and a complete organization/account/device/session/sync/audit write transaction that is rolled back and checked for cleanup. `GET /api/v1/diagnostics` returns the same result as JSON, while `GET /api/v1/meta` remains the lightweight metadata endpoint. Do not test account creation until the status page says **Ready** and **Account creation: verified**. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
+Open `http://127.0.0.1:8787/` to run the public end-to-end status page. It verifies password hashing, JWT/refresh-token cryptography, required tables and columns, and a complete organization/account/device/session/sync/audit batch that is intentionally aborted and checked for atomic rollback. `GET /api/v1/diagnostics` returns the same result as JSON, while `GET /api/v1/meta` remains the lightweight metadata endpoint. Do not test account creation until the status page says **Ready** and **Account creation: verified**. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
 
 ## 4. Deploy
 
@@ -76,7 +76,7 @@ npm run deploy:development
 npm run deploy:production
 ```
 
-Do not proceed to production until all four production runtime secrets exist, the migration step succeeds, and the Worker base URL status page reports **Ready**. The deployment workflow checks this automatically through `/api/v1/diagnostics`. After that preflight passes, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
+Do not proceed to production until all four production runtime secrets exist, the migration step succeeds, and the Worker base URL status page reports **Ready**. The deployment workflow checks this automatically through `/api/v1/diagnostics` and prints every failed stage from its JSON report. After that preflight passes, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
 
 ## GitHub Actions
 

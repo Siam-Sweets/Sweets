@@ -43,7 +43,7 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 2. Confirm the **Apply and verify Turso migrations** workflow step succeeded for the selected environment.
 3. Confirm the four runtime secrets and environment-specific `POSAPP_CLOUD_API_BASE_URL` exist for the exact Wrangler environment.
 4. Open the Worker base URL over HTTPS. Confirm the page says **Ready** and **Account creation: verified**.
-5. For machine-readable output, request `/api/v1/diagnostics`; every check must have `status: "pass"` and `accountCreationReady` must be `true`.
+5. For machine-readable output, request `/api/v1/diagnostics`. The endpoint always returns readable JSON; inspect `ready`, require every check to have `status: "pass"`, and require `accountCreationReady` to be `true`.
 6. Use Cloudflare logs by the status-page or desktop request ID; the Worker emits only a sanitized category/provider code and never request bodies, tokens, SQL, or database URLs.
 
 ## Local database issues

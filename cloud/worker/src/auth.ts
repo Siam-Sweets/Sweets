@@ -104,21 +104,15 @@ export async function signup(request: Request, env: Env, requestId: string, body
   const timestamp = nowIso();
   const syncPayload = userSyncPayload(username, email, fullName, "admin", true, timestamp, timestamp);
   const client = database(env);
-  let transaction: Transaction | undefined;
   try {
     await requireDatabaseSchema(client, schemaVersion(env));
-    try {
-      transaction = await client.transaction("write");
-    } catch (error) {
-      throw organizationProvisioningError("begin organization transaction", error);
-    }
-    const registeredDevice = await transaction.execute({
+    const registeredDevice = await client.execute({
       sql: "SELECT 1 FROM registered_devices WHERE id = ? LIMIT 1",
       args: [device.id],
     });
     if (registeredDevice.rows.length)
       throw new ApiError(409, "DEVICE_TENANT_MISMATCH", "This installation is already registered to an organization.");
-    const duplicate = await transaction.execute({
+    const duplicate = await client.execute({
       sql: "SELECT 1 FROM users WHERE username_normalized = ? OR email_normalized = ? LIMIT 1",
       args: [username, email],
     });
@@ -224,13 +218,7 @@ export async function signup(request: Request, env: Env, requestId: string, body
         args: [crypto.randomUUID(), tenantId, storeId, userId, device.id, timestamp, device.id, requestId],
       },
     ];
-    for (const step of provisioningSteps)
-      await executeOrganizationProvisioningStep(transaction, step.stage, step.sql, step.args);
-    try {
-      await transaction.commit();
-    } catch (error) {
-      throw organizationProvisioningError("commit organization transaction", error);
-    }
+    await executeOrganizationProvisioningBatch(client, provisioningSteps);
     return jsonResponse({
       tokens: {
         accessToken: access.token,
@@ -249,13 +237,11 @@ export async function signup(request: Request, env: Env, requestId: string, body
       apiVersion: apiVersion(env), schemaVersion: schemaVersion(env), deviceId: device.id,
     }, 201, requestId);
   } catch (error) {
-    if (transaction) await safeRollback(transaction);
     if (isUniqueError(error) && error instanceof Error && /registered_devices/i.test(error.message))
       throw new ApiError(409, "DEVICE_TENANT_MISMATCH", "This installation is already registered to an organization.");
     if (isUniqueError(error)) throw new ApiError(409, "ACCOUNT_ALREADY_EXISTS", "That username or email is already registered.");
     throw error;
   } finally {
-    transaction?.close();
     client.close();
   }
 }
@@ -1256,18 +1242,29 @@ async function auditFailedLogin(
   await client.batch(statements, "write");
 }
 
-async function executeOrganizationProvisioningStep(
-  transaction: Transaction,
-  stage: string,
-  sql: string,
-  args: Array<string | number | null>,
+async function executeOrganizationProvisioningBatch(
+  client: Client,
+  steps: Array<{ stage: string; sql: string; args: Array<string | number | null> }>,
 ): Promise<void> {
   try {
-    await transaction.execute({ sql, args });
+    // A libSQL batch is one non-interactive atomic transaction. This avoids
+    // holding a remote Turso interactive transaction open across many network
+    // round trips, which can expire before organization provisioning finishes.
+    await client.batch(steps.map(({ sql, args }) => ({ sql, args })), "write");
   } catch (error) {
     if (isUniqueError(error) || isDatabaseSchemaError(error)) throw error;
+    const statementIndex = batchStatementIndex(error);
+    const stage = statementIndex == null
+      ? "commit organization batch"
+      : steps[statementIndex]?.stage ?? "commit organization batch";
     throw organizationProvisioningError(stage, error);
   }
+}
+
+function batchStatementIndex(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const value = (error as Record<string, unknown>).statementIndex;
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
 }
 
 function organizationProvisioningError(stage: string, error: unknown): ApiError {

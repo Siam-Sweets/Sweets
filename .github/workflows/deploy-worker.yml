@@ -163,35 +163,79 @@ jobs:
         run: |
           set -euo pipefail
           base="${POSAPP_CLOUD_API_BASE_URL%/}"
+          expected_version="$(node -p "require('./cloud/worker/package.json').version")"
+          metadata_file="$(mktemp)"
           diagnostic_file="$(mktemp)"
-          ready=0
+          deployed=0
+
           for attempt in {1..12}; do
-            if curl --fail --silent --show-error \
-                --connect-timeout 10 --max-time 45 \
-                "$base/api/v1/diagnostics" -o "$diagnostic_file"; then
-              ready=1
+            metadata_status="$(curl --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              --output "$metadata_file" --write-out '%{http_code}' \
+              "$base/api/v1/meta" || true)"
+            if [[ "$metadata_status" == "200" ]] && node - "$metadata_file" "$expected_version" <<'NODE'
+          const { readFileSync } = require('node:fs');
+          try {
+            const report = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+            process.exit(report.deploymentVersion === process.argv[3] ? 0 : 1);
+          } catch {
+            process.exit(1);
+          }
+          NODE
+            then
+              deployed=1
               break
             fi
-            echo "Diagnostic endpoint is not ready yet (attempt $attempt/12)."
+            echo "Waiting for Worker $expected_version to propagate (attempt $attempt/12, HTTP ${metadata_status:-000})."
             sleep 5
           done
-          if [[ "$ready" -ne 1 ]]; then
-            echo "::error title=Worker diagnostic failed::The deployed Worker did not pass its public end-to-end diagnostic. Open $base to see the failed stage and request ID."
+
+          if [[ "$deployed" -ne 1 ]]; then
+            echo "::error title=Worker deployment not visible::The expected Worker version did not appear at $base/api/v1/meta."
+            test ! -s "$metadata_file" || cat "$metadata_file"
             exit 1
           fi
+
+          diagnostic_status="$(curl --silent --show-error \
+            --connect-timeout 10 --max-time 60 \
+            --output "$diagnostic_file" --write-out '%{http_code}' \
+            "$base/api/v1/diagnostics" || true)"
+          if [[ "$diagnostic_status" != "200" ]]; then
+            echo "::error title=Worker diagnostic request failed::The endpoint returned HTTP ${diagnostic_status:-000}."
+            test ! -s "$diagnostic_file" || cat "$diagnostic_file"
+            exit 1
+          fi
+
           node - "$diagnostic_file" <<'NODE'
           const { readFileSync } = require('node:fs');
-          const report = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-          if (report.ready !== true || report.accountCreationReady !== true) {
-            const failed = Array.isArray(report.checks)
-              ? report.checks.filter((check) => check.status !== 'pass')
-                  .map((check) => `${check.name}: ${check.stage || check.code || check.message}`).join('; ')
-              : 'unknown diagnostic failure';
-            throw new Error(`Worker is not ready: ${failed}`);
+          const path = process.argv[2];
+          let report;
+          try {
+            report = JSON.parse(readFileSync(path, 'utf8'));
+          } catch (error) {
+            throw new Error(`Diagnostic endpoint did not return valid JSON: ${error.message}`);
           }
-          console.log(`Worker ${report.deploymentVersion} passed organization creation preflight.`);
+
+          const checks = Array.isArray(report.checks) ? report.checks : [];
+          console.log(`Worker ${report.deploymentVersion || 'unknown'} diagnostic request ${report.requestId || 'unknown'}`);
+          for (const check of checks) {
+            const detail = [check.stage, check.code, check.providerCode].filter(Boolean).join(' | ');
+            console.log(`${check.status === 'pass' ? 'PASS' : 'FAIL'}: ${check.name}: ${check.message}${detail ? ` (${detail})` : ''}`);
+          }
+
+          if (report.ready !== true || report.accountCreationReady !== true) {
+            const failed = checks.filter((check) => check.status !== 'pass');
+            const summary = failed.length
+              ? failed.map((check) => `${check.name}: ${check.stage || check.code || check.message}`).join('; ')
+              : 'The diagnostic response did not mark account creation as ready.';
+            const escaped = summary.replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+            console.error(`::error title=Worker account creation is not ready::${escaped}`);
+            console.error(`Request ID: ${report.requestId || 'unknown'}`);
+            process.exit(1);
+          }
           NODE
-          curl --fail --silent --show-error --connect-timeout 10 --max-time 45 "$base/" \
+
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 30 "$base/" \
             | grep -q "Organization creation preflight"
 
       - name: Deployment summary
@@ -199,4 +243,4 @@ jobs:
           echo "## PosApp Cloud Worker" >> "$GITHUB_STEP_SUMMARY"
           echo "Environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Turso migrations were applied idempotently and verified before the Worker deployment." >> "$GITHUB_STEP_SUMMARY"
-          echo "The public status page passed its password, token, schema, transaction, rollback, synchronization, and audit preflight." >> "$GITHUB_STEP_SUMMARY"
+          echo "The public status page passed its password, token, schema, atomic batch, rollback, synchronization, and audit preflight." >> "$GITHUB_STEP_SUMMARY"

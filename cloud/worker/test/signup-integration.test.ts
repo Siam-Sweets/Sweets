@@ -44,7 +44,7 @@ const env: Env = {
   SCHEMA_VERSION: "4",
   MINIMUM_CLIENT_SCHEMA_VERSION: "4",
   API_VERSION: "1",
-  DEPLOYMENT_VERSION: "2.0.11-test",
+  DEPLOYMENT_VERSION: "2.0.12-test",
 };
 
 beforeAll(async () => {
@@ -81,6 +81,27 @@ describe("organization provisioning integration", () => {
     expect(html).toContain("Checking deployment");
   });
 
+  it("returns failed readiness checks as readable JSON instead of an opaque HTTP 503", async () => {
+    const response = await worker.fetch(
+      new Request("https://example.test/api/v1/diagnostics"),
+      { ...env, JWT_SIGNING_SECRET: "too-short" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    const report = await response.json() as {
+      ready: boolean;
+      accountCreationReady: boolean;
+      checks: Array<{ status: string; code?: string }>;
+    };
+    expect(report.ready).toBe(false);
+    expect(report.accountCreationReady).toBe(false);
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      status: "fail",
+      code: "AUTHENTICATION_CONFIGURATION_ERROR",
+    }));
+  });
+
   it("passes the public write-and-rollback diagnostic without leaving rows", async () => {
     const report = await runCloudDiagnostics(env, "request-diagnostic-test");
     expect(report.ready).toBe(true);
@@ -98,7 +119,7 @@ describe("organization provisioning integration", () => {
     }
   });
 
-  it("creates an organization through the same transaction path used in production", async () => {
+  it("creates an organization through the same atomic batch path used in production", async () => {
     const response = await signup(
       new Request("https://example.test/api/v1/auth/signup", { method: "POST" }),
       env,
@@ -129,5 +150,35 @@ describe("organization provisioning integration", () => {
     expect(body.organizationId).toMatch(/^[0-9a-f-]{36}$/);
     expect(body.user.username).toBe("siamtest");
     expect(body.store.code).toBe("MAIN");
+
+    const client = createClient({ url: `file:${dbPath}` });
+    try {
+      const result = await client.execute({
+        sql: `SELECT
+                (SELECT COUNT(*) FROM organizations WHERE id = ?) AS organizations,
+                (SELECT COUNT(*) FROM stores WHERE tenant_id = ?) AS stores,
+                (SELECT COUNT(*) FROM users WHERE tenant_id = ?) AS users,
+                (SELECT COUNT(*) FROM registered_devices WHERE tenant_id = ?) AS devices,
+                (SELECT COUNT(*) FROM login_sessions WHERE tenant_id = ?) AS sessions,
+                (SELECT COUNT(*) FROM refresh_tokens rt
+                  JOIN login_sessions ls ON ls.id = rt.session_id WHERE ls.tenant_id = ?) AS refreshTokens,
+                (SELECT COUNT(*) FROM user_sync_records WHERE tenant_id = ?) AS syncUsers,
+                (SELECT COUNT(*) FROM sync_changes WHERE tenant_id = ?) AS syncChanges,
+                (SELECT COUNT(*) FROM audit_logs WHERE tenant_id = ?) AS auditLogs`,
+        args: Array(9).fill(body.organizationId),
+      });
+      const row = result.rows[0]!;
+      expect(Number(row.organizations)).toBe(1);
+      expect(Number(row.stores)).toBe(1);
+      expect(Number(row.users)).toBe(1);
+      expect(Number(row.devices)).toBe(1);
+      expect(Number(row.sessions)).toBe(1);
+      expect(Number(row.refreshTokens)).toBe(1);
+      expect(Number(row.syncUsers)).toBe(1);
+      expect(Number(row.syncChanges)).toBe(1);
+      expect(Number(row.auditLogs)).toBe(3);
+    } finally {
+      client.close();
+    }
   });
 });

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.12 — Atomic Turso signup batch and transparent deployment diagnostics
+
+- Replaced organization creation's long-lived interactive Turso transaction with one non-interactive `client.batch(..., "write")` transaction, eliminating the repeated remote round trips that could expire before provisioning completed.
+- Preserved atomic all-or-nothing creation of the organization, store, administrator, assignment, device, session, refresh token, synchronized user record, sync change, and audit events.
+- Added failed batch-statement mapping so `ORGANIZATION_PROVISIONING_FAILED` still identifies the exact safe provisioning stage.
+- Reworked the public organization preflight to use the same atomic batch mechanism and an intentional final primary-key conflict as a rollback sentinel, then verifies that no diagnostic organization remains.
+- Changed `/api/v1/diagnostics` to always return readable JSON with HTTP 200; readiness remains explicit in `ready`, `accountCreationReady`, and each check's status.
+- Updated GitHub Actions to wait for the expected deployed Worker version, capture diagnostics without `curl --fail`, print every check and failed stage, and report the request ID instead of repeating an opaque HTTP 503 twelve times.
+- Updated the status page and cloud documentation to describe the atomic batch preflight and machine-readable readiness contract.
+- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.12.
+
 ## 2.0.11 — Public Worker diagnostics and reliable organization provisioning
 
 - Replaced the authenticated root API response with a public, responsive Worker status page at `/` that shows deployment, database, schema, authentication, and organization-creation readiness without exposing secrets or user data.
