@@ -110,7 +110,7 @@ internal static class LocalSyncOutboxCapture
             // to keep a recalled sale's draft-line changes ahead of its final
             // header transition when a large transaction spans several batches.
             var (expectedItemCount, expectedPaymentCount) = operationKind == SyncOperationKind.Upsert
-                ? await GetCompositionCountsAsync(db, change.Entity, cancellationToken)
+                ? await GetCompositionCountsAsync(db, change.Entity, localId, cancellationToken)
                 : ((int?)null, (int?)null);
             var (catalogVersion, legacyPriceSnapshot) = operationKind == SyncOperationKind.Upsert
                 ? await GetCatalogSnapshotAsync(
@@ -261,20 +261,25 @@ internal static class LocalSyncOutboxCapture
     private static async Task<(int? ItemCount, int? PaymentCount)> GetCompositionCountsAsync(
         AppDbContext db,
         object entity,
+        int persistedLocalId,
         CancellationToken cancellationToken)
     {
-        if (entity is Sale sale)
+        // Capture runs after SaveChanges(false). EF has already replaced the
+        // temporary key in its tracked property, but the entity CLR Id can still
+        // expose its pre-save default value. Query immutable children with the
+        // permanent key bound by BindPersistedKeys instead of entity.Id.
+        if (entity is Sale)
         {
             var items = await db.SaleItems.IgnoreQueryFilters()
-                .CountAsync(value => value.SaleId == sale.Id, cancellationToken);
+                .CountAsync(value => value.SaleId == persistedLocalId, cancellationToken);
             var payments = await db.SalePayments.IgnoreQueryFilters()
-                .CountAsync(value => value.SaleId == sale.Id, cancellationToken);
+                .CountAsync(value => value.SaleId == persistedLocalId, cancellationToken);
             return (items, payments);
         }
-        if (entity is PurchaseDocument purchase)
+        if (entity is PurchaseDocument)
         {
             var items = await db.PurchaseItems.IgnoreQueryFilters()
-                .CountAsync(value => value.PurchaseDocumentId == purchase.Id, cancellationToken);
+                .CountAsync(value => value.PurchaseDocumentId == persistedLocalId, cancellationToken);
             return (items, null);
         }
         return (null, null);

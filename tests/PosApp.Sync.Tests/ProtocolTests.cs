@@ -62,7 +62,7 @@ public sealed class ProtocolTests
     {
         Assert.Equal(1, CloudProtocol.ApiVersion);
         Assert.Equal(4, CloudProtocol.ClientSchemaVersion);
-        Assert.Equal("2.0.3", CloudProtocol.ClientVersion);
+        Assert.Equal("2.0.4", CloudProtocol.ClientVersion);
         Assert.Equal(2, CloudProtocol.MaxPushBatch);
         Assert.InRange(CloudProtocol.MaxPullBatch, 1, 200);
     }

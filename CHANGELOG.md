@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.4 — Immutable sale composition capture fix
+
+- Counted sale items, sale payments, and purchase items with the permanent local key bound after `SaveChanges(false)` instead of the entity CLR `Id`, which can still expose its pre-save default value during atomic outbox capture.
+- Restored accurate `expectedItemCount` and `expectedPaymentCount` values for newly completed sales, allowing immutable financial composition validation to pass.
+- Updated application, installer, cloud client, Worker package, workflow examples, tests, and README version metadata to 2.0.4.
+
 ## 2.0.3 — Synchronization runtime and test reliability fixes
 
 - Bound outbox capture to permanent post-save SQLite keys so added, edited, and deleted records retain one stable UUID identity and one compacted pending operation.
