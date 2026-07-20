@@ -197,7 +197,7 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
   const ready = checks.every((check) => check.status === "pass") && accountCreationReady;
   return {
     service: "PosApp Cloud API",
-    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.13",
+    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.14",
     checkedAtUtc: nowIso(),
     requestId,
     ready,
@@ -219,7 +219,7 @@ export async function diagnosticsJson(env: Env, requestId: string): Promise<Resp
 
 export async function diagnosticsPage(request: Request, env: Env, requestId: string): Promise<Response> {
   const origin = new URL(request.url).origin;
-  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.13";
+  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.14";
   const nonce = crypto.randomUUID().replace(/-/g, "");
   const html = `<!doctype html>
 <html lang="en">
@@ -227,6 +227,9 @@ export async function diagnosticsPage(request: Request, env: Env, requestId: str
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
+  <meta name="posapp-status-page" content="true">
+  <meta name="posapp-deployment-version" content="${escapeHtml(deploymentVersion)}">
+  <meta name="posapp-diagnostics-endpoint" content="/api/v1/diagnostics">
   <title>PosApp Cloud status</title>
   <style>
     :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color-scheme: light dark; }
@@ -377,6 +380,8 @@ export async function diagnosticsPage(request: Request, env: Env, requestId: str
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "x-request-id": requestId,
+      "x-posapp-status-page": "1",
+      "x-posapp-deployment-version": deploymentVersion,
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
       "content-security-policy": `default-src 'none'; connect-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'`,

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.14 — Reliable public status-page deployment verification
+
+- Fixed the final Worker deployment gate, which searched the initial HTML for `Organization creation preflight` even though that check name is populated later by browser JavaScript from `/api/v1/diagnostics`.
+- Added machine-readable `x-posapp-status-page` and `x-posapp-deployment-version` response headers plus matching HTML metadata to the public root status page.
+- Updated GitHub Actions to wait independently for the root page to serve the expected rolling-deployment version instead of validating whichever old Worker instance answered first.
+- Replaced the dynamic-text grep with structural checks for the status-page title, diagnostics link, run button, and deployment markers.
+- Added cache-busting deployment probes and concise failure output so a stale root route is retried instead of dumping an entire HTML document.
+- Added integration coverage for the root status-page headers and metadata.
+- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.14.
+
 ## 2.0.13 — Free-plan authentication crypto and rolling deployment verification
 
 - Replaced new online-password records with a deployment-secret-peppered PBKDF2 verifier that stays within the Cloudflare Workers Free per-request CPU budget while preserving unique salts, constant-time comparison, and database-leak resistance through a dedicated domain-separated password-pepper secret.

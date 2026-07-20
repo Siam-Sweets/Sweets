@@ -190,13 +190,34 @@ jobs:
           NODE
           }
 
+          header_value() {
+            node - "$1" "$2" <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const path = process.argv[2];
+          const expectedName = process.argv[3].toLowerCase();
+          let value = '';
+          try {
+            for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
+              const separator = line.indexOf(':');
+              if (separator < 0) continue;
+              if (line.slice(0, separator).trim().toLowerCase() === expectedName) {
+                value = line.slice(separator + 1).trim();
+              }
+            }
+          } catch {
+            value = '';
+          }
+          process.stdout.write(value);
+          NODE
+          }
+
           # First wait for the lightweight metadata route. Cloudflare can serve
           # old and new Worker versions concurrently for a short rolling window.
           for attempt in {1..24}; do
             metadata_status="$(curl --silent --show-error \
               --connect-timeout 10 --max-time 30 \
               --output "$metadata_file" --write-out '%{http_code}' \
-              "$base/api/v1/meta" || true)"
+              "$base/api/v1/meta?deployment_check=${GITHUB_RUN_ID:-manual}-$attempt" || true)"
             metadata_version="$(json_version "$metadata_file")"
             if [[ "$metadata_status" == "200" && "$metadata_version" == "$expected_version" ]]; then
               metadata_visible=1
@@ -219,7 +240,7 @@ jobs:
             diagnostic_status="$(curl --silent --show-error \
               --connect-timeout 10 --max-time 60 \
               --output "$diagnostic_file" --write-out '%{http_code}' \
-              "$base/api/v1/diagnostics" || true)"
+              "$base/api/v1/diagnostics?deployment_check=${GITHUB_RUN_ID:-manual}-$attempt" || true)"
             diagnostic_version="$(json_version "$diagnostic_file")"
             if [[ "$diagnostic_version" == "$expected_version" ]]; then
               diagnostic_visible=1
@@ -275,14 +296,43 @@ jobs:
           }
           NODE
 
+          # Finally wait independently for the public root page. Its detailed
+          # diagnostic cards are rendered by browser JavaScript, so validate the
+          # static interface and machine-readable deployment headers rather than
+          # grepping for dynamic check names in the initial HTML response.
           status_page_file="$(mktemp)"
-          status_page_status="$(curl --silent --show-error \
-            --connect-timeout 10 --max-time 30 \
-            --output "$status_page_file" --write-out '%{http_code}' \
-            "$base/" || true)"
-          if [[ "$status_page_status" != "200" ]] || ! grep -q "Organization creation preflight" "$status_page_file"; then
-            echo "::error title=Worker status page failed::The public root page did not expose the expected diagnostic interface."
-            test ! -s "$status_page_file" || cat "$status_page_file"
+          status_page_headers="$(mktemp)"
+          status_page_visible=0
+          status_page_status="000"
+          for attempt in {1..10}; do
+            status_page_status="$(curl --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              --dump-header "$status_page_headers" \
+              --output "$status_page_file" --write-out '%{http_code}' \
+              "$base/?deployment_check=${GITHUB_RUN_ID:-manual}-$attempt" || true)"
+            status_page_version="$(header_value "$status_page_headers" "x-posapp-deployment-version")"
+            status_page_marker="$(header_value "$status_page_headers" "x-posapp-status-page")"
+            if [[ "$status_page_status" == "200" && "$status_page_version" == "$expected_version" && "$status_page_marker" == "1" ]]; then
+              status_page_visible=1
+              break
+            fi
+            echo "Waiting for Worker $expected_version status page to propagate (attempt $attempt/10, deployed ${status_page_version:-unknown}, marker ${status_page_marker:-missing}, HTTP ${status_page_status:-000})."
+            sleep 6
+          done
+
+          if [[ "$status_page_visible" -ne 1 ]]; then
+            echo "::error title=Worker status page deployment not visible::Metadata and diagnostics reached $expected_version, but the public root page did not."
+            sed -n '1,30p' "$status_page_headers"
+            test ! -s "$status_page_file" || sed -n '1,40p' "$status_page_file"
+            exit 1
+          fi
+
+          if ! grep -Fq '<title>PosApp Cloud status</title>' "$status_page_file" \
+            || ! grep -Fq 'name="posapp-status-page" content="true"' "$status_page_file" \
+            || ! grep -Fq 'href="/api/v1/diagnostics"' "$status_page_file" \
+            || ! grep -Fq 'id="run"' "$status_page_file"; then
+            echo "::error title=Worker status page failed::Worker $expected_version returned HTTP 200 but the public diagnostic interface is incomplete."
+            sed -n '1,40p' "$status_page_file"
             exit 1
           fi
 
