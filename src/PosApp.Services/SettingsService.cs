@@ -16,7 +16,7 @@ public class SettingsService : ISettingsService
     public async Task<string?> GetAsync(string key)
     {
         var normalizedKey = NormalizeKey(key);
-        var setting = await _db.Settings.AsNoTracking().FirstOrDefaultAsync(x => x.Key == normalizedKey);
+        var setting = await FindVisibleSettingAsync(normalizedKey, tracking: false);
         return setting?.Value;
     }
 
@@ -25,7 +25,7 @@ public class SettingsService : ISettingsService
         var normalizedKey = NormalizeKey(key);
         if (value?.Length > 8192)
             throw new InvalidOperationException("A setting value cannot exceed 8192 characters.");
-        var setting = await _db.Settings.FirstOrDefaultAsync(x => x.Key == normalizedKey);
+        var setting = await FindVisibleSettingAsync(normalizedKey, tracking: true);
         if (setting == null)
         {
             setting = new Setting { Key = normalizedKey, Value = value };
@@ -85,6 +85,35 @@ public class SettingsService : ISettingsService
         normalized.BackupRetentionCount = Math.Clamp(normalized.BackupRetentionCount, 1, 365);
         var json = JsonSerializer.Serialize(normalized);
         await SetAsync("store:config", json);
+    }
+
+    private async Task<Setting?> FindVisibleSettingAsync(string normalizedKey, bool tracking)
+    {
+        IQueryable<Setting> settings = _db.Settings.IgnoreQueryFilters();
+        if (!tracking) settings = settings.AsNoTracking();
+
+        var capture = SyncCaptureContext.Current;
+        if (!capture.Enabled || string.IsNullOrWhiteSpace(capture.StoreId) ||
+            normalizedKey.StartsWith("app:", StringComparison.OrdinalIgnoreCase))
+            return await settings.FirstOrDefaultAsync(value => value.Key == normalizedKey);
+
+        var storeId = capture.StoreId;
+        var scoped = await settings.FirstOrDefaultAsync(value =>
+            value.Key == normalizedKey &&
+            _db.SyncIdentities.Any(identity =>
+                identity.EntityType == "settings" &&
+                identity.LocalId == value.Id &&
+                identity.StoreId == storeId &&
+                identity.DeletedAtUtc == null));
+        if (scoped != null) return scoped;
+
+        // An unlinked legacy setting is visible until it is adopted by the
+        // currently selected branch. A setting linked to another branch must
+        // never be updated merely because it uses the same key.
+        return await settings.FirstOrDefaultAsync(value =>
+            value.Key == normalizedKey &&
+            !_db.SyncIdentities.Any(identity =>
+                identity.EntityType == "settings" && identity.LocalId == value.Id));
     }
 
     private static string NormalizeKey(string? key)

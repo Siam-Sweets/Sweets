@@ -465,6 +465,7 @@ public class AppDbContext : DbContext
             // entries twice and means a serialization failure leaves the caller's
             // tracked states retryable after the database rollback.
             var affected = await base.SaveChangesAsync(false, cancellationToken);
+            var persistedChanges = LocalSyncOutboxCapture.BindPersistedKeys(this, changes);
             var currentTransaction = Database.CurrentTransaction
                                      ?? throw new InvalidOperationException("The local sync transaction is unavailable.");
             var metadataOptions = new DbContextOptionsBuilder<AppDbContext>()
@@ -479,9 +480,15 @@ public class AppDbContext : DbContext
                 await metadataDb.Database.UseTransactionAsync(
                     currentTransaction.GetDbTransaction(), cancellationToken);
                 await LocalSyncOutboxCapture.CaptureAsync(
-                    metadataDb, changes, capture, cancellationToken);
+                    metadataDb, persistedChanges, capture, cancellationToken);
                 await metadataDb.SaveChangesAsync(true, cancellationToken);
             }
+
+            // The metadata write uses a short-lived context, but callers may
+            // already be tracking an identity or outbox row. Reload those rows
+            // so this context does not continue exposing stale server versions,
+            // tombstones, or compacted payloads.
+            await RefreshTrackedSyncMetadataAsync(persistedChanges, cancellationToken);
 
             if (ownedTransaction != null)
             {
@@ -505,5 +512,28 @@ public class AppDbContext : DbContext
             if (ownedTransaction != null)
                 await ownedTransaction.DisposeAsync();
         }
+    }
+
+    private async Task RefreshTrackedSyncMetadataAsync(
+        IReadOnlyList<TrackedSyncChange> changes,
+        CancellationToken cancellationToken)
+    {
+        var changedRows = changes
+            .Select(change => (change.Descriptor.EntityType, change.LocalId))
+            .ToHashSet();
+
+        foreach (var entry in ChangeTracker.Entries<SyncIdentity>()
+                     .Where(entry =>
+                         (entry.State is EntityState.Unchanged or EntityState.Modified) &&
+                         changedRows.Contains((entry.Entity.EntityType, entry.Entity.LocalId)))
+                     .ToArray())
+            await entry.ReloadAsync(cancellationToken);
+
+        foreach (var entry in ChangeTracker.Entries<SyncOutboxOperation>()
+                     .Where(entry =>
+                         (entry.State is EntityState.Unchanged or EntityState.Modified) &&
+                         changedRows.Contains((entry.Entity.EntityType, entry.Entity.LocalId)))
+                     .ToArray())
+            await entry.ReloadAsync(cancellationToken);
     }
 }

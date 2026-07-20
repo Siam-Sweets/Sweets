@@ -32,7 +32,13 @@ public static class InitialSyncOutboxBuilder
                 if (rows.Count == 0) continue;
 
                 var changes = rows
-                    .Select(row => new TrackedSyncChange(row, EntityState.Modified, descriptor))
+                    .Select(row => new TrackedSyncChange(
+                        row,
+                        EntityState.Modified,
+                        descriptor,
+                        Convert.ToInt32(row.GetType().GetProperty("Id")?.GetValue(row)
+                                        ?? throw new InvalidOperationException(
+                                            $"{row.GetType().Name} has no local Id."))))
                     .ToArray();
                 await LocalSyncOutboxCapture.CaptureAsync(
                     db, changes, capture, cancellationToken, isInitialMigration: true);

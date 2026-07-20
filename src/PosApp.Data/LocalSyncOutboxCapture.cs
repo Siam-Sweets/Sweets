@@ -7,7 +7,11 @@ using PosApp.Core.Entities;
 
 namespace PosApp.Data;
 
-internal sealed record TrackedSyncChange(object Entity, EntityState State, SyncEntityDescriptor Descriptor);
+internal sealed record TrackedSyncChange(
+    object Entity,
+    EntityState State,
+    SyncEntityDescriptor Descriptor,
+    int LocalId = 0);
 
 internal static class LocalSyncOutboxCapture
 {
@@ -31,6 +35,28 @@ internal static class LocalSyncOutboxCapture
             .Cast<TrackedSyncChange>()
             .ToArray();
 
+    /// <summary>
+    /// Resolves permanent database keys after the operational rows have been
+    /// written. Sync metadata must never be created from EF temporary/default
+    /// keys because a later edit or delete would be treated as another record.
+    /// </summary>
+    public static IReadOnlyList<TrackedSyncChange> BindPersistedKeys(
+        AppDbContext db,
+        IReadOnlyList<TrackedSyncChange> changes)
+        => changes.Select(change =>
+        {
+            var entry = db.Entry(change.Entity);
+            var keyProperty = entry.Metadata.FindPrimaryKey()?.Properties.SingleOrDefault()
+                              ?? throw new InvalidOperationException(
+                                  $"SYNC_LOCAL_KEY_UNAVAILABLE: {change.Descriptor.EntityType} has no primary key.");
+            var key = entry.Property(keyProperty.Name);
+            var localId = Convert.ToInt32(key.CurrentValue);
+            if (key.IsTemporary || localId <= 0)
+                throw new InvalidOperationException(
+                    $"SYNC_LOCAL_KEY_UNAVAILABLE: {change.Descriptor.EntityType} has no permanent local key after SaveChanges.");
+            return change with { LocalId = localId };
+        }).ToArray();
+
     public static async Task CaptureAsync(
         AppDbContext db,
         IReadOnlyList<TrackedSyncChange> changes,
@@ -39,17 +65,22 @@ internal static class LocalSyncOutboxCapture
         bool isInitialMigration = false)
     {
         if (changes.Count == 0) return;
+        var invalidKey = changes.FirstOrDefault(change => change.LocalId <= 0);
+        if (invalidKey != null)
+            throw new InvalidOperationException(
+                $"SYNC_LOCAL_KEY_UNAVAILABLE: {invalidKey.Descriptor.EntityType} has no permanent local key.");
+
         var capturingUserId = capture.UserId ?? throw new InvalidOperationException(
             "SYNC_USER_REQUIRED: synchronized local changes require an attributed cloud user.");
 
         var identities = new Dictionary<(string EntityType, int LocalId), SyncIdentity>();
         var changedProductIds = changes
             .Where(change => change.Descriptor.EntityType == "products")
-            .Select(change => GetLocalId(change.Entity))
+            .Select(change => change.LocalId)
             .ToHashSet();
         foreach (var change in changes)
         {
-            var localId = GetLocalId(change.Entity);
+            var localId = change.LocalId;
             var identity = await FindOrCreateIdentityAsync(
                 db, change.Descriptor.EntityType, localId, capture, identities, cancellationToken);
             identities[(change.Descriptor.EntityType, localId)] = identity;
@@ -69,7 +100,7 @@ internal static class LocalSyncOutboxCapture
 
         foreach (var change in changes)
         {
-            var localId = GetLocalId(change.Entity);
+            var localId = change.LocalId;
             var identity = identities[(change.Descriptor.EntityType, localId)];
             var operationKind = change.State == EntityState.Deleted
                 ? SyncOperationKind.Delete
@@ -94,13 +125,12 @@ internal static class LocalSyncOutboxCapture
             identity.StoreId = change.Descriptor.StoreScoped ? capture.StoreId : null;
             identity.DeletedAtUtc = operationKind == SyncOperationKind.Delete ? DateTime.UtcNow : null;
 
-            // Compact unsent edits to the same row. This prevents two rapid local
-            // saves from using the same server base version and conflicting with
-            // each other before either operation has left the device.
+            // Compact unsent edits to the same row even when another signed-in
+            // user made the latest edit. The pending operation is re-attributed
+            // to that user below, avoiding two writes with the same base version.
             var pending = await db.SyncOutboxOperations.FirstOrDefaultAsync(operation =>
                     operation.EntityType == change.Descriptor.EntityType &&
                     operation.RecordId == identity.RecordId &&
-                    operation.CreatedByUserId == capturingUserId &&
                     operation.Status == SyncOutboxStatus.Pending,
                 cancellationToken);
 
@@ -293,10 +323,6 @@ internal static class LocalSyncOutboxCapture
 
     private static bool IsLocalOnlySetting(object entity)
         => entity is Setting setting && setting.Key.StartsWith("app:", StringComparison.OrdinalIgnoreCase);
-
-    private static int GetLocalId(object entity)
-        => Convert.ToInt32(entity.GetType().GetProperty("Id")?.GetValue(entity)
-                           ?? throw new InvalidOperationException($"{entity.GetType().Name} has no local Id."));
 
     private static int? GetNullableInt(object entity, string propertyName)
     {

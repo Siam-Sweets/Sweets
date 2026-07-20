@@ -13,20 +13,16 @@ public sealed class PullApplierTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        SyncCaptureContext.Disable();
         _factory = new TestDbFactory(_databasePath);
         await using var db = await _factory.CreateDbContextAsync();
         await db.Database.EnsureCreatedAsync();
     }
 
-    public Task DisposeAsync()
+    public async Task DisposeAsync()
     {
         SyncCaptureContext.Disable();
-        foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
-        {
-            var path = _databasePath + suffix;
-            if (File.Exists(path)) File.Delete(path);
-        }
-        return Task.CompletedTask;
+        await DeleteDatabaseFilesAsync(_databasePath);
     }
 
     [Fact]
@@ -212,9 +208,30 @@ public sealed class PullApplierTests : IAsyncLifetime
 
     private sealed class TestDbFactory(string databasePath) : IDbContextFactory<AppDbContext>
     {
-        public AppDbContext CreateDbContext() => new($"Data Source={databasePath}");
+        public AppDbContext CreateDbContext()
+            => new($"Data Source={databasePath};Pooling=False;Foreign Keys=True");
 
         public Task<AppDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
             => Task.FromResult(CreateDbContext());
+    }
+
+    private static async Task DeleteDatabaseFilesAsync(string databasePath)
+    {
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            try
+            {
+                foreach (var suffix in new[] { string.Empty, "-wal", "-shm", "-journal" })
+                {
+                    var path = databasePath + suffix;
+                    if (File.Exists(path)) File.Delete(path);
+                }
+                return;
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                await Task.Delay(50 * attempt);
+            }
+        }
     }
 }

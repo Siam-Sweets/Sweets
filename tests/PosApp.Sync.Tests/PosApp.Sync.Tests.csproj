@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\PosApp.Localization\Strings.en.xaml" Link="Localization\Strings.en.xaml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\PosApp.Localization\Strings.bn.xaml" Link="Localization\Strings.bn.xaml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

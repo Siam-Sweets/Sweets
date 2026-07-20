@@ -10,11 +10,13 @@ namespace PosApp.Sync.Tests;
 public sealed class OutboxTests : IAsyncLifetime
 {
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"posapp-sync-{Guid.NewGuid():N}.db");
+    private string ConnectionString => $"Data Source={_databasePath};Pooling=False;Foreign Keys=True";
     private AppDbContext _db = null!;
 
     public async Task InitializeAsync()
     {
-        _db = new AppDbContext($"Data Source={_databasePath}");
+        SyncCaptureContext.Disable();
+        _db = new AppDbContext(ConnectionString);
         await _db.Database.EnsureCreatedAsync();
         SyncCaptureContext.Enable(
             "00000000-0000-4000-8000-000000000001",
@@ -26,8 +28,9 @@ public sealed class OutboxTests : IAsyncLifetime
     public async Task DisposeAsync()
     {
         SyncCaptureContext.Disable();
+        await _db.Database.CloseConnectionAsync();
         await _db.DisposeAsync();
-        if (File.Exists(_databasePath)) File.Delete(_databasePath);
+        await DeleteDatabaseFilesAsync(_databasePath);
     }
 
     [Fact]
@@ -84,6 +87,11 @@ public sealed class OutboxTests : IAsyncLifetime
         await _db.SaveChangesAsync();
         var original = await _db.SyncOutboxOperations.SingleAsync(value => value.EntityType == "customers");
 
+        SyncCaptureContext.Enable(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-4000-8000-000000000003",
+            "00000000-0000-4000-8000-000000000005");
         customer.Name = "Corrected name";
         customer.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
@@ -91,6 +99,7 @@ public sealed class OutboxTests : IAsyncLifetime
         var operations = await _db.SyncOutboxOperations.Where(value => value.EntityType == "customers").ToListAsync();
         Assert.Single(operations);
         Assert.Equal(original.OperationId, operations[0].OperationId);
+        Assert.Equal("00000000-0000-4000-8000-000000000005", operations[0].CreatedByUserId);
         Assert.Contains("Corrected name", operations[0].PayloadJson, StringComparison.Ordinal);
     }
 
@@ -100,6 +109,11 @@ public sealed class OutboxTests : IAsyncLifetime
         var category = new Category { Name = "Temporary" };
         _db.Categories.Add(category);
         await _db.SaveChangesAsync();
+        SyncCaptureContext.Enable(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+            "00000000-0000-4000-8000-000000000003",
+            "00000000-0000-4000-8000-000000000005");
         _db.Categories.Remove(category);
         await _db.SaveChangesAsync();
 
@@ -134,7 +148,11 @@ public sealed class OutboxTests : IAsyncLifetime
     [Fact]
     public async Task InventoryBalanceChangesUseTheLedgerWithoutCreatingProductVersionNoise()
     {
-        var product = new Product { Name = "Coffee", Price = 5m, StockQuantity = 10m };
+        var category = new Category { Name = "Inventory" };
+        var product = new Product
+        {
+            Name = "Coffee", Category = category, Price = 5m, StockQuantity = 10m
+        };
         _db.Products.Add(product);
         await _db.SaveChangesAsync();
         var productOperation = await _db.SyncOutboxOperations.SingleAsync(value => value.EntityType == "products");
@@ -163,7 +181,11 @@ public sealed class OutboxTests : IAsyncLifetime
     public async Task SaleHeaderDeclaresItsImmutableLineAndPaymentComposition()
     {
         var user = new User { Username = "cashier-1", FullName = "Cashier", IsActive = true };
-        var product = new Product { Name = "Tea", Sku = "TEA-COMP", Price = 10m, CostPrice = 6m };
+        var category = new Category { Name = "Sale composition" };
+        var product = new Product
+        {
+            Name = "Tea", Sku = "TEA-COMP", Category = category, Price = 10m, CostPrice = 6m
+        };
         _db.AddRange(user, product);
         await _db.SaveChangesAsync();
         var sale = new Sale
@@ -354,5 +376,25 @@ public sealed class OutboxTests : IAsyncLifetime
 
         SyncCaptureContext.Enable(tenantId, northStore, deviceId, userId);
         Assert.Equal("north", await settings.GetAsync("store:test"));
+    }
+
+    private static async Task DeleteDatabaseFilesAsync(string databasePath)
+    {
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            try
+            {
+                foreach (var suffix in new[] { string.Empty, "-wal", "-shm", "-journal" })
+                {
+                    var path = databasePath + suffix;
+                    if (File.Exists(path)) File.Delete(path);
+                }
+                return;
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                await Task.Delay(50 * attempt);
+            }
+        }
     }
 }

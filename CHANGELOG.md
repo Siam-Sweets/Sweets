@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.3 — Synchronization runtime and test reliability fixes
+
+- Bound outbox capture to permanent post-save SQLite keys so added, edited, and deleted records retain one stable UUID identity and one compacted pending operation.
+- Reloaded already-tracked sync identities and outbox rows after the atomic metadata write, preventing stale server versions, tombstones, and payloads in long-lived application contexts.
+- Made settings lookup explicitly branch-aware so two stores can safely retain the same synchronized setting key without overwriting one another.
+- Disabled SQLite pooling in file-backed synchronization tests, closed test connections deterministically, and removed database, WAL, and shared-memory files without Windows runner lock failures.
+- Corrected product test fixtures to include their required category relationship and added an explicit single-threaded xUnit runner configuration for the process-wide synchronization scope.
+- Updated application, installer, cloud client, Worker package, workflow examples, and README version metadata to 2.0.3.
+
 ## 2.0.2 — Synchronization test build fix
 
 - Added a project-wide xUnit namespace import so `Fact`, `Theory`, `InlineData`, `Assert`, and `IAsyncLifetime` compile across every synchronization test file.
