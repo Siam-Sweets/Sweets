@@ -16,6 +16,7 @@ const env: Env = {
   TURSO_AUTH_TOKEN: "test",
   JWT_SIGNING_SECRET: "jwt-test-secret-that-is-at-least-32-characters-long",
   REFRESH_TOKEN_SECRET: "refresh-test-secret-at-least-32-characters-long",
+  PASSWORD_PEPPER_SECRET: "password-pepper-test-secret-at-least-32-characters",
   ACCESS_TOKEN_TTL_SECONDS: "600",
   REFRESH_TOKEN_TTL_DAYS: "30",
 };

@@ -41,9 +41,10 @@ npx wrangler secret put TURSO_DATABASE_URL --env development
 npx wrangler secret put TURSO_AUTH_TOKEN --env development
 npx wrangler secret put JWT_SIGNING_SECRET --env development
 npx wrangler secret put REFRESH_TOKEN_SECRET --env development
+npx wrangler secret put PASSWORD_PEPPER_SECRET --env development
 ```
 
-Repeat with `--env production`. Generate the signing and refresh secrets independently with a cryptographically secure generator and use at least 32 random bytes. Values must never be committed. `.dev.vars.example` contains names and placeholders only; copy it to `.dev.vars` for local emulation and keep that file ignored.
+Repeat with `--env production`. Generate the signing, refresh-token, and password-pepper secrets independently with a cryptographically secure generator and use at least 32 random bytes for each. Values must never be committed. `.dev.vars.example` contains names and placeholders only; copy it to `.dev.vars` for local emulation and keep that file ignored.
 
 Required secret bindings:
 
@@ -53,6 +54,7 @@ Required secret bindings:
 | `TURSO_AUTH_TOKEN` | least-scope Turso token used only by the Worker |
 | `JWT_SIGNING_SECRET` | HMAC key for short-lived access tokens |
 | `REFRESH_TOKEN_SECRET` | independent key mixed into stored refresh-token hashes |
+| `PASSWORD_PEPPER_SECRET` | independent key used only for online-password verifiers |
 
 Non-secret version, TTL, request-size, and batch limits are declared in `wrangler.toml` for development and production.
 
@@ -66,7 +68,7 @@ npm test
 npm run dev
 ```
 
-Open `http://127.0.0.1:8787/` to run the public end-to-end status page. It verifies password hashing, JWT/refresh-token cryptography, required tables and columns, and a complete organization/account/device/session/sync/audit batch that is intentionally aborted and checked for atomic rollback. `GET /api/v1/diagnostics` returns the same result as JSON, while `GET /api/v1/meta` remains the lightweight metadata endpoint. Do not test account creation until the status page says **Ready** and **Account creation: verified**. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
+Open `http://127.0.0.1:8787/` to run the public end-to-end status page. It verifies the Free-plan password verifier, JWT/refresh-token cryptography, required tables and columns, and a complete organization/account/device/session/sync/audit batch that is intentionally aborted and checked for atomic rollback. `GET /api/v1/diagnostics` returns the same result as JSON, while `GET /api/v1/meta` remains the lightweight metadata endpoint. Do not test account creation until the status page says **Ready** and **Account creation: verified**. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
 
 ## 4. Deploy
 
@@ -76,7 +78,7 @@ npm run deploy:development
 npm run deploy:production
 ```
 
-Do not proceed to production until all four production runtime secrets exist, the migration step succeeds, and the Worker base URL status page reports **Ready**. The deployment workflow checks this automatically through `/api/v1/diagnostics` and prints every failed stage from its JSON report. After that preflight passes, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
+Do not proceed to production until all five production runtime secrets exist, the migration step succeeds, and the Worker base URL status page reports **Ready**. The deployment workflow checks this automatically through `/api/v1/diagnostics` and prints every failed stage from its JSON report. After that preflight passes, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
 
 ## GitHub Actions
 
@@ -92,9 +94,10 @@ Configure these GitHub environment or repository secrets for Worker deployment:
 - `TURSO_AUTH_TOKEN`: the Worker-only Turso authentication token.
 - `JWT_SIGNING_SECRET`: an independent cryptographically random value of at least 32 characters.
 - `REFRESH_TOKEN_SECRET`: a second independent cryptographically random value of at least 32 characters.
+- `PASSWORD_PEPPER_SECRET`: a third independent cryptographically random value of at least 32 characters. Keep it stable; changing it invalidates stored online-password verifiers.
 - `POSAPP_CLOUD_API_BASE_URL`: the Worker origin for that exact GitHub environment. The deployment job uses it to verify the newly deployed status page and the Windows build embeds the same origin.
 
-The deployment workflow validates these values, applies and verifies pending SQL migrations with the Turso URL/token, uploads the four runtime bindings as encrypted Cloudflare Worker secrets, and then deploys the selected environment. `wrangler.toml` declares them as required, so Wrangler rejects a deployment that would leave the Worker unable to create or authenticate accounts. Configure the secrets separately in protected `development` and `production` GitHub environments when the environments use different databases or keys.
+The deployment workflow validates these values, applies and verifies pending SQL migrations with the Turso URL/token, uploads the five runtime bindings as encrypted Cloudflare Worker secrets, and then deploys the selected environment. `wrangler.toml` declares them as required, so Wrangler rejects a deployment that would leave the Worker unable to create or authenticate accounts. Configure the secrets separately in protected `development` and `production` GitHub environments when the environments use different databases or keys.
 
 Use an environment-specific `POSAPP_CLOUD_API_BASE_URL`, such as `https://posapp-cloud-api-production.example.workers.dev`. Do not include `/api/v1`, `/api/v1/meta`, query parameters, or fragments. Development and production environments should point to their matching Worker names.
 

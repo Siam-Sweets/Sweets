@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.13 — Free-plan authentication crypto and rolling deployment verification
+
+- Replaced new online-password records with a deployment-secret-peppered PBKDF2 verifier that stays within the Cloudflare Workers Free per-request CPU budget while preserving unique salts, constant-time comparison, and database-leak resistance through a dedicated domain-separated password-pepper secret.
+- Kept legacy 310,000-round PBKDF2 verification support for backward compatibility; every newly created or changed password uses the v2.0.13 verifier.
+- Reduced the public authentication diagnostic to one representative password derivation instead of hashing and verifying in the same request, and added the exact failed cryptographic stage.
+- Updated signup, login, password changes, and user creation to use the deployment-bound verifier.
+- Added the required `PASSWORD_PEPPER_SECRET` Worker binding and GitHub Actions validation; keep this independent secret stable because changing it invalidates stored online-password verifiers.
+- Fixed deployment validation for Cloudflare rolling propagation: metadata and diagnostics are now polled independently until both routes serve the expected Worker version.
+- Preserved diagnostic response bodies from older HTTP 503 routes instead of failing before the deployed version can be identified.
+- Added tests proving unique salts, correct verification, wrong-password rejection, and binding to deployment authentication secrets.
+- Updated application, installer, cloud client, Worker package, tests, README, security documentation, and release metadata to version 2.0.13.
+
 ## 2.0.12 — Atomic Turso signup batch and transparent deployment diagnostics
 
 - Replaced organization creation's long-lived interactive Turso transaction with one non-interactive `client.batch(..., "write")` transaction, eliminating the repeated remote round trips that could expire before provisioning completed.

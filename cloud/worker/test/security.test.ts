@@ -19,6 +19,7 @@ const env: Env = {
   TURSO_AUTH_TOKEN: "test",
   JWT_SIGNING_SECRET: "jwt-test-secret-that-is-at-least-32-characters-long",
   REFRESH_TOKEN_SECRET: "refresh-test-secret-at-least-32-characters-long",
+  PASSWORD_PEPPER_SECRET: "password-pepper-test-secret-at-least-32-characters",
   ACCESS_TOKEN_TTL_SECONDS: "600",
   MAX_SYNC_BATCH: "2",
   SCHEMA_VERSION: "4",
@@ -52,12 +53,21 @@ describe("database schema readiness", () => {
 });
 
 describe("authentication primitives", () => {
-  it("hashes passwords with unique PBKDF2 salts and verifies without plaintext storage", async () => {
-    const first = await hashPassword("correct-horse-42");
-    const second = await hashPassword("correct-horse-42");
+  it("hashes passwords with unique peppered PBKDF2 salts and verifies without plaintext storage", async () => {
+    const first = await hashPassword("correct-horse-42", env);
+    const second = await hashPassword("correct-horse-42", env);
     expect(first).not.toBe(second);
-    expect(await verifyPassword("correct-horse-42", first)).toBe(true);
-    expect(await verifyPassword("wrong-password-9", first)).toBe(false);
+    expect(await verifyPassword("correct-horse-42", first, env)).toBe(true);
+    expect(await verifyPassword("wrong-password-9", first, env)).toBe(false);
+    expect(first).toMatch(/^pbkdf2_sha256_peppered_v1\$12000\$/);
+  });
+
+  it("binds stored password verifiers to the deployment authentication secrets", async () => {
+    const stored = await hashPassword("correct-horse-42", env);
+    await expect(verifyPassword("correct-horse-42", stored, {
+      ...env,
+      PASSWORD_PEPPER_SECRET: "different-password-pepper-at-least-32-characters",
+    })).resolves.toBe(false);
   });
 
   it("signs tenant, session, device, permission, and password-version claims", async () => {

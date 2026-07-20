@@ -82,7 +82,7 @@ export async function signup(request: Request, env: Env, requestId: string, body
   assertAuthSecrets(env);
   let passwordHash: string;
   try {
-    passwordHash = await hashPassword(password);
+    passwordHash = await hashPassword(password, env);
   } catch (error) {
     throw organizationProvisioningError("hash online password", error);
   }
@@ -282,7 +282,7 @@ export async function login(
       args: [identifier, identifier],
     });
     const row = result.rows[0];
-    if (!row || !await verifyPassword(password, text(row.password_hash))) {
+    if (!row || !await verifyPassword(password, text(row.password_hash), env)) {
       recordLoginFailure(loginKey);
       await recordPersistentLoginFailure(client, loginKeyHash);
       await recordPersistentLoginFailure(client, accountKeyHash);
@@ -635,9 +635,9 @@ export async function changePassword(context: AuthContext, env: Env, body: unkno
       args: [context.claims.sub, context.claims.tid],
     });
     const row = result.rows[0];
-    if (!row || !await verifyPassword(currentPassword, text(row.password_hash)))
+    if (!row || !await verifyPassword(currentPassword, text(row.password_hash), env))
       throw new ApiError(401, "INVALID_CREDENTIALS", "The current password is incorrect.");
-    const nextHash = await hashPassword(newPassword);
+    const nextHash = await hashPassword(newPassword, env);
     const now = nowIso();
     await client.batch([
       { sql: "UPDATE users SET password_hash = ?, password_version = password_version + 1, updated_at_utc = ?, version = version + 1 WHERE id = ? AND tenant_id = ?", args: [nextHash, now, context.claims.sub, context.claims.tid] },
@@ -700,7 +700,7 @@ export async function createUser(context: AuthContext, env: Env, body: unknown):
       throw new ApiError(409, "USER_RECORD_MISMATCH", "That synchronized user record belongs to another username.");
     if (usernameMirror && requestedMirror && text(usernameMirror.id) !== text(requestedMirror.id))
       throw new ApiError(409, "DUPLICATE_USER_RECORD", "Multiple synchronized user records use that username.");
-    const hash = await hashPassword(password);
+    const hash = await hashPassword(password, env);
     const id = usernameMirror ? text(usernameMirror.id) : requestedRecordId ?? crypto.randomUUID();
     const now = nowIso();
     const mirrorCreatedAt = usernameMirror ? text(usernameMirror.created_at_utc) : now;
@@ -1133,7 +1133,8 @@ function schemaVersion(env: Env): number { return Number(env.SCHEMA_VERSION ?? "
 
 function assertAuthSecrets(env: Env): void {
   if (!env.JWT_SIGNING_SECRET || env.JWT_SIGNING_SECRET.length < 32 ||
-      !env.REFRESH_TOKEN_SECRET || env.REFRESH_TOKEN_SECRET.length < 32)
+      !env.REFRESH_TOKEN_SECRET || env.REFRESH_TOKEN_SECRET.length < 32 ||
+      !env.PASSWORD_PEPPER_SECRET || env.PASSWORD_PEPPER_SECRET.length < 32)
     throw new ApiError(500, "AUTHENTICATION_CONFIGURATION_ERROR", "The authentication secrets are missing or too short.");
 }
 

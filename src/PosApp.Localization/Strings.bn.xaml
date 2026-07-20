@@ -329,7 +329,7 @@
     <sys:String x:Key="Cloud_Error_RECORD_NOT_FOUND">সিঙ্ক করা রেকর্ডটি আর নেই</sys:String>
     <sys:String x:Key="Cloud_Error_REMOTE_SERVICE_ERROR">অনলাইন সেবা সাময়িকভাবে পাওয়া যাচ্ছে না</sys:String>
     <sys:String x:Key="Cloud_Error_REQUEST_TOO_LARGE">সিঙ্ক অনুরোধটি খুব বড়</sys:String>
-    <sys:String x:Key="Cloud_Error_AUTHENTICATION_CONFIGURATION_ERROR">Cloud Worker-এ JWT_SIGNING_SECRET অথবা REFRESH_TOKEN_SECRET নেই। GitHub Actions-এ কমপক্ষে ৩২ র‍্যান্ডম বাইটের দুটি সিক্রেট যোগ করে Worker পুনরায় ডিপ্লয় করুন</sys:String>
+    <sys:String x:Key="Cloud_Error_AUTHENTICATION_CONFIGURATION_ERROR">Cloud Worker-এ JWT_SIGNING_SECRET, REFRESH_TOKEN_SECRET অথবা PASSWORD_PEPPER_SECRET নেই। GitHub Actions-এ কমপক্ষে ৩২ র‍্যান্ডম বাইটের তিনটি সিক্রেট যোগ করে Worker পুনরায় ডিপ্লয় করুন</sys:String>
     <sys:String x:Key="Cloud_Error_DATABASE_CONFIGURATION_ERROR">Cloud Worker-এ TURSO_DATABASE_URL অথবা TURSO_AUTH_TOKEN নেই। GitHub Actions-এ দুটি সিক্রেট যোগ করে Worker পুনরায় ডিপ্লয় করুন</sys:String>
     <sys:String x:Key="Cloud_Error_DATABASE_SCHEMA_NOT_READY">অনলাইন ডেটাবেস স্কিমা প্রস্তুত নয়। Turso মাইগ্রেশন প্রয়োগ করতে Cloud Worker পুনরায় ডিপ্লয় করুন</sys:String>
     <sys:String x:Key="Cloud_Error_SERVER_CONFIGURATION_ERROR">অনলাইন সেবাটি সঠিকভাবে কনফিগার করা নেই</sys:String>

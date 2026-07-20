@@ -2,7 +2,7 @@
 
 ## Authentication and sessions
 
-- Online passwords are validated and hashed in the Worker with PBKDF2-HMAC-SHA-256, a unique 16-byte random salt, and 310,000 iterations. Plaintext passwords and PINs are never stored or logged.
+- Online passwords are validated in the Worker and stored as deployment-secret-peppered PBKDF2-HMAC-SHA-256 verifiers with a unique 16-byte random salt and 12,000 iterations. The pepper is domain-separated from both authentication secrets, making Turso-only database exports insufficient for offline password verification. Login attempts are throttled in memory and in Turso. Plaintext passwords and PINs are never stored or logged. The bounded work factor is intentionally compatible with the Workers Free 10 ms CPU budget; legacy 310,000-round verifiers remain readable for backward compatibility.
 - Access tokens are HS256 JWTs with issuer/audience, tenant, user, session, device, role, effective permissions, password version, issued time, and expiry. The default lifetime is 10 minutes and is bounded to 5–15 minutes.
 - Refresh tokens are opaque random values with a token ID. Turso stores only a secret-keyed SHA-256 hash. Every refresh consumes and revokes the old token and creates a new token in the same family.
 - Reuse of an old refresh token revokes the token family and login session. Password changes revoke the user's other sessions and increment a password version that invalidates old access tokens.
@@ -13,7 +13,7 @@
 
 Only access/refresh tokens are present on a desktop. `DpapiTokenStore` encrypts them with Windows Data Protection API `CurrentUser` scope and atomically replaces `%LOCALAPPDATA%\PosApp\Security\cloud-session.dat`. Copying that file to another Windows account does not make it usable. Organization/store/device metadata is non-secret.
 
-The desktop never receives `TURSO_AUTH_TOKEN`, `JWT_SIGNING_SECRET`, `REFRESH_TOKEN_SECRET`, or a Cloudflare API token. The public Worker origin is embedded at build time from `POSAPP_CLOUD_API_BASE_URL`; it is routing configuration, not a credential, and is expected to be discoverable in the distributed executable. `.dev.vars`, SQLite/WAL files, build outputs, and Worker dependencies are ignored by Git.
+The desktop never receives `TURSO_AUTH_TOKEN`, `JWT_SIGNING_SECRET`, `REFRESH_TOKEN_SECRET`, `PASSWORD_PEPPER_SECRET`, or a Cloudflare API token. The public Worker origin is embedded at build time from `POSAPP_CLOUD_API_BASE_URL`; it is routing configuration, not a credential, and is expected to be discoverable in the distributed executable. `.dev.vars`, SQLite/WAL files, build outputs, and Worker dependencies are ignored by Git.
 
 ## Authorization
 

@@ -1,5 +1,5 @@
 import type { Client } from "@libsql/client/web";
-import { hashPassword, signAccessToken, verifyAccessToken, verifyPassword, sha256 } from "./crypto";
+import { passwordCryptoSelfTest, signAccessToken, verifyAccessToken, sha256 } from "./crypto";
 import { database, inspectDatabaseReadiness, integer, nowIso } from "./db";
 import { jsonResponse, safeProviderErrorCode } from "./errors";
 import type { Env } from "./types";
@@ -93,7 +93,8 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
   });
 
   const authConfigured = Boolean(
-    env.JWT_SIGNING_SECRET?.length >= 32 && env.REFRESH_TOKEN_SECRET?.length >= 32,
+    env.JWT_SIGNING_SECRET?.length >= 32 && env.REFRESH_TOKEN_SECRET?.length >= 32 &&
+    env.PASSWORD_PEPPER_SECRET?.length >= 32,
   );
   let authReady = false;
   if (!authConfigured) {
@@ -101,29 +102,32 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
       id: "authentication-crypto",
       name: "Authentication cryptography",
       status: "fail",
-      message: "JWT or refresh-token secrets are missing or too short.",
+      message: "JWT, refresh-token, or password-pepper secrets are missing or too short.",
       code: "AUTHENTICATION_CONFIGURATION_ERROR",
     });
   } else {
+    let authenticationStage = "derive password verifier";
     try {
-      const password = "PosApp-diagnostic-1234";
-      const passwordHash = await hashPassword(password);
-      const passwordVerified = await verifyPassword(password, passwordHash);
+      const passwordReady = await passwordCryptoSelfTest(env);
+      authenticationStage = "sign access token";
       const signed = await signAccessToken({
         sub: crypto.randomUUID(), tid: crypto.randomUUID(), sid: crypto.randomUUID(),
         did: crypto.randomUUID(), role: "admin", permissions: ["*"], pv: 1,
       }, env);
+      authenticationStage = "verify access token";
       const verified = await verifyAccessToken(signed.token, env);
+      authenticationStage = "hash refresh token";
       await sha256(`diagnostic.${env.REFRESH_TOKEN_SECRET}`);
-      authReady = passwordVerified && verified.role === "admin" && verified.pv === 1;
+      authReady = passwordReady && verified.role === "admin" && verified.pv === 1;
       checks.push({
         id: "authentication-crypto",
         name: "Authentication cryptography",
         status: authReady ? "pass" : "fail",
         message: authReady
-          ? "Password hashing and verification, access-token signing, and refresh-token hashing work."
+          ? "The dedicated-pepper PBKDF2 password verifier (12,000 rounds), access-token signing and verification, and refresh-token hashing work."
           : "Authentication cryptography returned an invalid verification result.",
         code: authReady ? undefined : "AUTHENTICATION_DIAGNOSTIC_FAILED",
+        stage: authReady ? undefined : authenticationStage,
       });
     } catch (error) {
       checks.push({
@@ -132,6 +136,7 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
         status: "fail",
         message: "Authentication cryptography could not complete its self-test.",
         code: "AUTHENTICATION_DIAGNOSTIC_FAILED",
+        stage: authenticationStage,
         providerCode: safeProviderErrorCode(error),
       });
     }
@@ -192,7 +197,7 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
   const ready = checks.every((check) => check.status === "pass") && accountCreationReady;
   return {
     service: "PosApp Cloud API",
-    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.12",
+    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.13",
     checkedAtUtc: nowIso(),
     requestId,
     ready,
@@ -214,7 +219,7 @@ export async function diagnosticsJson(env: Env, requestId: string): Promise<Resp
 
 export async function diagnosticsPage(request: Request, env: Env, requestId: string): Promise<Response> {
   const origin = new URL(request.url).origin;
-  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.12";
+  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.13";
   const nonce = crypto.randomUUID().replace(/-/g, "");
   const html = `<!doctype html>
 <html lang="en">
@@ -276,7 +281,7 @@ export async function diagnosticsPage(request: Request, env: Env, requestId: str
     <section id="checks" class="checks" aria-live="polite">
       <article class="check">
         <div class="icon" aria-hidden="true">…</div>
-        <div><h2>End-to-end verification</h2><p>Testing password hashing, tokens, Turso schema, atomic organization provisioning, and rollback.</p></div>
+        <div><h2>End-to-end verification</h2><p>Testing the Free-plan password verifier, tokens, Turso schema, atomic organization provisioning, and rollback.</p></div>
       </article>
     </section>
     <section class="meta">

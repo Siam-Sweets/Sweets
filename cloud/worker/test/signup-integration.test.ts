@@ -39,12 +39,13 @@ const env: Env = {
   TURSO_AUTH_TOKEN: "local-test-token",
   JWT_SIGNING_SECRET: "jwt-test-secret-that-is-at-least-32-characters-long",
   REFRESH_TOKEN_SECRET: "refresh-test-secret-at-least-32-characters-long",
+  PASSWORD_PEPPER_SECRET: "password-pepper-test-secret-at-least-32-characters",
   ACCESS_TOKEN_TTL_SECONDS: "600",
   REFRESH_TOKEN_TTL_DAYS: "30",
   SCHEMA_VERSION: "4",
   MINIMUM_CLIENT_SCHEMA_VERSION: "4",
   API_VERSION: "1",
-  DEPLOYMENT_VERSION: "2.0.12-test",
+  DEPLOYMENT_VERSION: "2.0.13-test",
 };
 
 beforeAll(async () => {
@@ -97,6 +98,27 @@ describe("organization provisioning integration", () => {
     expect(report.ready).toBe(false);
     expect(report.accountCreationReady).toBe(false);
     expect(report.checks).toContainEqual(expect.objectContaining({
+      status: "fail",
+      code: "AUTHENTICATION_CONFIGURATION_ERROR",
+    }));
+  });
+
+  it("reports a missing dedicated password pepper before running account creation", async () => {
+    const response = await worker.fetch(
+      new Request("https://example.test/api/v1/diagnostics"),
+      { ...env, PASSWORD_PEPPER_SECRET: "too-short" },
+    );
+
+    expect(response.status).toBe(200);
+    const report = await response.json() as {
+      ready: boolean;
+      accountCreationReady: boolean;
+      checks: Array<{ id: string; status: string; code?: string }>;
+    };
+    expect(report.ready).toBe(false);
+    expect(report.accountCreationReady).toBe(false);
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      id: "authentication-crypto",
       status: "fail",
       code: "AUTHENTICATION_CONFIGURATION_ERROR",
     }));

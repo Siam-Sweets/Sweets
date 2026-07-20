@@ -50,11 +50,12 @@ export default {
         const expectedSchemaVersion = Number(env.SCHEMA_VERSION ?? "4");
         const database = await inspectDatabaseReadiness(env, expectedSchemaVersion);
         const authenticationConfigured = Boolean(
-          env.JWT_SIGNING_SECRET?.length >= 32 && env.REFRESH_TOKEN_SECRET?.length >= 32,
+          env.JWT_SIGNING_SECRET?.length >= 32 && env.REFRESH_TOKEN_SECRET?.length >= 32 &&
+          env.PASSWORD_PEPPER_SECRET?.length >= 32,
         );
         return jsonResponse({
           service: "PosApp Cloud API",
-          deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.12",
+          deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.13",
           apiVersion: Number(env.API_VERSION ?? "1"),
           schemaVersion: expectedSchemaVersion,
           minimumClientSchemaVersion: Number(env.MINIMUM_CLIENT_SCHEMA_VERSION ?? "4"),
