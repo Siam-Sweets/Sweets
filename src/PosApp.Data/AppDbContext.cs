@@ -320,7 +320,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<CloudAccountState>(b =>
         {
             b.HasKey(value => value.Id);
-            b.HasCheckConstraint("CK_CloudAccountState_SingleRow", "Id = 1");
+            b.ToTable(table => table.HasCheckConstraint("CK_CloudAccountState_SingleRow", "Id = 1"));
         });
 
         modelBuilder.Entity<SyncIdentity>(b =>

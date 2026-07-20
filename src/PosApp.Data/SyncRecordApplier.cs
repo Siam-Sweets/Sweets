@@ -43,7 +43,8 @@ public sealed class SyncRecordApplier
 
                 var pending = await db.SyncOutboxOperations.AsNoTracking().AnyAsync(operation =>
                         operation.RecordId == change.RecordId &&
-                        operation.Status is SyncOutboxStatus.Pending or SyncOutboxStatus.Uploading,
+                        (operation.Status == SyncOutboxStatus.Pending ||
+                         operation.Status == SyncOutboxStatus.Uploading),
                     cancellationToken);
                 var identity = await db.SyncIdentities.SingleOrDefaultAsync(
                     value => value.RecordId == change.RecordId, cancellationToken);
@@ -262,45 +263,61 @@ public sealed class SyncRecordApplier
         JsonElement payload,
         CancellationToken cancellationToken)
     {
-        string? Text(string name) => payload.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
+        // Read JSON before constructing EF queries. Expression trees cannot
+        // contain calls to a local function, while captured scalar values are
+        // translated safely into SQLite parameters.
+        var name = PayloadText(payload, "name");
+        var code = PayloadText(payload, "code");
+        var username = PayloadText(payload, "username");
+        var key = PayloadText(payload, "key");
+        var sku = PayloadText(payload, "sku");
+        var barcode = PayloadText(payload, "barcode");
+        var email = PayloadText(payload, "email");
+        var phone = PayloadText(payload, "phone");
+        var hasCode = !string.IsNullOrEmpty(code);
+        var hasSku = !string.IsNullOrEmpty(sku);
+        var hasBarcode = !string.IsNullOrEmpty(barcode);
+        var hasEmail = !string.IsNullOrEmpty(email);
+        var hasPhone = !string.IsNullOrEmpty(phone);
+
         return entityType switch
         {
             "categories" => await db.Categories.FirstOrDefaultAsync(value =>
-                value.Name == Text("name") && !db.SyncIdentities.Any(identity =>
+                value.Name == name && !db.SyncIdentities.Any(identity =>
                     identity.EntityType == "categories" && identity.LocalId == value.Id), cancellationToken),
             "taxes" => await db.Taxes.FirstOrDefaultAsync(value =>
-                value.Name == Text("name") && !db.SyncIdentities.Any(identity =>
+                value.Name == name && !db.SyncIdentities.Any(identity =>
                     identity.EntityType == "taxes" && identity.LocalId == value.Id), cancellationToken),
             "discounts" => await db.Discounts.FirstOrDefaultAsync(value =>
-                ((!string.IsNullOrEmpty(Text("code")) && value.Code == Text("code")) || value.Name == Text("name")) &&
+                ((hasCode && value.Code == code) || value.Name == name) &&
                 !db.SyncIdentities.Any(identity => identity.EntityType == "discounts" && identity.LocalId == value.Id),
                 cancellationToken),
-            "users" => await db.Users.FirstOrDefaultAsync(value => value.Username == Text("username") &&
+            "users" => await db.Users.FirstOrDefaultAsync(value => value.Username == username &&
                 !db.SyncIdentities.Any(identity => identity.EntityType == "users" && identity.LocalId == value.Id),
                 cancellationToken),
-            "settings" => await db.Settings.FirstOrDefaultAsync(value => value.Key == Text("key") &&
+            "settings" => await db.Settings.FirstOrDefaultAsync(value => value.Key == key &&
                 !db.SyncIdentities.Any(identity => identity.EntityType == "settings" && identity.LocalId == value.Id),
                 cancellationToken),
             "products" => await db.Products.FirstOrDefaultAsync(value =>
-                ((!string.IsNullOrEmpty(Text("sku")) && value.Sku == Text("sku")) ||
-                 (!string.IsNullOrEmpty(Text("barcode")) && value.Barcode == Text("barcode"))) &&
+                ((hasSku && value.Sku == sku) || (hasBarcode && value.Barcode == barcode)) &&
                 !db.SyncIdentities.Any(identity => identity.EntityType == "products" && identity.LocalId == value.Id),
                 cancellationToken),
             "customers" => await db.Customers.FirstOrDefaultAsync(value =>
-                ((!string.IsNullOrEmpty(Text("email")) && value.Email == Text("email")) ||
-                 (!string.IsNullOrEmpty(Text("phone")) && value.Phone == Text("phone"))) &&
+                ((hasEmail && value.Email == email) || (hasPhone && value.Phone == phone)) &&
                 !db.SyncIdentities.Any(identity => identity.EntityType == "customers" && identity.LocalId == value.Id),
                 cancellationToken),
             "suppliers" => await db.Suppliers.FirstOrDefaultAsync(value =>
-                ((!string.IsNullOrEmpty(Text("email")) && value.Email == Text("email")) ||
-                 (!string.IsNullOrEmpty(Text("phone")) && value.Phone == Text("phone"))) &&
+                ((hasEmail && value.Email == email) || (hasPhone && value.Phone == phone)) &&
                 !db.SyncIdentities.Any(identity => identity.EntityType == "suppliers" && identity.LocalId == value.Id),
                 cancellationToken),
             _ => null
         };
     }
+
+    private static string? PayloadText(JsonElement payload, string name)
+        => payload.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private static object? ConvertValue(JsonElement value, Type targetType)
     {

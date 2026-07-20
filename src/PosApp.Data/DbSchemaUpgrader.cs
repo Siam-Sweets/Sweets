@@ -652,6 +652,9 @@ public static class DbSchemaUpgrader
         string tableName,
         string columnName)
     {
+        var quotedIndex = QuoteSqlIdentifier(indexName);
+        var quotedTable = QuoteSqlIdentifier(tableName);
+        var quotedColumn = QuoteSqlIdentifier(columnName);
         var connection = db.Database.GetDbConnection();
         var shouldClose = connection.State != ConnectionState.Open;
         if (shouldClose) await connection.OpenAsync();
@@ -669,14 +672,29 @@ public static class DbSchemaUpgrader
                 !definition.StartsWith("CREATE UNIQUE INDEX", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            await db.Database.ExecuteSqlRawAsync($"DROP INDEX IF EXISTS \"{indexName}\";");
-            await db.Database.ExecuteSqlRawAsync(
-                $"CREATE INDEX \"{indexName}\" ON \"{tableName}\" (\"{columnName}\");");
+            await using var drop = connection.CreateCommand();
+            drop.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+            drop.CommandText = $"DROP INDEX IF EXISTS {quotedIndex};";
+            await drop.ExecuteNonQueryAsync();
+
+            await using var create = connection.CreateCommand();
+            create.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
+            create.CommandText = $"CREATE INDEX {quotedIndex} ON {quotedTable} ({quotedColumn});";
+            await create.ExecuteNonQueryAsync();
         }
         finally
         {
             if (shouldClose) await connection.CloseAsync();
         }
+    }
+
+    private static string QuoteSqlIdentifier(string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier) ||
+            !(char.IsLetter(identifier[0]) || identifier[0] == '_') ||
+            identifier.Any(character => !(char.IsLetterOrDigit(character) || character == '_')))
+            throw new ArgumentException("Invalid internal SQLite identifier.", nameof(identifier));
+        return $"\"{identifier}\"";
     }
 
     private static async Task CreateNoCaseUniqueIndexIfSafeAsync(

@@ -19,7 +19,9 @@ internal static class LocalSyncOutboxCapture
 
     public static IReadOnlyList<TrackedSyncChange> Snapshot(AppDbContext db)
         => db.ChangeTracker.Entries()
-            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Where(entry => entry.State == EntityState.Added ||
+                            entry.State == EntityState.Modified ||
+                            entry.State == EntityState.Deleted)
             .Where(entry => !IsInventoryBalanceOnly(entry))
             .Where(entry => !IsLocalOnlySetting(entry.Entity))
             .Select(entry => SyncEntityRegistry.TryGet(entry.Entity.GetType(), out var descriptor)
@@ -37,6 +39,8 @@ internal static class LocalSyncOutboxCapture
         bool isInitialMigration = false)
     {
         if (changes.Count == 0) return;
+        var capturingUserId = capture.UserId ?? throw new InvalidOperationException(
+            "SYNC_USER_REQUIRED: synchronized local changes require an attributed cloud user.");
 
         var identities = new Dictionary<(string EntityType, int LocalId), SyncIdentity>();
         var changedProductIds = changes
@@ -96,7 +100,7 @@ internal static class LocalSyncOutboxCapture
             var pending = await db.SyncOutboxOperations.FirstOrDefaultAsync(operation =>
                     operation.EntityType == change.Descriptor.EntityType &&
                     operation.RecordId == identity.RecordId &&
-                    operation.CreatedByUserId == capture.UserId &&
+                    operation.CreatedByUserId == capturingUserId &&
                     operation.Status == SyncOutboxStatus.Pending,
                 cancellationToken);
 
@@ -121,7 +125,7 @@ internal static class LocalSyncOutboxCapture
                     RecordId = identity.RecordId,
                     LocalId = localId,
                     StoreId = change.Descriptor.StoreScoped ? capture.StoreId : null,
-                    CreatedByUserId = capture.UserId,
+                    CreatedByUserId = capturingUserId,
                     Operation = operationKind,
                     BaseVersion = identity.ServerVersion,
                     PayloadJson = payload
@@ -130,7 +134,7 @@ internal static class LocalSyncOutboxCapture
             else
             {
                 pending.Operation = operationKind;
-                pending.CreatedByUserId = capture.UserId;
+                pending.CreatedByUserId = capturingUserId;
                 pending.PayloadJson = payload;
                 pending.LastErrorCode = null;
                 pending.LastErrorMessage = null;
@@ -263,7 +267,8 @@ internal static class LocalSyncOutboxCapture
             entry.State != EntityState.Deleted &&
             entry.Entity.EntityType == "products" &&
             entry.Entity.RecordId == productIdentity.RecordId &&
-            entry.Entity.Status is SyncOutboxStatus.Pending or SyncOutboxStatus.Uploading);
+            (entry.Entity.Status == SyncOutboxStatus.Pending ||
+             entry.Entity.Status == SyncOutboxStatus.Uploading));
         var storedPending = await db.SyncOutboxOperations.AsNoTracking().AnyAsync(operation =>
                 operation.EntityType == "products" &&
                 operation.RecordId == productIdentity.RecordId &&

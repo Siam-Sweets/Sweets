@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.1 — Build and deployment compatibility fixes
+
+- Rewrote EF Core pull and status queries to use expression-tree-compatible comparisons and captured scalar parameters, fixing CS8122 and CS8110 during the Windows synchronization-test build.
+- Enforced a non-null cloud user identity while capturing local outbox operations, removing nullable assignments and preserving audit attribution.
+- Replaced the obsolete EF Core check-constraint configuration and executed validated internal SQLite index DDL through database commands, removing the reported EF warnings without accepting untrusted identifiers.
+- Updated the Cloudflare deployment action to its Node 24-compatible v4 release, pinned Wrangler 4.112.0, and added explicit credential preflight errors for missing GitHub secrets.
+
 ## 2.0.0 — Secure multi-device offline-first synchronization
 
 - Preserved the complete v1.4.24 WPF application and added optional organization accounts, stores, registered devices, secure online login, session management, and administrator-created online users.

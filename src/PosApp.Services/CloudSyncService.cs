@@ -454,7 +454,9 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
         var account = await db.CloudAccountStates.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
         var pending = await db.SyncOutboxOperations.CountAsync(value =>
-            value.Status is SyncOutboxStatus.Pending or SyncOutboxStatus.Uploading or SyncOutboxStatus.Failed,
+            value.Status == SyncOutboxStatus.Pending ||
+            value.Status == SyncOutboxStatus.Uploading ||
+            value.Status == SyncOutboxStatus.Failed,
             cancellationToken);
         var conflicts = await db.SyncConflicts.CountAsync(value => value.Status == SyncConflictStatus.Unresolved,
             cancellationToken);

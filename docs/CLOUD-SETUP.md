@@ -82,6 +82,8 @@ Do not proceed to production until migrations and all four production secrets ex
 
 `.github/workflows/deploy-worker.yml` validates TypeScript, runs Worker tests, executes the migrations against a temporary SQLite database, performs a Wrangler dry run, and deploys development on cloud-path pushes. A manual run can select production.
 
+The deployment uses the Node 24-compatible `cloudflare/wrangler-action@v4`, pins the same Wrangler version as `package-lock.json`, and checks that both Cloudflare credentials are present before invoking Wrangler. Missing credentials therefore produce a named GitHub Actions error instead of an opaque `npx` exit code.
+
 Configure these GitHub environment or repository secrets:
 
 - `CLOUDFLARE_API_TOKEN`: a narrowly scoped token that can edit Workers Scripts for the intended account.
