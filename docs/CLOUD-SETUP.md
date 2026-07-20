@@ -66,7 +66,7 @@ npm test
 npm run dev
 ```
 
-`GET http://127.0.0.1:8787/api/v1/meta` should return API/schema metadata, a request ID, and `configuration.ready: true`. The response also reports `databaseReachable`, `databaseSchemaVersion`, and `databaseSchemaReady` without exposing credentials. Account creation must not be tested until all readiness fields are true. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
+Open `http://127.0.0.1:8787/` to run the public end-to-end status page. It verifies password hashing, JWT/refresh-token cryptography, required tables and columns, and a complete organization/account/device/session/sync/audit write transaction that is rolled back and checked for cleanup. `GET /api/v1/diagnostics` returns the same result as JSON, while `GET /api/v1/meta` remains the lightweight metadata endpoint. Do not test account creation until the status page says **Ready** and **Account creation: verified**. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
 
 ## 4. Deploy
 
@@ -76,11 +76,11 @@ npm run deploy:development
 npm run deploy:production
 ```
 
-Do not proceed to production until all four production secrets exist and the migration step succeeds. After deployment, verify `/api/v1/meta`, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
+Do not proceed to production until all four production runtime secrets exist, the migration step succeeds, and the Worker base URL status page reports **Ready**. The deployment workflow checks this automatically through `/api/v1/diagnostics`. After that preflight passes, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
 
 ## GitHub Actions
 
-`.github/workflows/deploy-worker.yml` validates TypeScript, runs Worker tests, executes the migrations against a temporary SQLite database, performs a Wrangler dry run, applies pending migrations to the selected Turso database, verifies the remote schema, and only then deploys the Worker. A manual run can select production.
+`.github/workflows/deploy-worker.yml` validates TypeScript, runs Worker unit and real SQLite/libSQL integration tests, executes the migrations against a temporary database, performs a Wrangler dry run, applies pending migrations to the selected Turso database, verifies the remote schema, deploys the Worker, and then calls the deployed public diagnostic endpoint. A manual run can select production.
 
 The deployment uses the Node 24-compatible `cloudflare/wrangler-action@v4`, pins the same Wrangler version as `package-lock.json`, and checks that both Cloudflare credentials are present before invoking Wrangler. Missing credentials therefore produce a named GitHub Actions error instead of an opaque `npx` exit code.
 
@@ -92,12 +92,11 @@ Configure these GitHub environment or repository secrets for Worker deployment:
 - `TURSO_AUTH_TOKEN`: the Worker-only Turso authentication token.
 - `JWT_SIGNING_SECRET`: an independent cryptographically random value of at least 32 characters.
 - `REFRESH_TOKEN_SECRET`: a second independent cryptographically random value of at least 32 characters.
+- `POSAPP_CLOUD_API_BASE_URL`: the Worker origin for that exact GitHub environment. The deployment job uses it to verify the newly deployed status page and the Windows build embeds the same origin.
 
 The deployment workflow validates these values, applies and verifies pending SQL migrations with the Turso URL/token, uploads the four runtime bindings as encrypted Cloudflare Worker secrets, and then deploys the selected environment. `wrangler.toml` declares them as required, so Wrangler rejects a deployment that would leave the Worker unable to create or authenticate accounts. Configure the secrets separately in protected `development` and `production` GitHub environments when the environments use different databases or keys.
 
-Configure this repository secret for the Windows desktop build:
-
-- `POSAPP_CLOUD_API_BASE_URL`: the deployed Worker origin, such as `https://posapp-cloud-api-production.example.workers.dev`. Do not include `/api/v1`, `/api/v1/meta`, query parameters, or fragments.
+Use an environment-specific `POSAPP_CLOUD_API_BASE_URL`, such as `https://posapp-cloud-api-production.example.workers.dev`. Do not include `/api/v1`, `/api/v1/meta`, query parameters, or fragments. Development and production environments should point to their matching Worker names.
 
 The desktop workflow validates the value and embeds it into `PosApp.exe` as assembly metadata. Users do not type or choose the Worker address. The URL is not an authentication secret and remains discoverable from the distributed executable; account access is still protected by the Worker-issued user tokens. Main, tag, and manual builds require this secret. Pull-request verification builds can compile without it but disable new online sign-in and organization creation.
 
@@ -117,6 +116,7 @@ Administrators create additional cloud users from **Online account & sync → On
 
 | Area | Routes |
 |---|---|
+| Public status | `GET /`; `GET /api/v1/diagnostics` |
 | Metadata | `GET /api/v1/meta` |
 | Authentication | `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/register-device`; `GET /auth/sessions`; `DELETE /auth/sessions/{id}`; `DELETE/PATCH /auth/devices/{id}` |
 | Account | `GET /account/profile`; `POST /account/password` |

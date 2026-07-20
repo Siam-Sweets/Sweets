@@ -101,9 +101,10 @@ jobs:
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           JWT_SIGNING_SECRET: ${{ secrets.JWT_SIGNING_SECRET }}
           REFRESH_TOKEN_SECRET: ${{ secrets.REFRESH_TOKEN_SECRET }}
+          POSAPP_CLOUD_API_BASE_URL: ${{ secrets.POSAPP_CLOUD_API_BASE_URL }}
         run: |
           missing=0
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TURSO_DATABASE_URL TURSO_AUTH_TOKEN JWT_SIGNING_SECRET REFRESH_TOKEN_SECRET; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TURSO_DATABASE_URL TURSO_AUTH_TOKEN JWT_SIGNING_SECRET REFRESH_TOKEN_SECRET POSAPP_CLOUD_API_BASE_URL; do
             if [[ -z "${!name}" ]]; then
               echo "::error title=Missing deployment secret::$name is not configured for the selected GitHub environment or repository."
               missing=1
@@ -120,6 +121,10 @@ jobs:
           fi
           if [[ "$TURSO_DATABASE_URL" != libsql://* && "$TURSO_DATABASE_URL" != https://* ]]; then
             echo "::error title=Invalid Turso URL::TURSO_DATABASE_URL must start with libsql:// or https://."
+            exit 1
+          fi
+          if [[ ! "$POSAPP_CLOUD_API_BASE_URL" =~ ^https://[^/?#]+/?$ ]]; then
+            echo "::error title=Invalid Worker URL::POSAPP_CLOUD_API_BASE_URL must be an HTTPS Worker origin without an API path, query, or fragment."
             exit 1
           fi
 
@@ -151,9 +156,47 @@ jobs:
           JWT_SIGNING_SECRET: ${{ secrets.JWT_SIGNING_SECRET }}
           REFRESH_TOKEN_SECRET: ${{ secrets.REFRESH_TOKEN_SECRET }}
 
+      - name: Verify deployed status page and organization preflight
+        shell: bash
+        env:
+          POSAPP_CLOUD_API_BASE_URL: ${{ secrets.POSAPP_CLOUD_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          base="${POSAPP_CLOUD_API_BASE_URL%/}"
+          diagnostic_file="$(mktemp)"
+          ready=0
+          for attempt in {1..12}; do
+            if curl --fail --silent --show-error \
+                --connect-timeout 10 --max-time 45 \
+                "$base/api/v1/diagnostics" -o "$diagnostic_file"; then
+              ready=1
+              break
+            fi
+            echo "Diagnostic endpoint is not ready yet (attempt $attempt/12)."
+            sleep 5
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            echo "::error title=Worker diagnostic failed::The deployed Worker did not pass its public end-to-end diagnostic. Open $base to see the failed stage and request ID."
+            exit 1
+          fi
+          node - "$diagnostic_file" <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const report = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (report.ready !== true || report.accountCreationReady !== true) {
+            const failed = Array.isArray(report.checks)
+              ? report.checks.filter((check) => check.status !== 'pass')
+                  .map((check) => `${check.name}: ${check.stage || check.code || check.message}`).join('; ')
+              : 'unknown diagnostic failure';
+            throw new Error(`Worker is not ready: ${failed}`);
+          }
+          console.log(`Worker ${report.deploymentVersion} passed organization creation preflight.`);
+          NODE
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 45 "$base/" \
+            | grep -q "Organization creation preflight"
+
       - name: Deployment summary
         run: |
           echo "## PosApp Cloud Worker" >> "$GITHUB_STEP_SUMMARY"
           echo "Environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Turso migrations were applied idempotently and verified before the Worker deployment." >> "$GITHUB_STEP_SUMMARY"
-          echo "The public metadata endpoint now reports database reachability and schema readiness." >> "$GITHUB_STEP_SUMMARY"
+          echo "The public status page passed its password, token, schema, transaction, rollback, synchronization, and audit preflight." >> "$GITHUB_STEP_SUMMARY"

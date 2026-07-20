@@ -1,6 +1,6 @@
 import type { Client, Row, Transaction } from "@libsql/client/web";
-import { ApiError, jsonResponse } from "./errors";
-import { booleanValue, database, integer, nowIso, nullableText, requireDatabaseSchema, text } from "./db";
+import { ApiError, jsonResponse, safeProviderErrorCode } from "./errors";
+import { booleanValue, database, integer, isDatabaseSchemaError, nowIso, nullableText, requireDatabaseSchema, text } from "./db";
 import {
   clampNumber,
   hashPassword,
@@ -80,7 +80,12 @@ export async function signup(request: Request, env: Env, requestId: string, body
   const device = validateDevice(source.device);
   assertClientSchema(source, env);
   assertAuthSecrets(env);
-  const passwordHash = await hashPassword(password);
+  let passwordHash: string;
+  try {
+    passwordHash = await hashPassword(password);
+  } catch (error) {
+    throw organizationProvisioningError("hash online password", error);
+  }
 
   const tenantId = crypto.randomUUID();
   const storeId = crypto.randomUUID();
@@ -102,7 +107,11 @@ export async function signup(request: Request, env: Env, requestId: string, body
   let transaction: Transaction | undefined;
   try {
     await requireDatabaseSchema(client, schemaVersion(env));
-    transaction = await client.transaction("write");
+    try {
+      transaction = await client.transaction("write");
+    } catch (error) {
+      throw organizationProvisioningError("begin organization transaction", error);
+    }
     const registeredDevice = await transaction.execute({
       sql: "SELECT 1 FROM registered_devices WHERE id = ? LIMIT 1",
       args: [device.id],
@@ -115,20 +124,27 @@ export async function signup(request: Request, env: Env, requestId: string, body
     });
     if (duplicate.rows.length) throw new ApiError(409, "ACCOUNT_ALREADY_EXISTS", "That username or email is already registered.");
 
-    await transaction.batch([
+    const provisioningSteps: Array<{
+      stage: string;
+      sql: string;
+      args: Array<string | number | null>;
+    }> = [
       {
+        stage: "insert organization",
         sql: `INSERT INTO organizations
               (id, name, is_active, created_at_utc, updated_at_utc, schema_version)
               VALUES (?, ?, 1, ?, ?, ?)`,
         args: [tenantId, organizationName, timestamp, timestamp, schemaVersion(env)],
       },
       {
+        stage: "insert store",
         sql: `INSERT INTO stores
               (id, tenant_id, name, code, is_active, created_at_utc, updated_at_utc, version)
               VALUES (?, ?, ?, ?, 1, ?, ?, 1)`,
         args: [storeId, tenantId, storeName, "MAIN", timestamp, timestamp],
       },
       {
+        stage: "insert administrator",
         sql: `INSERT INTO users
               (id, tenant_id, default_store_id, username, username_normalized, email, email_normalized,
                full_name, password_hash, password_version, role, permissions_json, is_active,
@@ -137,28 +153,14 @@ export async function signup(request: Request, env: Env, requestId: string, body
         args: [userId, tenantId, storeId, username, username, email, email, fullName, passwordHash, timestamp, timestamp],
       },
       {
+        stage: "assign administrator to store",
         sql: `INSERT INTO user_store_assignments
               (tenant_id, user_id, store_id, is_active, created_at_utc)
               VALUES (?, ?, ?, 1, ?)`,
         args: [tenantId, userId, storeId, timestamp],
       },
       {
-        sql: `INSERT INTO user_sync_records
-              (id, tenant_id, store_id, payload_json, created_at_utc, updated_at_utc, deleted_at_utc,
-               version, created_by_user_id, updated_by_user_id, last_modified_device_id)
-              VALUES (?, ?, NULL, ?, ?, ?, NULL, 1, ?, ?, ?)`,
-        args: [userId, tenantId,
-          syncPayload,
-          timestamp, timestamp, userId, userId, device.id],
-      },
-      {
-        sql: `INSERT INTO sync_changes
-              (tenant_id, store_id, entity_type, record_id, version, updated_at_utc, deleted_at_utc,
-               last_modified_device_id, payload_json)
-              VALUES (?, NULL, 'users', ?, 1, ?, NULL, ?, ?)`,
-        args: [tenantId, userId, timestamp, device.id, syncPayload],
-      },
-      {
+        stage: "register device",
         sql: `INSERT INTO registered_devices
               (id, tenant_id, registered_by_user_id, assigned_store_id, name, operating_system,
                machine_name, status, first_registered_at_utc, last_login_at_utc, updated_at_utc)
@@ -167,6 +169,7 @@ export async function signup(request: Request, env: Env, requestId: string, body
           device.machineName ?? null, timestamp, timestamp, timestamp],
       },
       {
+        stage: "create login session",
         sql: `INSERT INTO login_sessions
               (id, tenant_id, user_id, device_id, created_at_utc, last_login_at_utc,
                last_seen_at_utc, expires_at_utc)
@@ -174,12 +177,30 @@ export async function signup(request: Request, env: Env, requestId: string, body
         args: [sessionId, tenantId, userId, device.id, timestamp, timestamp, timestamp, refreshExpiresAtUtc],
       },
       {
+        stage: "create refresh token",
         sql: `INSERT INTO refresh_tokens
               (id, session_id, family_id, parent_token_id, token_hash, created_at_utc, expires_at_utc)
               VALUES (?, ?, ?, NULL, ?, ?, ?)`,
         args: [refreshId, sessionId, familyId, refreshHash, timestamp, refreshExpiresAtUtc],
       },
       {
+        stage: "create synchronized user record",
+        sql: `INSERT INTO user_sync_records
+              (id, tenant_id, store_id, payload_json, created_at_utc, updated_at_utc, deleted_at_utc,
+               version, created_by_user_id, updated_by_user_id, last_modified_device_id)
+              VALUES (?, ?, NULL, ?, ?, ?, NULL, 1, ?, ?, ?)`,
+        args: [userId, tenantId, syncPayload, timestamp, timestamp, userId, userId, device.id],
+      },
+      {
+        stage: "create synchronization change",
+        sql: `INSERT INTO sync_changes
+              (tenant_id, store_id, entity_type, record_id, version, updated_at_utc, deleted_at_utc,
+               last_modified_device_id, payload_json)
+              VALUES (?, NULL, 'users', ?, 1, ?, NULL, ?, ?)`,
+        args: [tenantId, userId, timestamp, device.id, syncPayload],
+      },
+      {
+        stage: "write organization audit event",
         sql: `INSERT INTO audit_logs
               (id, tenant_id, store_id, user_id, device_id, timestamp_utc, action, affected_type,
                affected_id, request_id, metadata_json)
@@ -187,6 +208,7 @@ export async function signup(request: Request, env: Env, requestId: string, body
         args: [crypto.randomUUID(), tenantId, storeId, userId, device.id, timestamp, tenantId, requestId],
       },
       {
+        stage: "write login audit event",
         sql: `INSERT INTO audit_logs
               (id, tenant_id, store_id, user_id, device_id, timestamp_utc, action, affected_type,
                affected_id, request_id, metadata_json)
@@ -194,14 +216,21 @@ export async function signup(request: Request, env: Env, requestId: string, body
         args: [crypto.randomUUID(), tenantId, storeId, userId, device.id, timestamp, sessionId, requestId],
       },
       {
+        stage: "write device audit event",
         sql: `INSERT INTO audit_logs
               (id, tenant_id, store_id, user_id, device_id, timestamp_utc, action, affected_type,
                affected_id, request_id, metadata_json)
               VALUES (?, ?, ?, ?, ?, ?, 'device.registered', 'device', ?, ?, '{}')`,
         args: [crypto.randomUUID(), tenantId, storeId, userId, device.id, timestamp, device.id, requestId],
       },
-    ]);
-    await transaction.commit();
+    ];
+    for (const step of provisioningSteps)
+      await executeOrganizationProvisioningStep(transaction, step.stage, step.sql, step.args);
+    try {
+      await transaction.commit();
+    } catch (error) {
+      throw organizationProvisioningError("commit organization transaction", error);
+    }
     return jsonResponse({
       tokens: {
         accessToken: access.token,
@@ -1227,8 +1256,31 @@ async function auditFailedLogin(
   await client.batch(statements, "write");
 }
 
+async function executeOrganizationProvisioningStep(
+  transaction: Transaction,
+  stage: string,
+  sql: string,
+  args: Array<string | number | null>,
+): Promise<void> {
+  try {
+    await transaction.execute({ sql, args });
+  } catch (error) {
+    if (isUniqueError(error) || isDatabaseSchemaError(error)) throw error;
+    throw organizationProvisioningError(stage, error);
+  }
+}
+
+function organizationProvisioningError(stage: string, error: unknown): ApiError {
+  return new ApiError(
+    500,
+    "ORGANIZATION_PROVISIONING_FAILED",
+    `The online organization could not be created because cloud provisioning failed at: ${stage}. Open the Worker status page and run diagnostics.`,
+    { stage, providerCode: safeProviderErrorCode(error) },
+  );
+}
+
 function isUniqueError(error: unknown): boolean {
-  return error instanceof Error && /unique|constraint/i.test(error.message);
+  return error instanceof Error && /UNIQUE constraint failed|is not unique|duplicate key|SQLITE_CONSTRAINT_UNIQUE/i.test(error.message);
 }
 
 async function safeRollback(transaction: Transaction): Promise<void> {

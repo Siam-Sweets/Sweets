@@ -3,6 +3,7 @@ export interface Env {
   TURSO_AUTH_TOKEN: string;
   JWT_SIGNING_SECRET: string;
   REFRESH_TOKEN_SECRET: string;
+  DEPLOYMENT_VERSION?: string;
   API_VERSION?: string;
   SCHEMA_VERSION?: string;
   MINIMUM_CLIENT_SCHEMA_VERSION?: string;

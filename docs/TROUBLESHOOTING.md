@@ -9,6 +9,8 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 | `DATABASE_CONFIGURATION_ERROR` | The selected Worker environment is missing `TURSO_DATABASE_URL` or `TURSO_AUTH_TOKEN` | Add both secrets to the matching GitHub environment and rerun **Validate and deploy PosApp Cloud Worker**. |
 | `DATABASE_SCHEMA_NOT_READY` | Turso is reachable but required tables or migration versions are missing | Rerun **Validate and deploy PosApp Cloud Worker** for the correct environment; the workflow applies and verifies pending migrations before redeploying. |
 | `AUTHENTICATION_CONFIGURATION_ERROR` | The Worker is missing a valid `JWT_SIGNING_SECRET` or `REFRESH_TOKEN_SECRET` | Add two independent values of at least 32 characters to the matching GitHub environment and redeploy. |
+| `ORGANIZATION_PROVISIONING_FAILED` | A specific database or cryptographic stage failed while creating the tenant | Open the Worker base URL, rerun diagnostics, and use the displayed failed stage and request ID. The transaction is rolled back. |
+| `ORGANIZATION_PREFLIGHT_FAILED` | The public safe write-and-rollback test could not reproduce the complete signup transaction | Do not create accounts yet. Fix the stage shown on the Worker status page and redeploy. |
 | `INVALID_CREDENTIALS` | Username/email/password mismatch | Check the account; repeated failures are rate-limited. |
 | `ACCESS_TOKEN_EXPIRED` | Short token expired | Client renews automatically; if renewal fails, sign in again. |
 | `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REVOKED`, `REFRESH_TOKEN_REUSE` | Session cannot be renewed | Sign in again; investigate reuse because the session family was revoked. |
@@ -39,9 +41,10 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 
 1. Run `npm ci`, `npm run check`, and `npm test` in `cloud/worker`.
 2. Confirm the **Apply and verify Turso migrations** workflow step succeeded for the selected environment.
-3. Confirm all four secrets exist for the exact Wrangler environment.
-4. Request `/api/v1/meta` over HTTPS; confirm `databaseReachable`, `databaseSchemaReady`, and `configuration.ready` are all `true`, and `databaseSchemaVersion` is `4`.
-5. Use Cloudflare logs by request ID; the Worker emits only a sanitized category/provider code and never request bodies, tokens, or SQL.
+3. Confirm the four runtime secrets and environment-specific `POSAPP_CLOUD_API_BASE_URL` exist for the exact Wrangler environment.
+4. Open the Worker base URL over HTTPS. Confirm the page says **Ready** and **Account creation: verified**.
+5. For machine-readable output, request `/api/v1/diagnostics`; every check must have `status: "pass"` and `accountCreationReady` must be `true`.
+6. Use Cloudflare logs by the status-page or desktop request ID; the Worker emits only a sanitized category/provider code and never request bodies, tokens, SQL, or database URLs.
 
 ## Local database issues
 

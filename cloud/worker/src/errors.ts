@@ -62,7 +62,7 @@ function isDatabaseSchemaFailure(error: unknown): boolean {
 }
 
 function logServerFailure(error: unknown, requestId: string, category: string): void {
-  const providerCode = providerErrorCode(error);
+  const providerCode = safeProviderErrorCode(error);
   const name = error instanceof Error ? error.name : typeof error;
   // Keep logs searchable by the request ID without logging SQL text, request
   // payloads, credentials, database URLs, or provider response bodies.
@@ -75,7 +75,7 @@ function logServerFailure(error: unknown, requestId: string, category: string): 
   }));
 }
 
-function providerErrorCode(error: unknown): string | null {
+export function safeProviderErrorCode(error: unknown): string | null {
   if (!error || typeof error !== "object") return null;
   const value = error as Record<string, unknown>;
   const code = value.code ?? value.name;

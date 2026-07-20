@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.11 — Public Worker diagnostics and reliable organization provisioning
+
+- Replaced the authenticated root API response with a public, responsive Worker status page at `/` that shows deployment, database, schema, authentication, and organization-creation readiness without exposing secrets or user data.
+- Added `/api/v1/diagnostics`, including production password hashing, JWT verification, required table-and-column inspection, and a complete organization/account/device/session/sync/audit write transaction that is always rolled back and verified.
+- Replaced the opaque organization-creation SQL batch with ordered transaction steps so remote libSQL failures identify the exact safe provisioning stage while preserving atomic rollback.
+- Added `ORGANIZATION_PROVISIONING_FAILED` responses with a request ID, sanitized stage, and provider code instead of a generic internal error.
+- Tightened unique-constraint detection so foreign-key and other database constraints are no longer mislabeled as an existing username or email.
+- Updated the deployment workflow to require the environment-specific `POSAPP_CLOUD_API_BASE_URL`, call the deployed diagnostic endpoint, verify `accountCreationReady`, and fail the deployment when the public status page does not pass.
+- Added real SQLite/libSQL integration coverage for the public status page, rollback preflight, and production organization-signup transaction; all 38 Worker tests pass.
+- Updated application, installer, cloud client, Worker package, README, and release metadata to version 2.0.11.
+
 ## 2.0.10 — Automated Turso migration and schema readiness
 
 - Added an idempotent Turso migration runner that applies pending reviewed SQL files in order and verifies schema version 4, required tables, and the `registered_devices.assigned_store_id` column.
