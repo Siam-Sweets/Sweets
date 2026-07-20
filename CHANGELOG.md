@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.5 — WPF localized message helper build fix
+
+- Imported `PosApp.Wpf.Helpers` in `MainWindow.xaml.cs`, resolving CS0103 for its unqualified `LocalizedMessageBox` calls, including the terminal cloud-session warning at line 279.
+- Normalized the existing fully qualified `LocalizedMessageBox` calls in `MainWindow` to use the same namespace import.
+- Updated application, installer, cloud client, Worker package, tests, and README version metadata to 2.0.5.
+
 ## 2.0.4 — Immutable sale composition capture fix
 
 - Counted sale items, sale payments, and purchase items with the permanent local key bound after `SaveChanges(false)` instead of the entity CLR `Id`, which can still expose its pre-save default value during atomic outbox capture.

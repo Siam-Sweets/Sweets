@@ -5,6 +5,7 @@ using System.Windows.Media;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Wpf.Helpers;
 
 namespace PosApp.Wpf.Views;
 
@@ -107,7 +108,7 @@ public partial class MainWindow : Window
         }
         if (!IsAuthorized(tag))
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Your account does not have permission to open this page.",
+            LocalizedMessageBox.Show("Your account does not have permission to open this page.",
                 "Access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -171,7 +172,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             App.LogError("View refresh", ex);
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to refresh page",
+            LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to refresh page",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -249,7 +250,7 @@ public partial class MainWindow : Window
         var user = App.CurrentUser;
         if (user == null) return;
         var connection = CloudStatusText.Text;
-        PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{user.FullName}\nUsername: {user.Username}\nRole: {user.Role}\n\n{connection}",
+        LocalizedMessageBox.Show($"{user.FullName}\nUsername: {user.Username}\nRole: {user.Role}\n\n{connection}",
             "User Information", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
@@ -343,7 +344,7 @@ public partial class MainWindow : Window
         try { await _cloudSync.SyncNowAsync(true); }
         catch
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+            LocalizedMessageBox.Show(
                 TryFindResource("Cloud_UnexpectedError") as string ?? "Synchronization could not be completed. Local data remains safe.",
                 TryFindResource("Cloud_OnlineSync") as string ?? "Online synchronization",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -427,7 +428,7 @@ public partial class MainWindow : Window
 
     private void DrawerExit_Click(object sender, RoutedEventArgs e)
     {
-        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Exit PosApp?", "Exit", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        if (LocalizedMessageBox.Show("Exit PosApp?", "Exit", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             Close();
     }
 
@@ -454,7 +455,7 @@ public partial class MainWindow : Window
             App.CurrentUser = signedInUser;
             if (newSessionCreated) App.RestorePreviousSession(previousSession);
             App.LogError("Sign out", ex);
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+            LocalizedMessageBox.Show(
                 ex.GetBaseException().Message,
                 "Unable to sign out",
                 MessageBoxButton.OK,
