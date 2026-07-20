@@ -22,6 +22,7 @@ import { pull, push, syncStatus } from "./sync";
 import { finishInitialMigration, startInitialMigration } from "./migrations";
 import type { Env } from "./types";
 import { clampNumber } from "./crypto";
+import { inspectDatabaseReadiness } from "./db";
 
 const requestWindows = new Map<string, { count: number; resetAt: number }>();
 
@@ -35,18 +36,22 @@ export default {
 
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });
       if (request.method === "GET" && url.pathname === "/api/v1/meta") {
-        const databaseConfigured = Boolean(env.TURSO_DATABASE_URL && env.TURSO_AUTH_TOKEN);
+        const expectedSchemaVersion = Number(env.SCHEMA_VERSION ?? "4");
+        const database = await inspectDatabaseReadiness(env, expectedSchemaVersion);
         const authenticationConfigured = Boolean(
           env.JWT_SIGNING_SECRET?.length >= 32 && env.REFRESH_TOKEN_SECRET?.length >= 32,
         );
         return jsonResponse({
           service: "PosApp Cloud API",
           apiVersion: Number(env.API_VERSION ?? "1"),
-          schemaVersion: Number(env.SCHEMA_VERSION ?? "4"),
+          schemaVersion: expectedSchemaVersion,
           minimumClientSchemaVersion: Number(env.MINIMUM_CLIENT_SCHEMA_VERSION ?? "4"),
           configuration: {
-            ready: databaseConfigured && authenticationConfigured,
-            databaseConfigured,
+            ready: database.configured && database.reachable && database.schemaReady && authenticationConfigured,
+            databaseConfigured: database.configured,
+            databaseReachable: database.reachable,
+            databaseSchemaVersion: database.schemaVersion,
+            databaseSchemaReady: database.schemaReady,
             authenticationConfigured,
           },
           requestId,

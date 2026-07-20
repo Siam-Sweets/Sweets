@@ -1,6 +1,6 @@
 import type { Client, Row, Transaction } from "@libsql/client/web";
 import { ApiError, jsonResponse } from "./errors";
-import { booleanValue, database, integer, nowIso, nullableText, text } from "./db";
+import { booleanValue, database, integer, nowIso, nullableText, requireDatabaseSchema, text } from "./db";
 import {
   clampNumber,
   hashPassword,
@@ -101,6 +101,7 @@ export async function signup(request: Request, env: Env, requestId: string, body
   const client = database(env);
   let transaction: Transaction | undefined;
   try {
+    await requireDatabaseSchema(client, schemaVersion(env));
     transaction = await client.transaction("write");
     const registeredDevice = await transaction.execute({
       sql: "SELECT 1 FROM registered_devices WHERE id = ? LIMIT 1",

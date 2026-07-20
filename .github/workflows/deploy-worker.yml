@@ -123,6 +123,13 @@ jobs:
             exit 1
           fi
 
+      - name: Apply and verify Turso migrations
+        working-directory: cloud/worker
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: npm run migrate
+
       - name: Upload Worker secrets and deploy without printing values
         uses: cloudflare/wrangler-action@v4
         with:
@@ -148,4 +155,5 @@ jobs:
         run: |
           echo "## PosApp Cloud Worker" >> "$GITHUB_STEP_SUMMARY"
           echo "Environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Turso migrations are intentionally applied separately using the reviewed SQL files in cloud/migrations, as documented in docs/CLOUD-SETUP.md." >> "$GITHUB_STEP_SUMMARY"
+          echo "Turso migrations were applied idempotently and verified before the Worker deployment." >> "$GITHUB_STEP_SUMMARY"
+          echo "The public metadata endpoint now reports database reachability and schema readiness." >> "$GITHUB_STEP_SUMMARY"

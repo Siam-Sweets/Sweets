@@ -1,6 +1,6 @@
 {
   "name": "posapp-cloud-worker",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "test": "vitest run",
     "dev": "wrangler dev --env development",
     "deploy:development": "wrangler deploy --env development",
-    "deploy:production": "wrangler deploy --env production"
+    "deploy:production": "wrangler deploy --env production",
+    "migrate": "node scripts/apply-migrations.mjs"
   },
   "dependencies": {
     "@libsql/client": "0.17.4"

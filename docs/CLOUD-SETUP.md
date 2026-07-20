@@ -8,11 +8,11 @@ The desktop can be used without this deployment. Complete these steps only for o
 - A Cloudflare account with Workers enabled.
 - Node.js 24 and npm for Worker development.
 - Wrangler authenticated locally, or Cloudflare repository secrets for CI.
-- Turso CLI for applying reviewed production migrations.
+- Turso CLI only when you need to inspect or apply migrations manually outside GitHub Actions.
 
-## 1. Create and migrate Turso
+## 1. Create Turso
 
-Create a database with the Turso CLI, then apply migrations in order:
+Create the Turso database. The GitHub deployment workflow now applies every pending reviewed migration in filename order and verifies the final schema before deploying the Worker. For a manual deployment or recovery, apply the same files in order:
 
 ```bash
 turso db create posapp-production
@@ -23,7 +23,7 @@ turso db shell posapp-production < cloud/migrations/0004_financial_composition_s
 turso db shell posapp-production "SELECT version, name, applied_at_utc FROM schema_migrations ORDER BY version;"
 ```
 
-The final query must show versions 1, 2, 3, and 4. Apply each migration once, review it before production, and back up/export important data before future schema changes. Never run a development database token against production by accident.
+The final query must show versions 1, 2, 3, and 4. The automated runner reads `schema_migrations`, skips completed versions, handles an interrupted version-3 column addition, and verifies required tables and columns. Review every new SQL file and back up/export important production data before approving a deployment. Never run a development database token against production by accident.
 
 Create a Worker-only database token. Do not distribute it to desktop devices:
 
@@ -66,7 +66,7 @@ npm test
 npm run dev
 ```
 
-`GET http://127.0.0.1:8787/api/v1/meta` should return API/schema metadata, a request ID, and `configuration.ready: true`. If either configuration flag is false, add the missing bindings before testing account creation. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
+`GET http://127.0.0.1:8787/api/v1/meta` should return API/schema metadata, a request ID, and `configuration.ready: true`. The response also reports `databaseReachable`, `databaseSchemaVersion`, and `databaseSchemaReady` without exposing credentials. Account creation must not be tested until all readiness fields are true. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
 
 ## 4. Deploy
 
@@ -76,11 +76,11 @@ npm run deploy:development
 npm run deploy:production
 ```
 
-Do not proceed to production until migrations and all four production secrets exist. After deployment, verify `/api/v1/meta`, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
+Do not proceed to production until all four production secrets exist and the migration step succeeds. After deployment, verify `/api/v1/meta`, create a test organization, synchronize two disposable clients, revoke one session, and confirm the revoked client can no longer call a protected endpoint.
 
 ## GitHub Actions
 
-`.github/workflows/deploy-worker.yml` validates TypeScript, runs Worker tests, executes the migrations against a temporary SQLite database, performs a Wrangler dry run, and deploys development on cloud-path pushes. A manual run can select production.
+`.github/workflows/deploy-worker.yml` validates TypeScript, runs Worker tests, executes the migrations against a temporary SQLite database, performs a Wrangler dry run, applies pending migrations to the selected Turso database, verifies the remote schema, and only then deploys the Worker. A manual run can select production.
 
 The deployment uses the Node 24-compatible `cloudflare/wrangler-action@v4`, pins the same Wrangler version as `package-lock.json`, and checks that both Cloudflare credentials are present before invoking Wrangler. Missing credentials therefore produce a named GitHub Actions error instead of an opaque `npx` exit code.
 
@@ -93,7 +93,7 @@ Configure these GitHub environment or repository secrets for Worker deployment:
 - `JWT_SIGNING_SECRET`: an independent cryptographically random value of at least 32 characters.
 - `REFRESH_TOKEN_SECRET`: a second independent cryptographically random value of at least 32 characters.
 
-The deployment workflow validates these values, uploads the four runtime bindings as encrypted Cloudflare Worker secrets, and then deploys the selected environment. `wrangler.toml` declares them as required, so Wrangler rejects a deployment that would leave the Worker unable to create or authenticate accounts. Configure the secrets separately in protected `development` and `production` GitHub environments when the environments use different databases or keys.
+The deployment workflow validates these values, applies and verifies pending SQL migrations with the Turso URL/token, uploads the four runtime bindings as encrypted Cloudflare Worker secrets, and then deploys the selected environment. `wrangler.toml` declares them as required, so Wrangler rejects a deployment that would leave the Worker unable to create or authenticate accounts. Configure the secrets separately in protected `development` and `production` GitHub environments when the environments use different databases or keys.
 
 Configure this repository secret for the Windows desktop build:
 
@@ -101,7 +101,7 @@ Configure this repository secret for the Windows desktop build:
 
 The desktop workflow validates the value and embeds it into `PosApp.exe` as assembly metadata. Users do not type or choose the Worker address. The URL is not an authentication secret and remains discoverable from the distributed executable; account access is still protected by the Worker-issued user tokens. Main, tag, and manual builds require this secret. Pull-request verification builds can compile without it but disable new online sign-in and organization creation.
 
-Keep Worker runtime secrets in protected GitHub environments; the deployment workflow transfers them to encrypted Cloudflare Worker secret bindings without writing their values to the repository or logs. Require approval for production. Turso migrations are deliberately separate from Worker deployment so a reviewed schema step cannot be hidden inside an application deploy.
+Keep Worker runtime secrets in protected GitHub environments; the deployment workflow uses them without writing their values to the repository or logs. Require approval for production. Migrations remain separate, reviewable SQL files, but deployment is blocked unless every pending file applies and the remote schema verification succeeds.
 
 ## Desktop connection
 

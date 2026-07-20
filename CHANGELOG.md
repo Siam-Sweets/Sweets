@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.10 — Automated Turso migration and schema readiness
+
+- Added an idempotent Turso migration runner that applies pending reviewed SQL files in order and verifies schema version 4, required tables, and the `registered_devices.assigned_store_id` column.
+- Updated GitHub Actions to migrate and verify the selected development or production database before deploying the Worker, so an empty Turso database can no longer produce a reachable but unusable API.
+- Changed `/api/v1/meta` to verify actual database reachability and migration state instead of reporting readiness from secret presence alone.
+- Added `DATABASE_SCHEMA_NOT_READY` handling, localized desktop guidance, and sanitized request-ID logging without SQL, payloads, URLs, tokens, or credentials.
+- Added Worker tests for missing and outdated Turso schemas and validated the migration runner against a local libSQL database twice to confirm idempotency.
+- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.10.
+
 ## 2.0.9 — Worker runtime-secret deployment validation
 
 - Added the required Turso and authentication secret declarations to Wrangler configuration.

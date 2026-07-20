@@ -214,7 +214,7 @@ public sealed class ApiErrorBody
 
 public static class CloudProtocol
 {
-    public const string ClientVersion = "2.0.9";
+    public const string ClientVersion = "2.0.10";
     public const int ApiVersion = 1;
     public const int ClientSchemaVersion = 4;
     // Turso's HTTP transaction protocol uses several sequential outbound calls

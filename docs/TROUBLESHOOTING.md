@@ -7,6 +7,7 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 | `NETWORK_UNAVAILABLE`, `NETWORK_TIMEOUT` | Internet/Worker cannot be reached | Keep working locally; use Retry when connectivity returns. |
 | `REMOTE_SERVICE_ERROR`, `SYNC_FAILED` | Worker/Turso/proxy failure | Check Worker/Turso status and request ID; pending outbox rows remain local. |
 | `DATABASE_CONFIGURATION_ERROR` | The selected Worker environment is missing `TURSO_DATABASE_URL` or `TURSO_AUTH_TOKEN` | Add both secrets to the matching GitHub environment and rerun **Validate and deploy PosApp Cloud Worker**. |
+| `DATABASE_SCHEMA_NOT_READY` | Turso is reachable but required tables or migration versions are missing | Rerun **Validate and deploy PosApp Cloud Worker** for the correct environment; the workflow applies and verifies pending migrations before redeploying. |
 | `AUTHENTICATION_CONFIGURATION_ERROR` | The Worker is missing a valid `JWT_SIGNING_SECRET` or `REFRESH_TOKEN_SECRET` | Add two independent values of at least 32 characters to the matching GitHub environment and redeploy. |
 | `INVALID_CREDENTIALS` | Username/email/password mismatch | Check the account; repeated failures are rate-limited. |
 | `ACCESS_TOKEN_EXPIRED` | Short token expired | Client renews automatically; if renewal fails, sign in again. |
@@ -37,10 +38,10 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 ## Worker deployment checks
 
 1. Run `npm ci`, `npm run check`, and `npm test` in `cloud/worker`.
-2. Confirm all four `schema_migrations` rows exist in the target Turso database.
+2. Confirm the **Apply and verify Turso migrations** workflow step succeeded for the selected environment.
 3. Confirm all four secrets exist for the exact Wrangler environment.
-4. Request `/api/v1/meta` over HTTPS; confirm the API/schema versions and `configuration.ready: true`.
-5. Use Cloudflare logs by request ID; do not enable body/header logging.
+4. Request `/api/v1/meta` over HTTPS; confirm `databaseReachable`, `databaseSchemaReady`, and `configuration.ready` are all `true`, and `databaseSchemaVersion` is `4`.
+5. Use Cloudflare logs by request ID; the Worker emits only a sanitized category/provider code and never request bodies, tokens, or SQL.
 
 ## Local database issues
 

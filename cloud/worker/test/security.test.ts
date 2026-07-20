@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import type { Client } from "@libsql/client/web";
+import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/errors";
+import { requireDatabaseSchema } from "../src/db";
 import { hashPassword, signAccessToken, verifyAccessToken, verifyPassword } from "../src/crypto";
 import { effectivePermissions, requirePermission, validateCustomPermissions } from "../src/permissions";
 import {
@@ -22,6 +24,32 @@ const env: Env = {
   SCHEMA_VERSION: "4",
   MINIMUM_CLIENT_SCHEMA_VERSION: "4",
 };
+
+describe("database schema readiness", () => {
+  it("returns a deployment-specific error when Turso has not been migrated", async () => {
+    const client = {
+      execute: vi.fn().mockRejectedValue(new Error("SQLITE_ERROR: no such table: schema_migrations")),
+    } as unknown as Client;
+
+    await expect(requireDatabaseSchema(client, 4)).rejects.toMatchObject({
+      status: 503,
+      code: "DATABASE_SCHEMA_NOT_READY",
+      details: { expectedSchemaVersion: 4, currentSchemaVersion: 0 },
+    });
+  });
+
+  it("rejects an older recorded schema version before organization creation", async () => {
+    const client = {
+      execute: vi.fn().mockResolvedValue({ rows: [{ version: 3 }] }),
+    } as unknown as Client;
+
+    await expect(requireDatabaseSchema(client, 4)).rejects.toMatchObject({
+      status: 503,
+      code: "DATABASE_SCHEMA_NOT_READY",
+      details: { expectedSchemaVersion: 4, currentSchemaVersion: 3 },
+    });
+  });
+});
 
 describe("authentication primitives", () => {
   it("hashes passwords with unique PBKDF2 salts and verifies without plaintext storage", async () => {
