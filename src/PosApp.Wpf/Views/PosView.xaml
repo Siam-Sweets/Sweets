@@ -205,7 +205,7 @@
                 <DataGrid x:Name="ReceiptGrid" ItemsSource="{Binding CartLines}"
                           AutoGenerateColumns="False" IsReadOnly="True"
                           SelectionMode="Single" SelectionUnit="FullRow"
-                          HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                          HeadersVisibility="Column" GridLinesVisibility="All"
                           RowHeight="52" FontSize="14" BorderThickness="0"
                           Background="{DynamicResource BackgroundBrush}">
                     <DataGrid.Columns>

@@ -1,0 +1,37 @@
+name = "posapp-cloud-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+[vars]
+API_VERSION = "1"
+SCHEMA_VERSION = "4"
+MINIMUM_CLIENT_SCHEMA_VERSION = "4"
+ACCESS_TOKEN_TTL_SECONDS = "600"
+REFRESH_TOKEN_TTL_DAYS = "30"
+MAX_REQUEST_BYTES = "1048576"
+MAX_SYNC_BATCH = "2"
+
+[env.development]
+name = "posapp-cloud-api-development"
+
+[env.development.vars]
+API_VERSION = "1"
+SCHEMA_VERSION = "4"
+MINIMUM_CLIENT_SCHEMA_VERSION = "4"
+ACCESS_TOKEN_TTL_SECONDS = "600"
+REFRESH_TOKEN_TTL_DAYS = "7"
+MAX_REQUEST_BYTES = "1048576"
+MAX_SYNC_BATCH = "2"
+
+[env.production]
+name = "posapp-cloud-api-production"
+
+[env.production.vars]
+API_VERSION = "1"
+SCHEMA_VERSION = "4"
+MINIMUM_CLIENT_SCHEMA_VERSION = "4"
+ACCESS_TOKEN_TTL_SECONDS = "600"
+REFRESH_TOKEN_TTL_DAYS = "30"
+MAX_REQUEST_BYTES = "1048576"
+MAX_SYNC_BATCH = "2"

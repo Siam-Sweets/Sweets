@@ -1,20 +1,24 @@
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.Extensions.DependencyInjection;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Wpf.Helpers;
 
 namespace PosApp.Wpf.Views;
 
 public partial class SetupView : Window
 {
     private readonly ISetupService _setup;
+    private readonly IServiceProvider _services;
     private StoreSettings _storeSettings = new();
     private bool _isLoading = true;
 
-    public SetupView(ISetupService setup)
+    public SetupView(ISetupService setup, IServiceProvider services)
     {
         InitializeComponent();
         _setup = setup;
+        _services = services;
     }
 
     private async void SetupView_Loaded(object sender, RoutedEventArgs e)
@@ -130,11 +134,59 @@ public partial class SetupView : Window
         }
     }
 
+    private async void OnlineAccount_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorText.Visibility = Visibility.Collapsed;
+        var accountWindow = _services.GetRequiredService<CloudAccountWindow>();
+        accountWindow.Owner = this;
+        if (accountWindow.ShowDialog() != true || accountWindow.AuthenticationResult == null) return;
+
+        OnlineAccountButton.IsEnabled = false;
+        FinishButton.IsEnabled = false;
+        try
+        {
+            var requiresInitialMigration = await _setup.CompleteOnlineSetupAsync(
+                accountWindow.AuthenticationResult, accountWindow.CreatedOrganization);
+            var accounts = _services.GetRequiredService<ICloudAccountService>();
+            await accounts.InitializeCachedSessionAsync();
+
+            if (requiresInitialMigration)
+                await _services.GetRequiredService<ICloudMigrationService>().UploadExistingDataAsync();
+            else
+            {
+                var status = await _services.GetRequiredService<ICloudSyncService>().SyncNowAsync(true);
+                if (status.State != "up_to_date")
+                    throw new InvalidOperationException(
+                        Text("Setup_OnlineDownloadIncomplete", "The initial download is incomplete. Check the connection and sign in again to resume."));
+            }
+
+            await _setup.FinalizeOnlineSetupAsync();
+
+            _storeSettings = await _services.GetRequiredService<ISettingsService>().GetStoreSettingsAsync();
+            App.PublishSettings(_storeSettings);
+            App.ApplyLanguage(_storeSettings.Language);
+            App.ApplyTheme(_storeSettings.Theme);
+            DialogResult = true;
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+        }
+        finally
+        {
+            OnlineAccountButton.IsEnabled = true;
+            FinishButton.IsEnabled = true;
+        }
+    }
+
     private void ShowError(string message)
     {
-        ErrorText.Text = message;
+        ErrorText.Text = RuntimeUiText.Translate(message);
         ErrorText.Visibility = Visibility.Visible;
     }
+
+    private string Text(string key, string fallback)
+        => TryFindResource(key) as string ?? fallback;
 
     private void Exit_Click(object sender, RoutedEventArgs e)
     {

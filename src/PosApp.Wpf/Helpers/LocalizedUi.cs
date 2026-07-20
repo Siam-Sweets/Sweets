@@ -308,6 +308,14 @@ public static class RuntimeUiText
         if (match.Success) return $"ব্যাকআপ সফলভাবে তৈরি হয়েছে।\n\n{match.Groups[1].Value}";
         match = Regex.Match(value, @"^Exported (\d+) sales to:\s*(.+)$", RegexOptions.Singleline);
         if (match.Success) return $"{match.Groups[1].Value}টি বিক্রয় এখানে রপ্তানি হয়েছে:\n{match.Groups[2].Value}";
+        match = Regex.Match(value,
+            @"^Cloud record-count verification failed for: (.+)\. The backup was retained and no automatic merge will be attempted\.$");
+        if (match.Success)
+            return $"এই রেকর্ডগুলোর ক্লাউড সংখ্যা যাচাই ব্যর্থ হয়েছে: {match.Groups[1].Value}। ব্যাকআপ রাখা হয়েছে এবং স্বয়ংক্রিয়ভাবে একত্রীকরণ করা হবে না।";
+        match = Regex.Match(value,
+            @"^The server reports a completed migration, but record-count verification failed for: (.+)\. Keep the local backup and contact an administrator before retrying\.$");
+        if (match.Success)
+            return $"সার্ভার মাইগ্রেশন সম্পন্ন দেখালেও এই রেকর্ডগুলোর সংখ্যা যাচাই ব্যর্থ হয়েছে: {match.Groups[1].Value}। স্থানীয় ব্যাকআপ রেখে আবার চেষ্টা করার আগে প্রশাসকের সঙ্গে যোগাযোগ করুন।";
         match = Regex.Match(value, @"^Enter a value of at least (.+)\.$");
         if (match.Success) return $"অন্তত {match.Groups[1].Value} মান লিখুন।";
         match = Regex.Match(value, @"^Unable to (.+)$");

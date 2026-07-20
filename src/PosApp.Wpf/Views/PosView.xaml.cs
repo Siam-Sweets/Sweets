@@ -786,6 +786,16 @@ public class PosViewModel : ViewModelBase
         RecalcTotals();
     }
 
+    public void ResetForStoreSwitch()
+    {
+        ClearCart();
+        _selectedCategoryId = 0;
+        SearchText = string.Empty;
+        SearchField = ProductSearchField.All;
+        Categories.Clear();
+        Products.Clear();
+    }
+
     private void RecalcTotals()
     {
         OnPropertyChanged(nameof(Subtotal));

@@ -1,0 +1,102 @@
+name: Validate and deploy PosApp Cloud Worker
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'cloud/**'
+      - '.github/workflows/deploy-worker.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'cloud/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Cloudflare Worker environment
+        type: choice
+        required: true
+        default: development
+        options: [development, production]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: posapp-worker-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Worker, tests, and Turso SQL
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud/worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloud/worker/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Type-check Worker
+        run: npm run check
+
+      - name: Run Worker security and sync tests
+        run: npm test
+
+      - name: Validate migrations with SQLite
+        working-directory: .
+        run: |
+          sqlite3 /tmp/posapp-cloud-schema.db < cloud/migrations/0001_initial.sql
+          sqlite3 /tmp/posapp-cloud-schema.db < cloud/migrations/0002_indexes.sql
+          sqlite3 /tmp/posapp-cloud-schema.db < cloud/migrations/0003_migration_lock.sql
+          sqlite3 /tmp/posapp-cloud-schema.db < cloud/migrations/0004_financial_composition_staging.sql
+          test "$(sqlite3 /tmp/posapp-cloud-schema.db 'SELECT MAX(version) FROM schema_migrations;')" = "4"
+
+      - name: Validate Wrangler configuration
+        run: npx wrangler deploy --dry-run --env development --outdir /tmp/posapp-worker-dry-run
+
+  deploy:
+    name: Deploy Cloudflare Worker
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloud/worker/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: cloud/worker
+        run: npm ci
+
+      - name: Deploy without printing secret values
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloud/worker
+          command: deploy --env ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}
+
+      - name: Deployment summary
+        run: |
+          echo "## PosApp Cloud Worker" >> "$GITHUB_STEP_SUMMARY"
+          echo "Environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Turso migrations are intentionally applied separately using the reviewed SQL files in cloud/migrations, as documented in docs/CLOUD-SETUP.md." >> "$GITHUB_STEP_SUMMARY"

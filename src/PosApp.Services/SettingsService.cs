@@ -10,8 +10,6 @@ namespace PosApp.Services;
 public class SettingsService : ISettingsService
 {
     private readonly AppDbContext _db;
-    private static readonly SemaphoreSlim CacheGate = new(1, 1);
-    private static string? _cachedJson;
 
     public SettingsService(AppDbContext db) => _db = db;
 
@@ -39,26 +37,15 @@ public class SettingsService : ISettingsService
             setting.UpdatedAt = DateTime.UtcNow;
         }
         await _db.SaveChangesAsync();
-        if (normalizedKey == "store:config")
-        {
-            await CacheGate.WaitAsync();
-            try { _cachedJson = value; }
-            finally { CacheGate.Release(); }
-        }
     }
 
     public async Task<StoreSettings> GetStoreSettingsAsync()
     {
-        await CacheGate.WaitAsync();
-        try
-        {
-            _cachedJson ??= await GetAsync("store:config") ?? JsonSerializer.Serialize(new StoreSettings());
-            return DeserializeClone(_cachedJson);
-        }
-        finally
-        {
-            CacheGate.Release();
-        }
+        // A background pull may replace this record at any time. Read the
+        // SQLite working copy so synchronized settings are never hidden by a
+        // process-wide stale value.
+        var json = await GetAsync("store:config") ?? JsonSerializer.Serialize(new StoreSettings());
+        return DeserializeClone(json);
     }
 
     public async Task SetStoreSettingsAsync(StoreSettings settings)

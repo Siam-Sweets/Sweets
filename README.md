@@ -1,12 +1,14 @@
-# PosApp - Local Point of Sale (WPF / .NET 8)
+# PosApp 2.0 - Offline-first online Point of Sale
 
-A feature-rich, **local-only** Point of Sale desktop application for Windows, built with C# and WPF on .NET 8. All data stays in a local SQLite database — no cloud, no server, no internet required.
+A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.0** preserves the complete v1.4.24 local application and adds optional secure multi-device synchronization through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational database, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is unavailable.
 
-## Offline Boundary
+## Offline-first boundary
 
-Version 1.4.22 contains no runtime HTTP client, telemetry, cloud sync, hosted API, remote login, email, or SMS integration. Checkout, purchases, register sessions, reports, CSV transfer, backups, restores, safe updates, and installation all use local files and the local SQLite database only. Internet access is needed only by a developer when restoring NuGet packages or installing build tools, or by GitHub Actions when building a release.
+The desktop never connects directly to Turso and never contains a Turso token, JWT secret, or Cloudflare credential. It sends bounded HTTPS JSON batches to the versioned Worker API. Every local business change and its outbox operation are committed in one SQLite transaction; synchronization runs asynchronously and never becomes a prerequisite for operating the register. Online accounts are optional, and a disconnected installation retains the original local POS behavior.
 
-This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
+See [Architecture](docs/ARCHITECTURE.md), [Cloud setup](docs/CLOUD-SETUP.md), [Sync protocol](docs/SYNC-PROTOCOL.md), [Security](docs/SECURITY.md), [free-plan guidance](docs/FREE-PLAN.md), and [Troubleshooting](docs/TROUBLESHOOTING.md).
+
+Version 2.0 evolves the existing v1.4.24 PosApp codebase in place. Its operational entities, UI, reports, printing, localization, migrations, updater, installer, and release history remain intact; online accounts and synchronization are additive layers around the established local application.
 
 ## Features
 
@@ -28,11 +30,14 @@ This is an original POS implementation inspired by the publicly known feature se
 | **Receipt Printer** | ESC/POS thermal printer via raw spooler (58/80mm) AND fallback Windows PrintDocument path for any printer |
 | **Hardware**        | Barcode scanner (HID keyboard + serial) and receipt printer — both degrade safely when unavailable |
 | **Data Safety**     | Consistent SQLite backups on startup/exit, manual backup, retention control, validated staged restore, automatic pre-restore safety copy, and pre-migration safe-update snapshots |
+| **Online account & sync** | Organization/store isolation, username or email login, rotating sessions, DPAPI-protected tokens, registered devices, background push/pull, tombstones, conflict review, migration from existing SQLite, and explicit post-restore reconciliation |
 
 ## Tech Stack
 
 - **.NET 8 (LTS)** + **WPF** (XAML and code-behind)
 - **EF Core 8** + **SQLite** (single-file local DB at `%LOCALAPPDATA%\PosApp\posapp.db`)
+- **Cloudflare Workers** versioned HTTPS API (optional online service)
+- **Turso/libSQL** multi-tenant cloud database accessed only by the Worker
 - **System.IO.Ports** for serial barcode scanners
 - **System.Drawing.Common** for Windows receipt and report printing
 - Original UI styling (flat, modern, Material-inspired) with EN + BN bilingual support
@@ -41,7 +46,11 @@ This is an original POS implementation inspired by the publicly known feature se
 
 ```
 posapp/
-├── .github/workflows/build.yml     # CI: build single-file exe on push/tag/manual
+├── .github/workflows/              # Windows release build + separate Worker deployment
+├── cloud/
+│   ├── migrations/                 # Ordered Turso/libSQL schema migrations
+│   └── worker/                     # Cloudflare Worker API and Vitest suite
+├── docs/                            # Architecture, deployment, protocol, security, limits, troubleshooting
 ├── installer/                      # Branded Inno Setup wizard, license, and artwork
 ├── scripts/Build-Installer.ps1     # Publish app + compile installer locally
 ├── PosApp.sln
@@ -52,6 +61,7 @@ posapp/
 │   ├── PosApp.Hardware/            # Receipt-printer and barcode-scanner integrations
 │   ├── PosApp.Localization/        # Strings.en.xaml + Strings.bn.xaml + LocalizationManager
 │   └── PosApp.Wpf/                 # App, MainWindow, all views, styles, converters
+├── tests/PosApp.Sync.Tests/         # SQLite outbox/protocol/localization tests
 └── README.md
 ```
 
@@ -72,15 +82,17 @@ dotnet run --project src/PosApp.Wpf/PosApp.Wpf.csproj
 
 On first run, the app creates `%LOCALAPPDATA%\PosApp\posapp.db`.
 
-Before login is shown, a one-time setup wizard asks for the store identity, currency, receipt footer, appearance, backup preference, optional sample products, and administrator username/PIN. The completed state is stored only in the local SQLite database, so setup does not appear again on later starts.
+Before login is shown, a one-time setup wizard offers two safe paths. A local-only installation enters its store identity, currency, receipt footer, appearance, backup preference, optional sample products, and administrator username/PIN. A computer joining PosApp Online can instead sign in or create an organization immediately; it registers the device, creates its device-only offline PIN, and downloads the authorized organization without first inventing a throwaway local account. Online setup is two-phase: the device-local completed marker is written only after the initial migration or cursor-zero download succeeds. An interrupted setup resumes the same safe path after restart, and neither setup marker is synchronized.
 
-The database also seeds:
+Local setup creates the administrator only after the owner chooses a username and PIN; there are no built-in or known default credentials. The database seeds:
 
-- The administrator account whose name, username, and PIN are finalized by the setup wizard
-- Starter cashier user: `cashier` / PIN `1111` (change or deactivate it from **Users** before production use)
 - 6 default categories (Beverages, Snacks, Groceries, Household, Personal Care, Produce)
 - 15 sample products (mix of fixed-price and weighted) only when the setup toggle is left on
 - Default tax rates and discounts
+
+When a new online organization is created from first-run setup, these local templates are uploaded under the protected cloud-empty migration lease. When the computer joins an existing organization, bootstrap templates are removed before the initial pull so the cloud catalog remains authoritative. If the final migration response is lost, the next startup verifies the completed lease and server counts rather than uploading the snapshot again.
+
+When an already-configured v1.x database is linked, PosApp first creates a verified backup and pauses all push/pull activity. The administrator must explicitly upload that local snapshot to a server-verified empty organization or replace the local synchronized working copy with server data. It never silently combines populated local and cloud datasets.
 
 ### Publish a Single-File EXE Locally
 ```powershell
@@ -104,7 +116,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-1.4.22-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-2.0.0-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -130,21 +142,23 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers now retain the real application version in their filename and Windows metadata, for example `PosApp-1.4.22-dev.27-Setup.exe` with resource version `1.4.22.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.0-dev.27-Setup.exe` with resource version `2.0.0.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v1.4.22`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v2.0.0`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.4.22
-git push origin v1.4.22
+git tag v2.0.0
+git push origin v2.0.0
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.4.22`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.0`.
+
+`.github/workflows/deploy-worker.yml` independently type-checks and tests the Worker, validates all ordered Turso migrations, performs a Wrangler dry run, and deploys the selected `development` or `production` environment using repository/environment secrets. Follow [Cloud setup](docs/CLOUD-SETUP.md) before enabling deployment.
 
 For in-app updates, configure these GitHub Actions repository secrets:
 
@@ -163,6 +177,8 @@ All settings persist in the SQLite database and are editable from the in-app **S
 - **Hardware**: receipt printer name (dropdown of installed Windows printers) and test printing; completed receipts are printed on demand from Sales History
 - **Language**: English (default) or বাংলা (Bengali) — switches live
 - **Theme**: Light / Dark
+- **Theme-aware date controls**: DatePicker fields and calendar popups use readable light/dark surfaces, headers, navigation arrows, weekday labels, date cells, and selection states
+- **High-contrast boundaries**: Cards, inputs, dropdowns, dialogs, side panels, command tiles, and tables use stronger theme-aware borders; data grids show clear horizontal and vertical cell separators
 - **Data safety**: automatic backups on startup and/or exit, retention count, manual backup, validated restore, and backup-folder access
 - **Update and recovery**: newer local installer selection, version/hash validation, pre-update database verification, recovery backup location, and last-update status
 
@@ -179,7 +195,10 @@ When an optional scanner or printer is missing, PosApp degrades safely so the re
 ## Security Notes
 
 - PINs are hashed with PBKDF2-SHA256 using a random salt and 120,000 iterations. Existing legacy SHA-256 hashes are transparently upgraded after a successful login.
-- The SQLite database lives under `%LOCALAPPDATA%\PosApp\` — back it up regularly. There is no cloud sync.
+- The SQLite database under `%LOCALAPPDATA%\PosApp\` is always the local working copy and should still be backed up regularly. Cloud synchronization is not a substitute for verified backups.
+- Access and refresh tokens are encrypted for the current Windows user with DPAPI. No token is written to normal settings or SQLite.
+- Online passwords use PBKDF2-HMAC-SHA-256 with a unique random salt and 310,000 iterations. Refresh tokens are stored only as keyed hashes in Turso and rotate after every use.
+- Every Worker query is parameterized and protected endpoints re-check the active session, device, tenant, role, and permission against Turso.
 - Role-based access:
   - **Cashier**: POS, Register, and Sales
   - **Manager**: + Products, Inventory, Purchases, Customers, Reports, and register close/Z report
@@ -187,8 +206,7 @@ When an optional scanner or printer is missing, PosApp degrades safely so the re
 
 ## Future Roadmap
 
-- Multi-terminal sync (would need a server or shared DB)
-- Cloud backup
+- Optional managed cloud backup/export retention beyond synchronized operational data
 - Email/SMS receipts
 - Purchase orders and supplier stock returns (posted purchase receiving is included)
 - Loyalty tier rules

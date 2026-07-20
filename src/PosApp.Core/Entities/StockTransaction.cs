@@ -27,6 +27,14 @@ public class StockTransaction
     public int? SaleId { get; set; }
     public int? SaleItemId { get; set; }
 
+    /// <summary>Posted purchase that owns this stock receipt, when applicable.</summary>
+    public int? PurchaseDocumentId { get; set; }
+    public PurchaseDocument? PurchaseDocument { get; set; }
+
+    /// <summary>Immutable purchase line that determines product and quantity.</summary>
+    public int? PurchaseItemId { get; set; }
+    public PurchaseItem? PurchaseItem { get; set; }
+
     [MaxLength(500)]
     public string? Note { get; set; }
 

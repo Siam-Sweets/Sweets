@@ -370,7 +370,10 @@
         <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Padding" Value="6"/>
+        <Setter Property="Padding" Value="4"/>
+        <Setter Property="MinWidth" Value="28"/>
+        <Setter Property="MinHeight" Value="26"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -381,28 +384,49 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="4"
                             Padding="{TemplateBinding Padding}">
-                        <TextBlock x:Name="DayText" Text="{TemplateBinding Content}"
+                        <TextBlock x:Name="DayText"
+                                   Text="{TemplateBinding Content}"
                                    Foreground="{TemplateBinding Foreground}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="DayBorder" Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
-                            <Setter TargetName="DayBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="DayBorder" Property="Background"
+                                    Value="{DynamicResource SurfaceHoverBrush}"/>
+                            <Setter TargetName="DayBorder" Property="BorderBrush"
+                                    Value="{DynamicResource PrimaryBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="DayBorder" Property="Background"
+                                    Value="{DynamicResource SelectionBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="DayBorder" Property="BorderBrush"
+                                    Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="DayBorder" Property="BorderThickness" Value="2"/>
                         </Trigger>
                         <Trigger Property="IsToday" Value="True">
-                            <Setter TargetName="DayBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="DayBorder" Property="BorderBrush"
+                                    Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="DayText" Property="FontWeight" Value="Bold"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="DayBorder" Property="Background" Value="{DynamicResource PrimaryBrush}"/>
-                            <Setter TargetName="DayBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="DayBorder" Property="Background"
+                                    Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="DayBorder" Property="BorderBrush"
+                                    Value="{DynamicResource PrimaryBrush}"/>
                             <Setter TargetName="DayText" Property="Foreground" Value="White"/>
+                            <Setter TargetName="DayText" Property="FontWeight" Value="SemiBold"/>
                         </Trigger>
                         <Trigger Property="IsInactive" Value="True">
-                            <Setter TargetName="DayBorder" Property="Opacity" Value="0.45"/>
+                            <Setter TargetName="DayText" Property="Foreground"
+                                    Value="{DynamicResource TextMutedBrush}"/>
+                            <Setter TargetName="DayBorder" Property="Opacity" Value="0.58"/>
                         </Trigger>
                         <Trigger Property="IsBlackedOut" Value="True">
-                            <Setter TargetName="DayBorder" Property="Opacity" Value="0.3"/>
+                            <Setter TargetName="DayText" Property="TextDecorations" Value="Strikethrough"/>
+                            <Setter TargetName="DayBorder" Property="Opacity" Value="0.32"/>
                             <Setter Property="IsHitTestVisible" Value="False"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
@@ -420,28 +444,53 @@
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="8,6"/>
+        <Setter Property="MinWidth" Value="48"/>
+        <Setter Property="MinHeight" Value="42"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CalendarButton">
-                    <Border x:Name="MonthBorder" Background="{TemplateBinding Background}"
+                    <Border x:Name="MonthBorder"
+                            Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4" Padding="{TemplateBinding Padding}">
-                        <TextBlock x:Name="MonthText" Text="{TemplateBinding Content}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <TextBlock x:Name="MonthText"
+                                   Text="{TemplateBinding Content}"
                                    Foreground="{TemplateBinding Foreground}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="MonthBorder" Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
-                            <Setter TargetName="MonthBorder" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="MonthBorder" Property="Background"
+                                    Value="{DynamicResource SurfaceHoverBrush}"/>
+                            <Setter TargetName="MonthBorder" Property="BorderBrush"
+                                    Value="{DynamicResource PrimaryBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="MonthBorder" Property="Background"
+                                    Value="{DynamicResource SelectionBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="MonthBorder" Property="BorderBrush"
+                                    Value="{DynamicResource PrimaryBrush}"/>
+                            <Setter TargetName="MonthBorder" Property="BorderThickness" Value="2"/>
                         </Trigger>
                         <Trigger Property="HasSelectedDays" Value="True">
-                            <Setter TargetName="MonthBorder" Property="Background" Value="{DynamicResource SelectionBrush}"/>
+                            <Setter TargetName="MonthBorder" Property="Background"
+                                    Value="{DynamicResource SelectionBrush}"/>
+                            <Setter TargetName="MonthText" Property="FontWeight" Value="SemiBold"/>
                         </Trigger>
                         <Trigger Property="IsInactive" Value="True">
-                            <Setter TargetName="MonthBorder" Property="Opacity" Value="0.45"/>
+                            <Setter TargetName="MonthText" Property="Foreground"
+                                    Value="{DynamicResource TextMutedBrush}"/>
+                            <Setter TargetName="MonthBorder" Property="Opacity" Value="0.58"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="MonthBorder" Property="Opacity" Value="0.35"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -454,6 +503,223 @@
         <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CalendarItem">
+                    <ControlTemplate.Resources>
+                        <DataTemplate x:Key="{x:Static CalendarItem.DayTitleTemplateResourceKey}">
+                            <TextBlock Text="{Binding}"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </DataTemplate>
+                    </ControlTemplate.Resources>
+
+                    <Grid x:Name="PART_Root"
+                          Background="{TemplateBinding Background}"
+                          TextElement.Foreground="{TemplateBinding Foreground}">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="34"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="34"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="38"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Button x:Name="PART_PreviousButton"
+                                        Grid.Row="0" Grid.Column="0"
+                                        Width="30" Height="30"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Focusable="False"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="PreviousBorder"
+                                                    Background="Transparent"
+                                                    CornerRadius="4">
+                                                <Path Data="M 8,3 L 4,7 L 8,11"
+                                                      Width="12" Height="14"
+                                                      Stretch="Uniform"
+                                                      Stroke="{DynamicResource TextDarkBrush}"
+                                                      StrokeThickness="1.8"
+                                                      StrokeStartLineCap="Round"
+                                                      StrokeEndLineCap="Round"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="PreviousBorder" Property="Background"
+                                                            Value="{DynamicResource SurfaceHoverBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="PreviousBorder" Property="Background"
+                                                            Value="{DynamicResource SelectionBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="PreviousBorder" Property="Opacity" Value="0.35"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                                <Button x:Name="PART_HeaderButton"
+                                        Grid.Row="0" Grid.Column="1"
+                                        MinHeight="30"
+                                        Padding="10,4"
+                                        HorizontalContentAlignment="Center"
+                                        VerticalContentAlignment="Center"
+                                        Background="Transparent"
+                                        Foreground="{DynamicResource TextDarkBrush}"
+                                        BorderThickness="0"
+                                        FontWeight="SemiBold"
+                                        Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="HeaderBorder"
+                                                    Background="{TemplateBinding Background}"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center"
+                                                                  RecognizesAccessKey="True"
+                                                                  TextElement.Foreground="{TemplateBinding Foreground}"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="HeaderBorder" Property="Background"
+                                                            Value="{DynamicResource SurfaceHoverBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="HeaderBorder" Property="Background"
+                                                            Value="{DynamicResource SelectionBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="HeaderBorder" Property="Opacity" Value="0.35"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                                <Button x:Name="PART_NextButton"
+                                        Grid.Row="0" Grid.Column="2"
+                                        Width="30" Height="30"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Focusable="False"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Cursor="Hand">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="NextBorder"
+                                                    Background="Transparent"
+                                                    CornerRadius="4">
+                                                <Path Data="M 4,3 L 8,7 L 4,11"
+                                                      Width="12" Height="14"
+                                                      Stretch="Uniform"
+                                                      Stroke="{DynamicResource TextDarkBrush}"
+                                                      StrokeThickness="1.8"
+                                                      StrokeStartLineCap="Round"
+                                                      StrokeEndLineCap="Round"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="NextBorder" Property="Background"
+                                                            Value="{DynamicResource SurfaceHoverBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="NextBorder" Property="Background"
+                                                            Value="{DynamicResource SelectionBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="NextBorder" Property="Opacity" Value="0.35"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+
+                                <Grid x:Name="PART_MonthView"
+                                      Grid.Row="1" Grid.ColumnSpan="3"
+                                      MinWidth="224" MinHeight="206"
+                                      Background="{TemplateBinding Background}"
+                                      TextElement.Foreground="{TemplateBinding Foreground}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="32"/>
+                                        <ColumnDefinition Width="32"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="26"/>
+                                        <RowDefinition Height="30"/>
+                                        <RowDefinition Height="30"/>
+                                        <RowDefinition Height="30"/>
+                                        <RowDefinition Height="30"/>
+                                        <RowDefinition Height="30"/>
+                                        <RowDefinition Height="30"/>
+                                    </Grid.RowDefinitions>
+                                </Grid>
+
+                                <Grid x:Name="PART_YearView"
+                                      Grid.Row="1" Grid.ColumnSpan="3"
+                                      MinWidth="224" MinHeight="174"
+                                      Visibility="Hidden"
+                                      Background="{TemplateBinding Background}"
+                                      TextElement.Foreground="{TemplateBinding Foreground}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="56"/>
+                                        <ColumnDefinition Width="56"/>
+                                        <ColumnDefinition Width="56"/>
+                                        <ColumnDefinition Width="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="58"/>
+                                        <RowDefinition Height="58"/>
+                                        <RowDefinition Height="58"/>
+                                    </Grid.RowDefinitions>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="PART_DisabledVisual"
+                                Background="{DynamicResource CardBrush}"
+                                Opacity="0.58"
+                                CornerRadius="6"
+                                Visibility="Collapsed"
+                                IsHitTestVisible="False"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="PART_DisabledVisual" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="Calendar">
@@ -639,12 +905,13 @@
     <Style TargetType="DataGrid">
         <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource StrongBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="RowBackground" Value="{DynamicResource CardBrush}"/>
         <Setter Property="AlternatingRowBackground" Value="{DynamicResource AlternateRowBrush}"/>
-        <Setter Property="GridLinesVisibility" Value="Horizontal"/>
-        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="GridLinesVisibility" Value="All"/>
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource StrongBorderBrush}"/>
+        <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource StrongBorderBrush}"/>
         <Setter Property="HeadersVisibility" Value="Column"/>
         <Setter Property="SelectionMode" Value="Single"/>
         <Setter Property="AutoGenerateColumns" Value="False"/>
@@ -658,7 +925,7 @@
                     <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
                     <Setter Property="FontWeight" Value="SemiBold"/>
                     <Setter Property="Padding" Value="12,10"/>
-                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource StrongBorderBrush}"/>
                     <Setter Property="BorderThickness" Value="0,0,1,1"/>
                 </Style>
             </Setter.Value>

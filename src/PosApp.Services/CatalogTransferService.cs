@@ -279,6 +279,7 @@ public class CatalogTransferService : ICatalogTransferService
 
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            SyncCaptureContext.NotifyOutboxChanged();
             _db.ChangeTracker.Clear();
             return result;
         }

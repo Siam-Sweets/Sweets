@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using PosApp.Core.Entities;
 
 namespace PosApp.Data;
@@ -10,6 +11,16 @@ namespace PosApp.Data;
 public class AppDbContext : DbContext
 {
     private readonly string _connectionString;
+
+    /// <summary>Used only while applying trusted server changes.</summary>
+    public bool SuppressSyncCapture { get; set; }
+
+    /// <summary>Background migration/apply operations must be able to see every store.</summary>
+    public bool BypassStoreFilter { get; set; }
+
+    private bool CloudStoreFilterEnabled => SyncCaptureContext.Current.Enabled &&
+                                            !string.IsNullOrWhiteSpace(SyncCaptureContext.Current.StoreId);
+    private string CurrentCloudStoreId => SyncCaptureContext.Current.StoreId;
 
     public AppDbContext(string connectionString)
         : base()
@@ -39,6 +50,14 @@ public class AppDbContext : DbContext
     public DbSet<PurchaseItem> PurchaseItems => Set<PurchaseItem>();
     public DbSet<CashSession> CashSessions => Set<CashSession>();
     public DbSet<CashMovement> CashMovements => Set<CashMovement>();
+    public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<CloudAccountState> CloudAccountStates => Set<CloudAccountState>();
+    public DbSet<SyncIdentity> SyncIdentities => Set<SyncIdentity>();
+    public DbSet<SyncOutboxOperation> SyncOutboxOperations => Set<SyncOutboxOperation>();
+    public DbSet<SyncCursorState> SyncCursorStates => Set<SyncCursorState>();
+    public DbSet<SyncConflict> SyncConflicts => Set<SyncConflict>();
+    public DbSet<CloudCachedStore> CloudCachedStores => Set<CloudCachedStore>();
+    public DbSet<CloudCachedDeviceSession> CloudCachedDeviceSessions => Set<CloudCachedDeviceSession>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -62,8 +81,12 @@ public class AppDbContext : DbContext
             b.Property(p => p.TaxRate).HasColumnType("decimal(6,3)");
             b.Property(p => p.StockQuantity).HasColumnType("decimal(18,4)");
             b.Property(p => p.LowStockThreshold).HasColumnType("decimal(18,4)");
-            b.HasIndex(p => p.Sku).IsUnique();
-            b.HasIndex(p => p.Barcode).IsUnique();
+            // Cloud branch ownership lives in SyncIdentities. These indexes are
+            // intentionally non-unique at the physical SQLite level so two
+            // branches can use the same catalog identifiers; service validation
+            // still enforces uniqueness inside the currently selected branch.
+            b.HasIndex(p => p.Sku);
+            b.HasIndex(p => p.Barcode);
             b.HasOne(p => p.Category)
                 .WithMany(c => c.Products)
                 .HasForeignKey(p => p.CategoryId)
@@ -75,7 +98,7 @@ public class AppDbContext : DbContext
         {
             b.HasKey(c => c.Id);
             b.Property(c => c.Name).IsRequired();
-            b.HasIndex(c => c.Name).IsUnique();
+            b.HasIndex(c => c.Name);
         });
 
         // Customer
@@ -118,7 +141,7 @@ public class AppDbContext : DbContext
                 .WithMany(session => session.Sales)
                 .HasForeignKey(s => s.CashSessionId)
                 .OnDelete(DeleteBehavior.Restrict);
-            b.HasIndex(s => s.ReceiptNumber).IsUnique();
+            b.HasIndex(s => s.ReceiptNumber);
             b.HasIndex(s => s.SaleDate);
             b.HasIndex(s => s.CashSessionId);
             b.HasIndex(s => s.RefundedSaleId);
@@ -168,6 +191,16 @@ public class AppDbContext : DbContext
                 .HasForeignKey(t => t.ProductId)
                 .OnDelete(DeleteBehavior.Cascade);
             b.HasIndex(t => t.CreatedAt);
+            b.HasIndex(t => t.PurchaseDocumentId);
+            b.HasIndex(t => t.PurchaseItemId).IsUnique();
+            b.HasOne(t => t.PurchaseDocument)
+                .WithMany()
+                .HasForeignKey(t => t.PurchaseDocumentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(t => t.PurchaseItem)
+                .WithMany()
+                .HasForeignKey(t => t.PurchaseItemId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.HasOne<User>()
                 .WithMany()
                 .HasForeignKey(t => t.UserId)
@@ -187,7 +220,7 @@ public class AppDbContext : DbContext
             b.HasKey(d => d.Id);
             b.Property(d => d.Value).HasColumnType("decimal(18,4)");
             b.Property(d => d.Code).UseCollation("NOCASE");
-            b.HasIndex(d => d.Code).IsUnique();
+            b.HasIndex(d => d.Code);
         });
 
         // Setting
@@ -195,7 +228,7 @@ public class AppDbContext : DbContext
         {
             b.HasKey(s => s.Id);
             b.Property(s => s.Key).IsRequired();
-            b.HasIndex(s => s.Key).IsUnique();
+            b.HasIndex(s => s.Key);
         });
 
         modelBuilder.Entity<Supplier>(b =>
@@ -212,7 +245,7 @@ public class AppDbContext : DbContext
             b.Property(p => p.Subtotal).HasColumnType("decimal(18,4)");
             b.Property(p => p.TaxTotal).HasColumnType("decimal(18,4)");
             b.Property(p => p.Total).HasColumnType("decimal(18,4)");
-            b.HasIndex(p => p.DocumentNumber).IsUnique();
+            b.HasIndex(p => p.DocumentNumber);
             b.HasIndex(p => p.DocumentDate);
             b.HasOne(p => p.Supplier)
                 .WithMany(s => s.Purchases)
@@ -272,5 +305,205 @@ public class AppDbContext : DbContext
                 .HasForeignKey(m => m.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+
+        modelBuilder.Entity<Expense>(b =>
+        {
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Amount).HasColumnType("decimal(18,4)");
+            b.HasIndex(e => e.ExpenseDate);
+            b.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CloudAccountState>(b =>
+        {
+            b.HasKey(value => value.Id);
+            b.HasCheckConstraint("CK_CloudAccountState_SingleRow", "Id = 1");
+        });
+
+        modelBuilder.Entity<SyncIdentity>(b =>
+        {
+            b.HasKey(value => value.Id);
+            b.HasIndex(value => new { value.EntityType, value.LocalId }).IsUnique();
+            b.HasIndex(value => value.RecordId).IsUnique();
+            b.HasIndex(value => new { value.TenantId, value.StoreId, value.EntityType });
+        });
+
+        modelBuilder.Entity<SyncOutboxOperation>(b =>
+        {
+            b.HasKey(value => value.Id);
+            b.HasIndex(value => value.OperationId).IsUnique();
+            b.HasIndex(value => value.IdempotencyKey).IsUnique();
+            b.HasIndex(value => new { value.CreatedByUserId, value.Status, value.NextAttemptAtUtc, value.Id });
+            b.Property(value => value.PayloadJson).IsRequired();
+        });
+
+        modelBuilder.Entity<SyncCursorState>(b =>
+        {
+            b.HasKey(value => value.Id);
+            b.HasIndex(value => new { value.TenantId, value.StoreId, value.DeviceId }).IsUnique();
+        });
+
+        modelBuilder.Entity<SyncConflict>(b =>
+        {
+            b.HasKey(value => value.Id);
+            b.HasIndex(value => value.ConflictId).IsUnique();
+            b.HasIndex(value => new { value.Status, value.DetectedAtUtc });
+        });
+
+        modelBuilder.Entity<CloudCachedStore>(b =>
+        {
+            b.HasKey(value => value.Id);
+            b.HasIndex(value => value.CloudStoreId).IsUnique();
+        });
+
+        modelBuilder.Entity<CloudCachedDeviceSession>(b =>
+        {
+            b.HasKey(value => value.Id);
+            b.HasIndex(value => value.CloudSessionId).IsUnique();
+        });
+
+        // Existing operational rows retain their integer keys. Store ownership
+        // lives in SyncIdentities, and these parameterized filters keep normal
+        // services/reports scoped to the selected branch. Legacy rows without an
+        // identity remain visible until the administrator completes migration.
+        modelBuilder.Entity<Category>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "categories" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "categories" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Tax>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "taxes" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "taxes" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Discount>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "discounts" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "discounts" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Customer>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "customers" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "customers" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Supplier>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "suppliers" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "suppliers" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Product>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "products" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "products" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Setting>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "settings" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "settings" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Sale>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "sales" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "sales" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<SaleItem>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "sale_items" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "sale_items" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<SalePayment>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "payments" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "payments" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<PurchaseDocument>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "purchases" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "purchases" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<PurchaseItem>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "purchase_items" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "purchase_items" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<StockTransaction>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "inventory_movements" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "inventory_movements" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<CashSession>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "register_sessions" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "register_sessions" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<CashMovement>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "cash_movements" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "cash_movements" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+        modelBuilder.Entity<Expense>().HasQueryFilter(value => BypassStoreFilter || !CloudStoreFilterEnabled ||
+            !SyncIdentities.Any(identity => identity.EntityType == "expenses" && identity.LocalId == value.Id) ||
+            SyncIdentities.Any(identity => identity.EntityType == "expenses" && identity.LocalId == value.Id &&
+                                               identity.StoreId == CurrentCloudStoreId && identity.DeletedAtUtc == null));
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        => SaveChangesAsync(acceptAllChangesOnSuccess).GetAwaiter().GetResult();
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        => SaveChangesAsync(true, cancellationToken);
+
+    public override async Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        var capture = SyncCaptureContext.Current;
+        var changes = !SuppressSyncCapture && capture.Enabled
+            ? LocalSyncOutboxCapture.Snapshot(this)
+            : Array.Empty<TrackedSyncChange>();
+
+        if (changes.Count == 0)
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+
+        IDbContextTransaction? ownedTransaction = null;
+        try
+        {
+            if (Database.CurrentTransaction == null)
+                ownedTransaction = await Database.BeginTransactionAsync(cancellationToken);
+
+            // Keep the business entries unaccepted until their outbox rows are
+            // durable. A short-lived context shares this exact connection and
+            // transaction for sync metadata; this avoids writing the business
+            // entries twice and means a serialization failure leaves the caller's
+            // tracked states retryable after the database rollback.
+            var affected = await base.SaveChangesAsync(false, cancellationToken);
+            var currentTransaction = Database.CurrentTransaction
+                                     ?? throw new InvalidOperationException("The local sync transaction is unavailable.");
+            var metadataOptions = new DbContextOptionsBuilder<AppDbContext>()
+                .UseSqlite(Database.GetDbConnection())
+                .Options;
+            await using (var metadataDb = new AppDbContext(metadataOptions)
+                         {
+                             SuppressSyncCapture = true,
+                             BypassStoreFilter = true
+                         })
+            {
+                await metadataDb.Database.UseTransactionAsync(
+                    currentTransaction.GetDbTransaction(), cancellationToken);
+                await LocalSyncOutboxCapture.CaptureAsync(
+                    metadataDb, changes, capture, cancellationToken);
+                await metadataDb.SaveChangesAsync(true, cancellationToken);
+            }
+
+            if (ownedTransaction != null)
+            {
+                await ownedTransaction.CommitAsync(cancellationToken);
+                SyncCaptureContext.NotifyOutboxChanged();
+            }
+
+            if (acceptAllChangesOnSuccess)
+                ChangeTracker.AcceptAllChanges();
+
+            return affected;
+        }
+        catch
+        {
+            if (ownedTransaction != null)
+                await ownedTransaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+        finally
+        {
+            if (ownedTransaction != null)
+                await ownedTransaction.DisposeAsync();
+        }
     }
 }

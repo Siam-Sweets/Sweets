@@ -5,8 +5,9 @@ using PosApp.Core.Models;
 namespace PosApp.Data;
 
 /// <summary>
-/// Seeds first-run default data: an admin user, default categories,
-/// default tax and discount, and store settings. Sample products are added
+/// Seeds first-run default data: categories, tax and discount templates, and
+/// store settings. Credentials are created only by the explicit local or online
+/// setup flow, so a new installation never contains a known default PIN. Sample products are added
 /// separately only when the store owner enables them during setup.
 /// </summary>
 public static class DbSeeder
@@ -18,31 +19,6 @@ public static class DbSeeder
         // without needing EF Core migration files (which we don't ship).
         // On subsequent runs it's a no-op if the DB schema is already current.
         await db.Database.EnsureCreatedAsync();
-
-        if (!await db.Users.AnyAsync())
-        {
-            var (hash, salt) = HashPin("1234");
-            db.Users.Add(new User
-            {
-                Username = "admin",
-                FullName = "Administrator",
-                PasswordHash = hash,
-                PasswordSalt = salt,
-                Role = UserRole.Admin,
-                IsActive = true
-            });
-
-            var (cashierHash, cashierSalt) = HashPin("1111");
-            db.Users.Add(new User
-            {
-                Username = "cashier",
-                FullName = "Default Cashier",
-                PasswordHash = cashierHash,
-                PasswordSalt = cashierSalt,
-                Role = UserRole.Cashier,
-                IsActive = true
-            });
-        }
 
         // A restored or manually repaired database can contain only some of the
         // built-in categories. Ensure each category independently so setup-time

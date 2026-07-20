@@ -184,6 +184,8 @@ public class PurchaseService : IPurchaseService
                 _db.StockTransactions.Add(new StockTransaction
                 {
                     Product = product,
+                    PurchaseDocument = document,
+                    PurchaseItem = purchaseItem,
                     Type = StockTransactionType.Purchase,
                     Quantity = line.Quantity,
                     BalanceAfter = newQuantity,
@@ -198,6 +200,7 @@ public class PurchaseService : IPurchaseService
             _db.PurchaseDocuments.Add(document);
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            SyncCaptureContext.NotifyOutboxChanged();
             _db.ChangeTracker.Clear();
             return document;
         }

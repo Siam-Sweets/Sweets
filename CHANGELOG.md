@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.0.0 — Secure multi-device offline-first synchronization
+
+- Preserved the complete v1.4.24 WPF application and added optional organization accounts, stores, registered devices, secure online login, session management, and administrator-created online users.
+- Added a transactional SQLite outbox, UUID identity map, incremental cursors, bounded push/pull batches, retry with jittered exponential backoff, tombstones, explicit conflict records, and live background synchronization without blocking the register.
+- Deferred event-triggered uploads until their outer checkout/refund/void/purchase/register/import/inventory SQLite transaction has committed, preventing pre-commit reads while still starting an immediate online sync after important operations.
+- Added a versioned Cloudflare Worker REST API with PBKDF2 password hashing, short-lived signed access tokens, rotating hashed refresh tokens, device/session revocation, persistent hashed-key brute-force protection, structured errors, request IDs, decompressed input limits, parameterized Turso queries, audit events, and server-side role/tenant/store validation.
+- Added ordered Turso/libSQL migrations covering organizations, stores, users, devices, sessions, synchronized operational entities, operation deduplication, change cursors, tombstones, and audit logs.
+- Added immutable financial-transition checks, versioned catalog-price validation, cumulative refund limits, related-record and arithmetic validation, unique business-source protections, and append-only inventory movement synchronization so completed payments, sales, purchases, refunds, voids, and stock deductions cannot be silently overwritten or replayed.
+- Preserved suspended-sale identity through recall and checkout, staged draft lines before finalization, declared immutable child counts with server-side aggregate reconciliation, cancelled never-uploaded create/delete pairs, and added explicit purchase document/item ledger links with deterministic legacy backfill.
+- Added initial migration safeguards with pre-sync detection of unlinked local records, a verified safety backup and explicit local/server reconciliation gate, an atomic server-side cloud-empty lease, dependency-ordered resumable upload, UUID conversion, operation idempotency, count verification, and explicit reconciliation after restoring an older local backup.
+- Added the Account & Sync UI, connection status bar, manual sync/retry, pending/conflict counts, device sessions, store selector, migration flow, conflict decisions, restore reconciliation, secure logout, password changes, and matching English/Bengali resources.
+- Added direct online sign-in/organization creation to first-run setup, removed known bootstrap credentials, kept device-local setup state out of synchronization, and made a new device clear template-only data before downloading its organization.
+- Made first-run online setup two-phase and restart-safe: organization creation retains its protected initial-upload decision until verified completion, while an existing organization cannot be marked ready before its cursor-zero pull succeeds. Lost migration completion responses recover from server lease history and count verification.
+- Made one local SQLite working copy branch-aware by separating identical store-scoped catalog/settings identifiers and open registers across authorized branches; added matching server-side normalized identifiers and a shared SKU/barcode namespace.
+- Made branch switching reload the selected store's receipt, currency, printer, language, and theme settings and explicitly clear the warned-about unsaved cart, preventing a cached cart or settings from crossing stores.
+- Added per-operation Turso savepoints so a partial constraint, cursor, or audit failure cannot survive as a rejected synchronization result.
+- Capped push requests at two operations and pipelined independent Turso reads and savepoint recovery statements, retaining transactional batching while leaving headroom beneath the Cloudflare Workers Free external-subrequest ceiling.
+- Added schema-v4 financial composition staging: finalized sale/purchase headers and children remain private during interrupted multi-batch uploads, then publish atomically through a cursor-ordered completion replay only after immutable counts and monetary totals reconcile.
+- Persisted the installation UUID before the first network request, isolated cached PIN users from one another's cloud tokens on shared terminals, and continued capturing correctly attributed offline changes after secure online logout.
+- Locked the active WPF session back to the sign-in window after an explicit user/device/session/organization/store revocation or terminal refresh expiry, with localized notification while retaining the documented cached-offline sign-in policy.
+- Made expired initial-migration leases resumable only by their original tenant/store/user/device, retained the verified migration-backup path across restart, and preserved device-local `app:` settings during server-authoritative restore reconciliation.
+- Restricted server-stored custom permissions to an explicit allow-list and rejected wildcard or unknown client-supplied grants.
+- Added DPAPI-protected desktop token storage; no Turso credential, Worker secret, access token, or refresh token is stored in ordinary configuration or SQLite.
+- Added Worker authentication/rotation/revocation and synchronization tests, transactional SQLite outbox tests, localization parity checks, a separate Cloudflare deployment workflow, and complete architecture/setup/security/protocol/free-plan/troubleshooting documentation.
+
+## 1.4.24 — Higher-contrast borders and table grid lines
+
+- Increased the global light- and dark-theme border contrast so cards, fields, dropdowns, dialogs, drawers, sidebar panels, and command tiles remain visually separated from their surrounding surfaces.
+- Added a dedicated strong-border theme resource for dense data surfaces without making every standard control equally heavy.
+- Enabled both horizontal and vertical DataGrid grid lines and applied the stronger brush to table outlines and column headers.
+- Preserved primary focus, hover, selection, success, warning, and danger states while improving boundary visibility throughout the app.
+
+## 1.4.23 — Theme-aware date picker calendar
+
+- Replaced the default system-white `CalendarItem` popup template with a complete PosApp theme-aware calendar template.
+- Applied dynamic dark/light resources to the calendar surface, border, month/year header, weekday headings, navigation arrows, day cells, and month/year selection cells.
+- Added readable hover, pressed, keyboard-focus, today, selected, inactive, blackout, and disabled states in both themes.
+- Preserved DatePicker navigation between month, year, and decade views while keeping the popup readable at Windows display scaling levels.
+
 ## 1.4.22 — Responsive product-search cards
 
 - Increased the minimum product-card height so names, identifiers, price, unit, and stock remain readable without clipping.

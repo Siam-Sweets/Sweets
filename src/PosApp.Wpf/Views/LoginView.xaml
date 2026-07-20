@@ -52,12 +52,15 @@
                         Margin="0,12,0,8" Padding="0,14" FontSize="15"
                         Click="LoginButton_Click"/>
 
+                <Button Content="{DynamicResource Cloud_OnlineAccountButton}" Style="{StaticResource OutlineButton}"
+                        Margin="0,4,0,4" Padding="0,11" Click="OnlineAccount_Click"/>
+
                 <Button Content="{DynamicResource Login_Exit}" Style="{StaticResource OutlineButton}"
                         Margin="0,4,0,0" Padding="0,10"
                         Click="Exit_Click"/>
 
                 <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="6" Padding="12" Margin="0,16,0,0">
-                    <TextBlock Text="{DynamicResource Login_SetupHint}" Style="{StaticResource Muted}"
+                    <TextBlock Text="{DynamicResource Cloud_LoginOfflineHint}" Style="{StaticResource Muted}"
                                TextWrapping="Wrap" TextAlignment="Center"/>
                 </Border>
             </StackPanel>

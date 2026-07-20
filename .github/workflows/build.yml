@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v1.0.5) - leave empty for dev build'
+        description: 'Version tag (e.g. v2.0.0) - leave empty for dev build'
         required: false
         default: ''
 
@@ -43,6 +43,16 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Restore synchronization tests
+        run: dotnet restore tests/PosApp.Sync.Tests/PosApp.Sync.Tests.csproj
+
+      - name: Run local synchronization and localization tests
+        run: >-
+          dotnet test tests/PosApp.Sync.Tests/PosApp.Sync.Tests.csproj
+          --configuration ${{ env.CONFIGURATION }}
+          --no-restore
+          --logger "trx;LogFileName=posapp-sync-tests.trx"
 
       - name: Determine version
         id: ver
@@ -467,7 +477,7 @@ jobs:
           4. Complete the first-run store and administrator setup inside PosApp
 
           ## What's inside
-          - Aronium-style offline POS and checkout with barcode scanner support
+          - Offline-first POS and checkout with barcode scanner support
           - Products, purchases, inventory, register sessions, and physical counts
           - Customer contact records and purchase history
           - Sales history with refunds, voids, held sales, and split payments
@@ -476,7 +486,7 @@ jobs:
           - Bilingual EN + বাংলা UI with Light and Dark themes
           - ESC/POS receipt-printer support and reliable single-click checkboxes
           - Safe local updates with verified pre-update database backups
-          - Local SQLite database (no cloud, no runtime internet)
+          - Local SQLite operation with optional Cloudflare Worker + Turso synchronization
 
           _This is an automated development build. For a stable release, push a tag such as vX.Y.Z._
           EOF

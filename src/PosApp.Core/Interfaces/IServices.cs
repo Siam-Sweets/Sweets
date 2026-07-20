@@ -133,6 +133,8 @@ public interface ISetupService
     Task<bool> IsSetupCompleteAsync();
     Task<InitialSetupRequest> GetSetupDefaultsAsync();
     Task CompleteSetupAsync(InitialSetupRequest request);
+    Task<bool> CompleteOnlineSetupAsync(CloudAuthenticationResult authentication, bool createdOrganization);
+    Task FinalizeOnlineSetupAsync();
 }
 
 public interface IHardwareService
@@ -142,4 +144,52 @@ public interface IHardwareService
     Task<bool> IsScannerConnected();
     Task StartScannerAsync(Action<string> onScan);
     Task StopScannerAsync();
+}
+
+public interface ISecureTokenStore
+{
+    Task<CloudAuthTokens?> LoadAsync(CancellationToken cancellationToken = default);
+    Task SaveAsync(CloudAuthTokens tokens, CancellationToken cancellationToken = default);
+    Task ClearAsync(CancellationToken cancellationToken = default);
+}
+
+public interface ICloudAccountService
+{
+    Task InitializeCachedSessionAsync(CancellationToken cancellationToken = default);
+    Task<bool> CanUseCachedSessionAsync(int localUserId, CancellationToken cancellationToken = default);
+    Task<CloudAuthenticationResult> LoginAsync(CloudLoginRequest request, CancellationToken cancellationToken = default);
+    Task<CloudAuthenticationResult> CreateOrganizationAsync(CloudOrganizationRequest request, CancellationToken cancellationToken = default);
+    Task LogoutAsync(bool revokeAllDeviceSessions = false, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CloudStoreDto>> GetStoresAsync(CancellationToken cancellationToken = default);
+    Task<string> CreateStoreAsync(string name, string code, CancellationToken cancellationToken = default);
+    Task SelectStoreAsync(string storeId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CloudDeviceSessionDto>> GetDeviceSessionsAsync(CancellationToken cancellationToken = default);
+    Task RevokeDeviceSessionAsync(string sessionId, CancellationToken cancellationToken = default);
+    Task RevokeDeviceAsync(string deviceId, CancellationToken cancellationToken = default);
+    Task AuthorizeDeviceAsync(string deviceId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CloudUserProfile>> GetUsersAsync(CancellationToken cancellationToken = default);
+    Task<string> CreateUserAsync(CloudUserCreateRequest request, CancellationToken cancellationToken = default);
+    Task UpdateUserAsync(string userId, CloudUserUpdateRequest request, CancellationToken cancellationToken = default);
+    Task ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken = default);
+    Task<CloudAccountState?> GetAccountStateAsync(CancellationToken cancellationToken = default);
+}
+
+public interface ICloudSyncService
+{
+    event EventHandler<CloudSyncStatus>? StatusChanged;
+    CloudSyncStatus CurrentStatus { get; }
+    Task StartAsync(CancellationToken cancellationToken = default);
+    Task StopAsync(CancellationToken cancellationToken = default);
+    Task<CloudSyncStatus> SyncNowAsync(bool userInitiated = false, CancellationToken cancellationToken = default);
+    Task RetryFailedAsync(CancellationToken cancellationToken = default);
+    Task ResolveConflictAsync(long conflictId, SyncConflictStatus resolution, CancellationToken cancellationToken = default);
+}
+
+public interface ICloudMigrationService
+{
+    Task<CloudMigrationPreview> PreviewInitialMigrationAsync(CancellationToken cancellationToken = default);
+    Task<CloudMigrationResult> UploadExistingDataAsync(CancellationToken cancellationToken = default);
+    Task MarkRestoreRequiresReconciliationAsync(string safetyBackupPath, CancellationToken cancellationToken = default);
+    Task AcceptServerAfterRestoreAsync(CancellationToken cancellationToken = default);
+    Task PrepareRestoreAsNewCloudStateAsync(CancellationToken cancellationToken = default);
 }

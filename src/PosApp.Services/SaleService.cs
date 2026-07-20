@@ -128,28 +128,31 @@ public class SaleService : ISaleService
             var receiptNo = suspended?.ReceiptNumber ?? await GenerateReceiptNumberAsync();
             if (suspended != null)
             {
-                _db.SaleItems.RemoveRange(suspended.Items);
-                _db.Sales.Remove(suspended);
+                // Keep the saved sale's local/cloud identity. Deleting it and
+                // inserting a replacement would produce a tombstone followed by
+                // another receipt with the same business identifier, and a second
+                // device could observe either half of that transition.
+                _db.SaleItems.RemoveRange(suspended.Items.ToList());
+                suspended.Items.Clear();
             }
 
             await ValidateAndConsumePromotionsAsync(draft);
 
-            var sale = new Sale
-            {
-                ReceiptNumber = receiptNo,
-                CustomerId = draft.CustomerId,
-                UserId = draft.UserId,
-                CashSessionId = openSessionId,
-                Status = SaleStatus.Completed,
-                SaleDate = DateTime.UtcNow,
-                Subtotal = draft.Subtotal,
-                DiscountTotal = draft.DiscountTotal,
-                TaxTotal = draft.TaxTotal,
-                AmountPaid = amountTendered,
-                Change = Math.Max(0m, amountTendered - total),
-                Note = Clean(draft.Note, 500, "Sale note"),
-                ServiceType = NormalizeServiceType(draft.ServiceType)
-            };
+            var sale = suspended ?? new Sale();
+            sale.ReceiptNumber = receiptNo;
+            sale.CustomerId = draft.CustomerId;
+            sale.UserId = draft.UserId;
+            sale.CashSessionId = openSessionId;
+            sale.Status = SaleStatus.Completed;
+            sale.SaleDate = DateTime.UtcNow;
+            sale.Subtotal = draft.Subtotal;
+            sale.DiscountTotal = draft.DiscountTotal;
+            sale.TaxTotal = draft.TaxTotal;
+            sale.AmountPaid = amountTendered;
+            sale.Change = Math.Max(0m, amountTendered - total);
+            sale.Note = Clean(draft.Note, 500, "Sale note");
+            sale.ServiceType = NormalizeServiceType(draft.ServiceType);
+            sale.UpdatedAt = suspended == null ? null : DateTime.UtcNow;
 
             foreach (var payment in draft.Payments)
             {
@@ -198,7 +201,7 @@ public class SaleService : ISaleService
                 }
             }
 
-            _db.Sales.Add(sale);
+            if (suspended == null) _db.Sales.Add(sale);
             await _db.SaveChangesAsync();
             foreach (var link in stockLinks)
             {
@@ -208,6 +211,7 @@ public class SaleService : ISaleService
             if (stockLinks.Count > 0) await _db.SaveChangesAsync();
 
             await transaction.CommitAsync();
+            SyncCaptureContext.NotifyOutboxChanged();
             _db.ChangeTracker.Clear();
             return sale;
         }
@@ -319,6 +323,7 @@ public class SaleService : ISaleService
             sale.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
+            SyncCaptureContext.NotifyOutboxChanged();
             _db.ChangeTracker.Clear();
             return sale;
         }
@@ -523,6 +528,7 @@ public class SaleService : ISaleService
             if (stockLinks.Count > 0) await _db.SaveChangesAsync();
 
             await transaction.CommitAsync();
+            SyncCaptureContext.NotifyOutboxChanged();
             _db.ChangeTracker.Clear();
             return refund;
         }

@@ -16,25 +16,26 @@
     <Color x:Key="SidebarMutedColor">#64748B</Color>
     <Color x:Key="SidebarHoverColor">#F1F5F9</Color>
     <Color x:Key="SidebarCardColor">#F8FAFC</Color>
-    <Color x:Key="SidebarBorderColor">#E2E8F0</Color>
+    <Color x:Key="SidebarBorderColor">#CBD5E1</Color>
     <Color x:Key="CommandPanelColor">#F8FAFC</Color>
     <Color x:Key="CommandTileColor">#FFFFFF</Color>
     <Color x:Key="CommandTileHoverColor">#EFF6FF</Color>
     <Color x:Key="CommandTextColor">#0F172A</Color>
     <Color x:Key="CommandMutedColor">#64748B</Color>
-    <Color x:Key="CommandBorderColor">#CBD5E1</Color>
+    <Color x:Key="CommandBorderColor">#94A3B8</Color>
     <Color x:Key="CommandStatusColor">#FFFFFF</Color>
     <Color x:Key="OverlayScrimColor">#140F172A</Color>
     <Color x:Key="DrawerPanelColor">#FFFFFF</Color>
     <Color x:Key="DrawerTextColor">#0F172A</Color>
     <Color x:Key="DrawerMutedColor">#64748B</Color>
-    <Color x:Key="DrawerBorderColor">#E2E8F0</Color>
+    <Color x:Key="DrawerBorderColor">#CBD5E1</Color>
     <Color x:Key="DrawerHoverColor">#F1F5F9</Color>
     <Color x:Key="CardColor">#FFFFFF</Color>
     <Color x:Key="BackgroundLight">#F1F5F9</Color>
     <Color x:Key="TextDark">#0F172A</Color>
     <Color x:Key="TextMuted">#64748B</Color>
-    <Color x:Key="BorderColor">#E2E8F0</Color>
+    <Color x:Key="BorderColor">#CBD5E1</Color>
+    <Color x:Key="StrongBorderColor">#94A3B8</Color>
     <Color x:Key="InputColor">#FFFFFF</Color>
     <Color x:Key="SurfaceMutedColor">#F1F5F9</Color>
     <Color x:Key="SurfaceHoverColor">#F8FAFC</Color>
@@ -79,6 +80,7 @@
     <SolidColorBrush x:Key="TextDarkBrush" Color="{StaticResource TextDark}" options:Freeze="False"/>
     <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMuted}" options:Freeze="False"/>
     <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" options:Freeze="False"/>
+    <SolidColorBrush x:Key="StrongBorderBrush" Color="{StaticResource StrongBorderColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="InputBrush" Color="{StaticResource InputColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="SurfaceMutedBrush" Color="{StaticResource SurfaceMutedColor}" options:Freeze="False"/>
     <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource SurfaceHoverColor}" options:Freeze="False"/>

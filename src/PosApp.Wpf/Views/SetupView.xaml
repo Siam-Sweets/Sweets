@@ -101,6 +101,21 @@
                       HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="28,22">
                 <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,18,0">
+                            <TextBlock Text="{DynamicResource Setup_OnlineSection}" Style="{StaticResource Heading2}"/>
+                            <TextBlock Text="{DynamicResource Setup_OnlineHelp}" Style="{StaticResource Muted}"
+                                       TextWrapping="Wrap" Margin="0,5,0,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" x:Name="OnlineAccountButton"
+                                Content="{DynamicResource Setup_OnlineButton}"
+                                Style="{StaticResource OutlineButton}" Padding="18,10"
+                                VerticalAlignment="Center" Click="OnlineAccount_Click"/>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                     <StackPanel>
                         <TextBlock Text="{DynamicResource Setup_StoreSection}" Style="{StaticResource Heading2}"/>
                         <TextBlock Text="{DynamicResource Setup_StoreHelp}" Style="{StaticResource Muted}" Margin="0,0,0,14"/>

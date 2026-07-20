@@ -174,6 +174,28 @@ public partial class App : Application
                 Log("Database seeded.");
             }
 
+            if (preRestoreBackup != null)
+            {
+                await Services.GetRequiredService<ICloudMigrationService>()
+                    .MarkRestoreRequiresReconciliationAsync(preRestoreBackup);
+                Log("Cloud synchronization paused until the restored database is reconciled.");
+            }
+
+            // Load the persisted account/store scope before reading settings.
+            // Otherwise a multi-store SQLite cache can expose the first branch's
+            // store:config on the login screen after a restart.
+            var cloudSessionInitialized = false;
+            try
+            {
+                await Services.GetRequiredService<ICloudAccountService>().InitializeCachedSessionAsync();
+                cloudSessionInitialized = true;
+            }
+            catch (Exception cloudStartupError)
+            {
+                // Cloud availability never blocks the local register.
+                Log($"Cloud session initialization deferred: {cloudStartupError.GetType().Name}");
+            }
+
             // Load settings
             Log("Loading store settings...");
             var settingsService = Services.GetRequiredService<ISettingsService>();
@@ -183,6 +205,9 @@ public partial class App : Application
 
             // Apply language from settings
             ApplyLanguage(StoreSettings.Language);
+
+            if (cloudSessionInitialized)
+                _ = Services.GetRequiredService<ICloudSyncService>().SyncNowAsync();
 
             // A seeded local database is not the same as a configured store.
             // Until the one-time flag is written, show setup before login.
@@ -289,6 +314,8 @@ public partial class App : Application
         services.AddDbContext<AppDbContext>(opt =>
             opt.UseSqlite(DbPathResolver.ConnectionString()),
             ServiceLifetime.Transient);
+        services.AddSingleton<IDbContextFactory<AppDbContext>>(
+            new PosAppDbContextFactory(DbPathResolver.ConnectionString()));
 
         // Services
         services.AddTransient<IAuthService, AuthService>();
@@ -304,6 +331,13 @@ public partial class App : Application
         services.AddTransient<ICatalogTransferService, CatalogTransferService>();
         services.AddSingleton<IBackupService, BackupService>();
         services.AddSingleton<IUpdateService, SafeUpdateService>();
+        services.AddSingleton<ISecureTokenStore, DpapiTokenStore>();
+        services.AddSingleton<CloudSessionManager>();
+        services.AddSingleton<CloudApiClient>();
+        services.AddSingleton<SyncRecordApplier>();
+        services.AddSingleton<ICloudSyncService, CloudSyncService>();
+        services.AddSingleton<ICloudAccountService, CloudAccountService>();
+        services.AddSingleton<ICloudMigrationService, CloudMigrationService>();
 
         // Hardware drivers fail safely when a configured device is unavailable.
         services.AddSingleton<IReceiptPrinter>(sp =>
@@ -330,6 +364,8 @@ public partial class App : Application
         services.AddTransient<SettingsView>();
         services.AddTransient<PurchasesView>();
         services.AddTransient<RegisterView>();
+        services.AddTransient<CloudAccountWindow>();
+        services.AddTransient<CloudAccountView>();
     }
 
     /// <summary>
@@ -370,6 +406,20 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (_startupCompleted)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                Services.GetService<ICloudSyncService>()?.SyncNowAsync(false, timeout.Token)
+                    .GetAwaiter().GetResult();
+            }
+            catch (Exception syncError)
+            {
+                Log($"Final cloud sync deferred: {syncError.GetType().Name}");
+            }
+        }
+
         if (_startupCompleted && StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnExit)
         {
             try
@@ -411,7 +461,8 @@ public partial class App : Application
         SetThemeBrush("InputBrush", dark ? "#111827" : "#FFFFFF");
         SetThemeBrush("TextDarkBrush", dark ? "#F8FAFC" : "#0F172A");
         SetThemeBrush("TextMutedBrush", dark ? "#94A3B8" : "#64748B");
-        SetThemeBrush("BorderBrush", dark ? "#334155" : "#E2E8F0");
+        SetThemeBrush("BorderBrush", dark ? "#475569" : "#CBD5E1");
+        SetThemeBrush("StrongBorderBrush", dark ? "#64748B" : "#94A3B8");
         SetThemeBrush("SurfaceMutedBrush", dark ? "#293548" : "#F1F5F9");
         SetThemeBrush("SurfaceHoverBrush", dark ? "#334155" : "#F8FAFC");
         SetThemeBrush("AlternateRowBrush", dark ? "#243247" : "#F8FAFC");
@@ -428,19 +479,19 @@ public partial class App : Application
         SetThemeBrush("SidebarMutedBrush", dark ? "#94A3B8" : "#64748B");
         SetThemeBrush("SidebarHoverBrush", dark ? "#334155" : "#F1F5F9");
         SetThemeBrush("SidebarCardBrush", dark ? "#0F172A" : "#F8FAFC");
-        SetThemeBrush("SidebarBorderBrush", dark ? "#334155" : "#E2E8F0");
+        SetThemeBrush("SidebarBorderBrush", dark ? "#475569" : "#CBD5E1");
         SetThemeBrush("CommandPanelBrush", dark ? "#182235" : "#F8FAFC");
         SetThemeBrush("CommandTileBrush", dark ? "#243247" : "#FFFFFF");
         SetThemeBrush("CommandTileHoverBrush", dark ? "#334155" : "#EFF6FF");
         SetThemeBrush("CommandTextBrush", dark ? "#F8FAFC" : "#0F172A");
         SetThemeBrush("CommandMutedBrush", dark ? "#94A3B8" : "#64748B");
-        SetThemeBrush("CommandBorderBrush", dark ? "#475569" : "#CBD5E1");
+        SetThemeBrush("CommandBorderBrush", dark ? "#64748B" : "#94A3B8");
         SetThemeBrush("CommandStatusBrush", dark ? "#111827" : "#FFFFFF");
         SetThemeBrush("OverlayScrimBrush", dark ? "#B3000000" : "#140F172A");
         SetThemeBrush("DrawerPanelBrush", dark ? "#111827" : "#FFFFFF");
         SetThemeBrush("DrawerTextBrush", dark ? "#F8FAFC" : "#0F172A");
         SetThemeBrush("DrawerMutedBrush", dark ? "#94A3B8" : "#64748B");
-        SetThemeBrush("DrawerBorderBrush", dark ? "#334155" : "#E2E8F0");
+        SetThemeBrush("DrawerBorderBrush", dark ? "#475569" : "#CBD5E1");
         SetThemeBrush("DrawerHoverBrush", dark ? "#334155" : "#F1F5F9");
     }
 

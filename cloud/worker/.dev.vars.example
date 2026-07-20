@@ -1,0 +1,4 @@
+TURSO_DATABASE_URL=libsql://your-database-name-your-org.turso.io
+TURSO_AUTH_TOKEN=replace-with-a-development-token
+JWT_SIGNING_SECRET=replace-with-at-least-32-random-bytes
+REFRESH_TOKEN_SECRET=replace-with-a-different-32-byte-secret
