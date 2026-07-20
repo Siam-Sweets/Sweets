@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.2 — Synchronization test build fix
+
+- Added a project-wide xUnit namespace import so `Fact`, `Theory`, `InlineData`, `Assert`, and `IAsyncLifetime` compile across every synchronization test file.
+- Replaced interpolated table-identifier deletion commands in restore reconciliation with a reviewed fixed-SQL statement list, eliminating EF1002 without suppressing the analyzer.
+- Updated application, installer, cloud client, Worker package, workflow examples, and README version metadata to 2.0.2.
+
 ## 2.0.1 — Build and deployment compatibility fixes
 
 - Rewrote EF Core pull and status queries to use expression-tree-compatible comparisons and captured scalar parameters, fixing CS8122 and CS8110 during the Windows synchronization-test build.

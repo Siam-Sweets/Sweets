@@ -239,16 +239,33 @@ public sealed class CloudMigrationService : ICloudMigrationService
                 // "Use server" is deliberately a replacement operation. Keeping
                 // restored transaction rows and then pulling UUID-backed cloud
                 // rows would duplicate receipts, payments, and stock movements.
-                var tables = new[]
+                // Keep these statements fixed rather than interpolating identifiers.
+                // The list is internal and reviewed, and fixed SQL also lets the EF
+                // analyzer verify that no untrusted value can enter the command.
+                var deleteStatements = new[]
                 {
-                    "CashMovements", "SalePayments", "SaleItems", "PurchaseItems",
-                    "StockTransactions", "Expenses", "Sales", "PurchaseDocuments",
-                    "CashSessions", "Products", "Categories", "Taxes", "Discounts",
-                    "Customers", "Suppliers", "SyncConflicts",
-                    "SyncOutboxOperations", "SyncCursorStates", "SyncIdentities"
+                    "DELETE FROM \"CashMovements\"",
+                    "DELETE FROM \"SalePayments\"",
+                    "DELETE FROM \"SaleItems\"",
+                    "DELETE FROM \"PurchaseItems\"",
+                    "DELETE FROM \"StockTransactions\"",
+                    "DELETE FROM \"Expenses\"",
+                    "DELETE FROM \"Sales\"",
+                    "DELETE FROM \"PurchaseDocuments\"",
+                    "DELETE FROM \"CashSessions\"",
+                    "DELETE FROM \"Products\"",
+                    "DELETE FROM \"Categories\"",
+                    "DELETE FROM \"Taxes\"",
+                    "DELETE FROM \"Discounts\"",
+                    "DELETE FROM \"Customers\"",
+                    "DELETE FROM \"Suppliers\"",
+                    "DELETE FROM \"SyncConflicts\"",
+                    "DELETE FROM \"SyncOutboxOperations\"",
+                    "DELETE FROM \"SyncCursorStates\"",
+                    "DELETE FROM \"SyncIdentities\""
                 };
-                foreach (var table in tables)
-                    await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"{table}\"", cancellationToken);
+                foreach (var statement in deleteStatements)
+                    await db.Database.ExecuteSqlRawAsync(statement, cancellationToken);
                 // Setup completion, onboarding preparation, and other `app:`
                 // values belong to this installation and never come from Turso.
                 // Retain them while replacing synchronized store settings.
