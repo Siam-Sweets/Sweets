@@ -131,9 +131,11 @@ public interface IDiscountService
 public interface ISetupService
 {
     Task<bool> IsSetupCompleteAsync();
-    Task<InitialSetupRequest> GetSetupDefaultsAsync();
-    Task CompleteSetupAsync(InitialSetupRequest request);
-    Task<bool> CompleteOnlineSetupAsync(CloudAuthenticationResult authentication, bool createdOrganization);
+    Task<bool> CompleteOnlineSetupAsync(
+        CloudAuthenticationResult authentication,
+        bool createdOrganization,
+        StoreSettings? initialStoreSettings = null,
+        bool includeSampleProducts = false);
     Task FinalizeOnlineSetupAsync();
 }
 

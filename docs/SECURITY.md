@@ -30,7 +30,7 @@ The three existing roles remain Cashier, Manager, and Administrator. The Worker 
 
 Local PIN checks preserve offline usability and use the existing salted PBKDF2 implementation. Cached local roles are an offline availability decision: a revocation made elsewhere becomes effective on this device at its next successful protected request. An explicit terminal user/device/session/organization/store response clears cloud tokens, stops synchronization, displays a localized notice, and returns the active WPF window to sign-in; device revocation and user deactivation also block cached login. A merely unavailable network or transient refresh request does not interrupt the local register. High-risk businesses should require periodic connectivity and physically secure terminals.
 
-New installations contain no known default usernames or PINs. Local setup creates its administrator only after the owner chooses a PIN; online first-run setup retains only the authenticated cloud user. The setup-complete marker uses the reserved device-local `app:` namespace, which the outbox excludes and the Worker rejects.
+New installations contain no local default usernames, PINs, store configuration, or catalog. First run requires online sign-in or organization creation, and only the authenticated cloud user receives a protected device-local PIN verifier for cached offline login. The setup-complete marker uses the reserved device-local `app:` namespace, which the outbox excludes and the Worker rejects.
 
 ## API and data handling
 

@@ -259,65 +259,196 @@ public sealed class OutboxTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExistingOrganizationOnboardingRemovesOnlyBootstrapDataAndKnownLegacyUsers()
+    public async Task FreshExistingOrganizationOnboardingUsesACompleteDownloadOnlyCache()
     {
         _db.SuppressSyncCapture = true;
         await DbSeeder.SeedAsync(_db);
-        Assert.Empty(await _db.Users.ToListAsync());
-        var current = new User { Username = "online-admin", FullName = "Online Admin", Role = UserRole.Admin };
-        var legacy = new User { Username = "cashier", FullName = "Default Cashier", Role = UserRole.Cashier };
-        _db.AddRange(current, legacy);
+        var current = new User
+        {
+            Username = "online-admin",
+            FullName = "Online Admin",
+            Role = UserRole.Admin
+        };
+        _db.Users.Add(current);
+        _db.CloudAccountStates.Add(new CloudAccountState
+        {
+            Id = 1,
+            ApiBaseUrl = "https://example.workers.dev",
+            TenantId = "00000000-0000-4000-8000-000000000010",
+            TenantName = "Existing Organization",
+            CurrentStoreId = "00000000-0000-4000-8000-000000000012",
+            CurrentStoreName = "Dhaka Branch",
+            CurrentCloudUserId = "00000000-0000-4000-8000-000000000013",
+            DeviceId = "00000000-0000-4000-8000-000000000014",
+            IsEnabled = true
+        });
         await _db.SaveChangesAsync();
         _db.SuppressSyncCapture = false;
 
         var setup = new SetupService(_db, new SettingsService(_db));
-        var requiresInitialMigration = await setup.CompleteOnlineSetupAsync(new CloudAuthenticationResult
-        {
-            OrganizationId = "00000000-0000-4000-8000-000000000010",
-            LocalUser = current,
-            Store = new CloudStoreDto { Name = "Dhaka Branch" }
-        }, createdOrganization: false);
+        var requiresInitialMigration = await setup.CompleteOnlineSetupAsync(
+            new CloudAuthenticationResult
+            {
+                OrganizationId = "00000000-0000-4000-8000-000000000010",
+                LocalUser = current,
+                Store = new CloudStoreDto
+                {
+                    Id = "00000000-0000-4000-8000-000000000012",
+                    Name = "Dhaka Branch"
+                }
+            },
+            createdOrganization: false);
+
         Assert.False(requiresInitialMigration);
         Assert.False(await setup.IsSetupCompleteAsync());
         await setup.FinalizeOnlineSetupAsync();
 
         Assert.True(await setup.IsSetupCompleteAsync());
         Assert.Single(await _db.Users.ToListAsync());
-        Assert.Equal(current.Id, (await _db.Users.SingleAsync()).Id);
         Assert.Empty(await _db.Categories.ToListAsync());
         Assert.Empty(await _db.Taxes.ToListAsync());
         Assert.Empty(await _db.Discounts.ToListAsync());
-        Assert.Equal("Dhaka Branch", (await new SettingsService(_db).GetStoreSettingsAsync()).StoreName);
+        Assert.Empty(await _db.Products.ToListAsync());
     }
 
     [Fact]
-    public async Task InterruptedNewOrganizationSetupRetainsItsInitialMigrationRequirement()
+    public async Task FreshOrganizationSeedsOneCompleteSynchronizedStoreSnapshot()
     {
         _db.SuppressSyncCapture = true;
         await DbSeeder.SeedAsync(_db);
-        var current = new User { Username = "owner", FullName = "Store Owner", Role = UserRole.Admin };
+        var current = new User
+        {
+            Username = "owner",
+            FullName = "Store Owner",
+            Role = UserRole.Admin
+        };
         _db.Users.Add(current);
+        _db.CloudAccountStates.Add(new CloudAccountState
+        {
+            Id = 1,
+            ApiBaseUrl = "https://example.workers.dev",
+            TenantId = "00000000-0000-4000-8000-000000000020",
+            TenantName = "New Organization",
+            CurrentStoreId = "00000000-0000-4000-8000-000000000021",
+            CurrentStoreName = "Chattogram Branch",
+            CurrentCloudUserId = "00000000-0000-4000-8000-000000000022",
+            DeviceId = "00000000-0000-4000-8000-000000000023",
+            IsEnabled = true
+        });
         await _db.SaveChangesAsync();
         _db.SuppressSyncCapture = false;
 
         var setup = new SetupService(_db, new SettingsService(_db));
         var authentication = new CloudAuthenticationResult
         {
-            OrganizationId = "00000000-0000-4000-8000-000000000011",
+            OrganizationId = "00000000-0000-4000-8000-000000000020",
             LocalUser = current,
-            Store = new CloudStoreDto { Name = "Chattogram Branch" }
+            Store = new CloudStoreDto
+            {
+                Id = "00000000-0000-4000-8000-000000000021",
+                Name = "Chattogram Branch"
+            }
+        };
+        var requestedSettings = new StoreSettings
+        {
+            StoreName = "Chattogram Branch",
+            Phone = "01234567890",
+            Address = "Chattogram",
+            CurrencySymbol = "৳",
+            FooterNote = "Thank you",
+            Language = "bn",
+            Theme = "Dark",
+            AutomaticBackupEnabled = true
         };
 
-        Assert.True(await setup.CompleteOnlineSetupAsync(authentication, createdOrganization: true));
-        Assert.False(await setup.IsSetupCompleteAsync());
+        Assert.True(await setup.CompleteOnlineSetupAsync(
+            authentication,
+            createdOrganization: true,
+            initialStoreSettings: requestedSettings,
+            includeSampleProducts: true));
 
-        // A restart no longer carries the transient `createdOrganization` flag.
-        // The device-local preparation marker must preserve the safe upload path.
-        Assert.True(await setup.CompleteOnlineSetupAsync(authentication, createdOrganization: false));
+        Assert.Equal(6, await _db.Categories.CountAsync());
+        Assert.Equal(2, await _db.Taxes.CountAsync());
+        Assert.Equal(3, await _db.Discounts.CountAsync());
+        Assert.Equal(15, await _db.Products.CountAsync());
+        var storedSettings = await new SettingsService(_db).GetStoreSettingsAsync();
+        Assert.Equal("Chattogram Branch", storedSettings.StoreName);
+        Assert.Equal("01234567890", storedSettings.Phone);
+        Assert.Equal("Chattogram", storedSettings.Address);
+        Assert.Equal("bn", storedSettings.Language);
+        Assert.Equal("Dark", storedSettings.Theme);
+
+        // A restart loses the transient created-organization flag. The local
+        // preparation marker must retain the protected full-upload path.
+        Assert.True(await setup.CompleteOnlineSetupAsync(
+            authentication,
+            createdOrganization: false));
         Assert.False(await setup.IsSetupCompleteAsync());
 
         await setup.FinalizeOnlineSetupAsync();
         Assert.True(await setup.IsSetupCompleteAsync());
+    }
+
+    [Fact]
+    public async Task LegacyLocalStoreIsPreservedForProtectedInitialOnlineMigration()
+    {
+        _db.SuppressSyncCapture = true;
+        await DbSeeder.SeedAsync(_db);
+        var current = new User
+        {
+            Username = "online-owner",
+            FullName = "Online Owner",
+            Role = UserRole.Admin
+        };
+        var legacyUser = new User
+        {
+            Username = "legacy-cashier",
+            FullName = "Legacy Cashier",
+            Role = UserRole.Cashier
+        };
+        var customer = new Customer { Name = "Existing Customer" };
+        _db.AddRange(current, legacyUser, customer);
+        _db.CloudAccountStates.Add(new CloudAccountState
+        {
+            Id = 1,
+            ApiBaseUrl = "https://example.workers.dev",
+            TenantId = "00000000-0000-4000-8000-000000000030",
+            TenantName = "Migrated Organization",
+            CurrentStoreId = "00000000-0000-4000-8000-000000000031",
+            CurrentStoreName = "Feni Branch",
+            CurrentCloudUserId = "00000000-0000-4000-8000-000000000032",
+            DeviceId = "00000000-0000-4000-8000-000000000033",
+            IsEnabled = true
+        });
+        await _db.SaveChangesAsync();
+        _db.SuppressSyncCapture = false;
+
+        var setup = new SetupService(_db, new SettingsService(_db));
+        var requiresInitialMigration = await setup.CompleteOnlineSetupAsync(
+            new CloudAuthenticationResult
+            {
+                OrganizationId = "00000000-0000-4000-8000-000000000030",
+                LocalUser = current,
+                Store = new CloudStoreDto
+                {
+                    Id = "00000000-0000-4000-8000-000000000031",
+                    Name = "Feni Branch"
+                }
+            },
+            createdOrganization: false,
+            initialStoreSettings: new StoreSettings
+            {
+                StoreName = "Feni Branch",
+                Address = "Feni, Bangladesh",
+                CurrencySymbol = "৳"
+            });
+
+        Assert.True(requiresInitialMigration);
+        Assert.Equal(2, await _db.Users.CountAsync());
+        Assert.Single(await _db.Customers.Where(value => value.Name == "Existing Customer").ToListAsync());
+        var settings = await new SettingsService(_db).GetStoreSettingsAsync();
+        Assert.Equal("Feni Branch", settings.StoreName);
+        Assert.Equal("Feni, Bangladesh", settings.Address);
     }
 
     [Fact]

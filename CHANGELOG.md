@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.15 — Online-only onboarding and complete initial synchronization
+
+- Removed the independent offline setup wizard and its local store, administrator, currency, receipt, backup, and sample-catalog form.
+- Changed first launch to require either online sign-in to an existing organization or creation of a new organization before cashier login can open.
+- Changed database seeding before onboarding to schema-only; no business templates or local default account are created outside an authenticated organization.
+- Moved store identity, receipt settings, language, theme, backup preference, and optional sample products into the online organization-creation form.
+- Added a protected two-phase onboarding boundary that writes the local completion marker only after a complete cursor-zero download or verified initial snapshot upload finishes without pending operations or conflicts.
+- Preserved older local databases through the reviewed cloud-empty migration and safety-backup path instead of silently deleting or merging their users, catalog, inventory, and transaction history.
+- Added tests for fresh existing-organization downloads, complete new-organization snapshot seeding, resumable uploads, and preservation of legacy local data.
+- Removed unused setup views, DTOs, service methods, dependency registrations, and English/Bengali setup strings.
+- Updated application, installer, cloud client, Worker package, tests, README, architecture, deployment, security, and release metadata to version 2.0.15.
+
 ## 2.0.14 — Reliable public status-page deployment verification
 
 - Fixed the final Worker deployment gate, which searched the initial HTML for `Organization creation preflight` even though that check name is populated later by browser JavaScript from `/api/v1/diagnostics`.

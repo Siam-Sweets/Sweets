@@ -209,19 +209,22 @@ public partial class App : Application
             if (cloudSessionInitialized)
                 _ = Services.GetRequiredService<ICloudSyncService>().SyncNowAsync();
 
-            // A seeded local database is not the same as a configured store.
-            // Until the one-time flag is written, show setup before login.
+            // PosApp no longer creates an independent offline store. A new or
+            // legacy local-only installation must sign in to an existing online
+            // organization or create one, then finish a complete upload/download
+            // before the cashier login is available.
             var setupService = Services.GetRequiredService<ISetupService>();
             if (!await setupService.IsSetupCompleteAsync())
             {
-                Log("First-run setup is required.");
+                Log("Online-only first-run onboarding is required.");
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                var setup = Services.GetRequiredService<SetupView>();
-                MainWindow = setup;
-                var setupCompleted = setup.ShowDialog() == true;
+                var accountWindow = Services.GetRequiredService<CloudAccountWindow>();
+                MainWindow = accountWindow;
+                var setupCompleted = accountWindow.ShowDialog() == true &&
+                                     await setupService.IsSetupCompleteAsync();
                 if (!setupCompleted)
                 {
-                    Log("Setup was closed before completion.");
+                    Log("Online onboarding was closed before full synchronization completed.");
                     Shutdown();
                     return;
                 }
@@ -229,7 +232,7 @@ public partial class App : Application
                 PublishSettings(await settingsService.GetStoreSettingsAsync());
                 ApplyTheme(StoreSettings.Theme);
                 ApplyLanguage(StoreSettings.Language);
-                Log($"First-run setup completed. Store: {StoreSettings.StoreName}");
+                Log($"Online onboarding completed. Store: {StoreSettings.StoreName}");
             }
 
             if (StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnStartup)
@@ -350,7 +353,6 @@ public partial class App : Application
 
         // Views
         services.AddTransient<LoginView>();
-        services.AddTransient<SetupView>();
         services.AddTransient<MainWindow>();
         services.AddTransient<PosView>();
         services.AddTransient<DashboardView>();

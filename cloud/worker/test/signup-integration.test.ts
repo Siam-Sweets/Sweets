@@ -45,7 +45,7 @@ const env: Env = {
   SCHEMA_VERSION: "4",
   MINIMUM_CLIENT_SCHEMA_VERSION: "4",
   API_VERSION: "1",
-  DEPLOYMENT_VERSION: "2.0.14-test",
+  DEPLOYMENT_VERSION: "2.0.15-test",
 };
 
 beforeAll(async () => {
@@ -76,13 +76,13 @@ describe("organization provisioning integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(response.headers.get("x-posapp-status-page")).toBe("1");
-    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.14-test");
+    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.15-test");
     const html = await response.text();
     expect(html).toContain("PosApp Cloud API");
     expect(html).toContain("Run diagnostics again");
     expect(html).toContain("/api/v1/diagnostics");
     expect(html).toContain('name="posapp-status-page" content="true"');
-    expect(html).toContain('name="posapp-deployment-version" content="2.0.14-test"');
+    expect(html).toContain('name="posapp-deployment-version" content="2.0.15-test"');
     expect(html).toContain("Checking deployment");
   });
 

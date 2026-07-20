@@ -178,16 +178,6 @@ public sealed class SafeUpdateLaunchResult
     public SafeUpdateRecord Record { get; init; } = new();
 }
 
-/// <summary>Information collected by the local first-run setup wizard.</summary>
-public class InitialSetupRequest
-{
-    public StoreSettings StoreSettings { get; set; } = new();
-    public string AdminFullName { get; set; } = "Administrator";
-    public string AdminUsername { get; set; } = "admin";
-    public string AdminPin { get; set; } = string.Empty;
-    public bool IncludeSampleProducts { get; set; } = true;
-}
-
 public class PurchaseDraft
 {
     public int? SupplierId { get; set; }

@@ -1,14 +1,14 @@
 # PosApp 2.0 - Offline-first online Point of Sale
 
-A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.14** preserves the complete v1.4.24 local application and adds optional secure multi-device synchronization through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational database, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is unavailable.
+A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.15** preserves the complete v1.4.24 desktop application and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
 
 ## Offline-first boundary
 
-The desktop never connects directly to Turso and never contains a Turso token, JWT secret, or Cloudflare credential. It sends bounded HTTPS JSON batches to the versioned Worker API. Every local business change and its outbox operation are committed in one SQLite transaction; synchronization runs asynchronously and never becomes a prerequisite for operating the register. Online accounts are optional, and a disconnected installation retains the original local POS behavior.
+The desktop never connects directly to Turso and never contains a Turso token, JWT secret, or Cloudflare credential. It sends bounded HTTPS JSON batches to the versioned Worker API. Every local business change and its outbox operation are committed in one SQLite transaction. Internet access is required to sign in or create the organization and complete the initial full synchronization; afterward the register remains offline-first and queues changes safely during temporary outages.
 
 See [Architecture](docs/ARCHITECTURE.md), [Cloud setup](docs/CLOUD-SETUP.md), [Sync protocol](docs/SYNC-PROTOCOL.md), [Security](docs/SECURITY.md), [free-plan guidance](docs/FREE-PLAN.md), and [Troubleshooting](docs/TROUBLESHOOTING.md).
 
-Version 2.0 evolves the existing v1.4.24 PosApp codebase in place. Its operational entities, UI, reports, printing, localization, migrations, updater, installer, and release history remain intact; online accounts and synchronization are additive layers around the established local application.
+Version 2.0 evolves the existing v1.4.24 PosApp codebase in place. Its operational entities, UI, reports, printing, localization, migrations, updater, installer, and release history remain intact; an online organization is now the required source of identity and synchronization, while SQLite remains the local operational cache.
 
 ## Features
 
@@ -26,7 +26,7 @@ Version 2.0 evolves the existing v1.4.24 PosApp codebase in place. Its operation
 | **Management workspace** | Slide-over terminal menu, role-aware back-office navigation, documents/sales, products, stock, purchases, customers/suppliers, reporting, promotions, users/security, payment/tax/company settings |
 | **Settings** | Sectioned General, Order & Payment, Products, Documents, Email/offline boundary, Print, Database, Update & Recovery, and About workflow; live English/বাংলা and Light/Dark switching |
 | **Keyboard workflow** | Global Enter-to-next-field navigation for single-line text, password/PIN, date, and selection fields; existing scanner/search/payment Enter actions and multiline editors retain their specialized behavior |
-| **Reliable checkboxes** | User activation, product weighted status, promotion activation, setup, and settings checkboxes use consistent two-state controls; grid changes persist immediately |
+| **Reliable checkboxes** | User activation, product weighted status, promotion activation and settings checkboxes use consistent two-state controls; grid changes persist immediately |
 | **Receipt Printer** | ESC/POS thermal printer via raw spooler (58/80mm) AND fallback Windows PrintDocument path for any printer |
 | **Hardware**        | Barcode scanner (HID keyboard + serial) and receipt printer — both degrade safely when unavailable |
 | **Data Safety**     | Consistent SQLite backups on startup/exit, manual backup, retention control, validated staged restore, automatic pre-restore safety copy, and pre-migration safe-update snapshots |
@@ -36,7 +36,7 @@ Version 2.0 evolves the existing v1.4.24 PosApp codebase in place. Its operation
 
 - **.NET 8 (LTS)** + **WPF** (XAML and code-behind)
 - **EF Core 8** + **SQLite** (single-file local DB at `%LOCALAPPDATA%\PosApp\posapp.db`)
-- **Cloudflare Workers** versioned HTTPS API (optional online service)
+- **Cloudflare Workers** versioned HTTPS API (required for first-run account onboarding and synchronization)
 - **Turso/libSQL** multi-tenant cloud database accessed only by the Worker
 - **System.IO.Ports** for serial barcode scanners
 - **System.Drawing.Common** for Windows receipt and report printing
@@ -80,17 +80,11 @@ dotnet restore
 dotnet run --project src/PosApp.Wpf/PosApp.Wpf.csproj
 ```
 
-On first run, the app creates `%LOCALAPPDATA%\PosApp\posapp.db`.
+On first run, the app creates only the device-local SQLite schema at `%LOCALAPPDATA%\PosApp\posapp.db`, then opens the online account window. There is no local/offline setup wizard and no independent local administrator. The user must either **Sign in** to an existing organization or **Create organization**. The account form also creates the device-only offline PIN used for cached login after onboarding.
 
-Before login is shown, a one-time setup wizard offers two safe paths. A local-only installation enters its store identity, currency, receipt footer, appearance, backup preference, optional sample products, and administrator username/PIN. A computer joining PosApp Online can instead sign in or create an organization immediately; it registers the device, creates its device-only offline PIN, and downloads the authorized organization without first inventing a throwaway local account. Online setup is two-phase: the device-local completed marker is written only after the initial migration or cursor-zero download succeeds. An interrupted setup resumes the same safe path after restart, and neither setup marker is synchronized.
+PosApp does not open the cashier login until the complete initial synchronization succeeds. A new device signing in downloads the authorized store from cursor zero, including users, store settings, catalog, customers, suppliers, inventory, purchases, sales, payments, register data, discounts, taxes, and synchronization metadata. A newly created organization builds its selected store settings, standard categories/taxes/discounts, and optional sample products, then uploads that entire snapshot through the protected cloud-empty migration lease.
 
-Local setup creates the administrator only after the owner chooses a username and PIN; there are no built-in or known default credentials. The database seeds:
-
-- 6 default categories (Beverages, Snacks, Groceries, Household, Personal Care, Produce)
-- 15 sample products (mix of fixed-price and weighted) only when the setup toggle is left on
-- Default tax rates and discounts
-
-When a new online organization is created from first-run setup, these local templates are uploaded under the protected cloud-empty migration lease. When the computer joins an existing organization, bootstrap templates are removed before the initial pull so the cloud catalog remains authoritative. If the final migration response is lost, the next startup verifies the completed lease and server counts rather than uploading the snapshot again.
+Online onboarding is resumable and two-phase: a device-local preparation marker is written first, while `app:setup-complete` is written only after the protected upload or full download finishes with no pending operations or conflicts. Neither marker is synchronized. Existing local databases from older releases are preserved, backed up, and migrated through the same reviewed initial-migration path instead of being silently discarded or merged.
 
 When an already-configured v1.x database is linked, PosApp first creates a verified backup and pauses all push/pull activity. The administrator must explicitly upload that local snapshot to a server-verified empty organization or replace the local synchronized working copy with server data. It never silently combines populated local and cloud datasets.
 
@@ -122,7 +116,7 @@ $env:POSAPP_CLOUD_API_BASE_URL = "https://your-worker.example.workers.dev"
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-2.0.14-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-2.0.15-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -131,7 +125,7 @@ The output is `artifacts\installer\PosApp-2.0.14-Setup.exe`. The branded wizard 
 5. A ready-to-install summary and progress page.
 6. A completion page with an optional **Run PosApp** action.
 
-The installer contains the self-contained offline app and does not download components during installation. Uninstalling removes program files and shortcuts but intentionally leaves the local database under `%LOCALAPPDATA%\PosApp` so business data is not silently deleted.
+The installer contains the self-contained desktop app and does not download components during installation. Internet access is required for initial online account onboarding and later cloud synchronization/authentication. Uninstalling removes program files and shortcuts but intentionally leaves the local database under `%LOCALAPPDATA%\PosApp` so business data is not silently deleted.
 
 ### Safe Offline Update
 
@@ -148,21 +142,21 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.14-dev.27-Setup.exe` with resource version `2.0.14.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.15-dev.27-Setup.exe` with resource version `2.0.15.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v2.0.14`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v2.0.15`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v2.0.14
-git push origin v2.0.14
+git tag v2.0.15
+git push origin v2.0.15
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.14`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.15`.
 
 `.github/workflows/deploy-worker.yml` independently type-checks and tests the Worker, validates all ordered Turso migrations, performs a Wrangler dry run, applies every pending migration to the selected Turso database, verifies schema version 4 and required tables/columns, uploads the required Turso and authentication bindings, including the dedicated password pepper, from protected GitHub secrets, and deploys the selected `development` or `production` environment. After deployment it independently waits for `/api/v1/meta`, `/api/v1/diagnostics`, and the public root status page to serve the expected Worker version. It fails unless the Free-plan password verifier, token signing, schema inspection, the complete atomic organization-provisioning batch, and forced rollback verification all pass. The root page exposes machine-readable deployment headers and metadata, while its detailed check cards are rendered from the already-validated diagnostic JSON. Opening the Worker base URL displays the status page instead of returning `AUTH_REQUIRED`. Follow [Cloud setup](docs/CLOUD-SETUP.md) before enabling deployment.
 

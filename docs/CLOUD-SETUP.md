@@ -1,6 +1,6 @@
 # Cloudflare Worker and Turso setup
 
-The desktop can be used without this deployment. Complete these steps only for online accounts and multi-device synchronization.
+This deployment is required for first-run account onboarding. PosApp remains offline-first after the initial full synchronization, but a new installation cannot create an independent local store.
 
 ## Prerequisites
 
@@ -107,9 +107,9 @@ Keep Worker runtime secrets in protected GitHub environments; the deployment wor
 
 ## Desktop connection
 
-On a new computer, choose **Sign in or create account** directly in first-run setup. On an already configured computer, use **Online account** at login. The app uses the Worker endpoint embedded by GitHub Actions, so no address field is shown. Create an organization or sign in with an existing account. The first organization user is its administrator. Each Windows installation generates a persistent UUID device identity and records its currently selected branch; the user also chooses a device-local PIN for cached offline login. No built-in default account or PIN is created.
+On a new computer, PosApp opens the online account window before cashier login. Select **Sign in** for an existing organization or **Create organization** for a new one. There is no offline/local setup option. The app uses the Worker endpoint embedded by GitHub Actions, so no address field is shown. The first organization user is its administrator. Each Windows installation generates a persistent UUID device identity and records its selected branch; the user also chooses a device-local PIN for cached offline login after onboarding. No built-in default account or PIN is created.
 
-A first-run computer joining an existing organization clears only its unused bootstrap catalog templates, retains the authenticated local user, and performs a cursor-zero pull. Creating a new organization from first-run setup keeps the standard templates and imports them through the same server-owned cloud-empty lease used by the reviewed migration flow. Setup writes a device-local preparation marker first and writes `app:setup-complete` only after that upload or download succeeds. Restart therefore resumes the original path; a lost migration-completion response is recovered by verifying the completed server lease and counts. Both `app:` markers are intentionally local-only and are never sent to Turso.
+A fresh computer joining an existing organization starts with a schema-only SQLite cache and performs a cursor-zero pull of the complete authorized store. Creating a new organization records the store details and preferences in the same online form, creates the standard templates and optional sample catalog locally, and imports the full snapshot through the server-owned cloud-empty lease. PosApp writes a device-local preparation marker first and writes `app:setup-complete` only after the upload or download succeeds with no pending operations or conflicts. Restart therefore resumes the original path; a lost migration-completion response is recovered by verifying the completed server lease and counts. Both `app:` markers are intentionally local-only and are never sent to Turso.
 
 An already-configured local installation follows a stricter path. If it contains records without cloud identities, PosApp creates and validates a SQLite backup, sets the reconciliation gate, and blocks both push and pull before any background synchronization. The administrator must then choose **Upload local data** (which rechecks that the organization is empty and obtains the migration lease) or **Use server data** (which keeps the safety backup and replaces the local synchronized working copy). A populated local database is never silently combined with a populated cloud organization.
 

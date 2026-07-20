@@ -5,24 +5,36 @@ using PosApp.Core.Models;
 namespace PosApp.Data;
 
 /// <summary>
-/// Seeds first-run default data: categories, tax and discount templates, and
-/// store settings. Credentials are created only by the explicit local or online
-/// setup flow, so a new installation never contains a known default PIN. Sample products are added
-/// separately only when the store owner enables them during setup.
+/// Initializes the local SQLite cache and, after online account creation, can
+/// build the default store snapshot that is uploaded to the selected organization.
+/// No local-only administrator or business catalog is created before online onboarding.
 /// </summary>
 public static class DbSeeder
 {
-    public static async Task SeedAsync(AppDbContext db)
+    /// <summary>
+    /// Creates only the device-local SQLite schema. Business templates are not
+    /// inserted until an authenticated online organization has been selected,
+    /// so a new installation can never become an independent offline store.
+    /// </summary>
+    public static Task SeedAsync(AppDbContext db)
     {
-        // Use EnsureCreatedAsync for the local single-DB scenario.
-        // It creates all tables from the current model in one shot
-        // without needing EF Core migration files (which we don't ship).
-        // On subsequent runs it's a no-op if the DB schema is already current.
+        ArgumentNullException.ThrowIfNull(db);
+        return db.Database.EnsureCreatedAsync();
+    }
+
+    /// <summary>
+    /// Creates the standard catalog and store configuration for a newly created
+    /// online organization. The caller runs this with sync capture suppressed,
+    /// then uploads the complete snapshot through the protected initial-migration
+    /// flow. Existing organizations never receive these templates locally.
+    /// </summary>
+    public static async Task SeedOnlineOrganizationDefaultsAsync(
+        AppDbContext db,
+        StoreSettings? storeSettings = null)
+    {
+        ArgumentNullException.ThrowIfNull(db);
         await db.Database.EnsureCreatedAsync();
 
-        // A restored or manually repaired database can contain only some of the
-        // built-in categories. Ensure each category independently so setup-time
-        // sample-product creation can always resolve every required category.
         var categoryDefinitions = new[]
         {
             (Name: "Beverages", Color: "#2D7FF9", SortOrder: 1),
@@ -33,10 +45,10 @@ public static class DbSeeder
             (Name: "Produce", Color: "#22C55E", SortOrder: 6)
         };
         var categories = await db.Categories.ToListAsync();
-        var categoriesAdded = false;
         foreach (var definition in categoryDefinitions)
         {
-            if (categories.Any(c => string.Equals(c.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
+            if (categories.Any(category => string.Equals(
+                    category.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
             var category = new Category
@@ -47,18 +59,13 @@ public static class DbSeeder
             };
             db.Categories.Add(category);
             categories.Add(category);
-            categoriesAdded = true;
         }
-
-        if (categoriesAdded)
-            await db.SaveChangesAsync();
 
         if (!await db.Taxes.AnyAsync())
         {
             db.Taxes.AddRange(
                 new Tax { Name = "VAT", Rate = 15m, IsIncluded = false, IsDefault = true },
-                new Tax { Name = "Service Charge", Rate = 5m, IsIncluded = false }
-            );
+                new Tax { Name = "Service Charge", Rate = 5m, IsIncluded = false });
         }
 
         if (!await db.Discounts.AnyAsync())
@@ -66,14 +73,24 @@ public static class DbSeeder
             db.Discounts.AddRange(
                 new Discount { Name = "5% Off", Type = DiscountType.Percentage, Value = 5m, Code = "SAVE5", IsActive = true },
                 new Discount { Name = "Senior Citizen", Type = DiscountType.Percentage, Value = 10m, IsActive = true },
-                new Discount { Name = "50 Off", Type = DiscountType.FixedAmount, Value = 50m, Code = "BD50", IsActive = true }
-            );
+                new Discount { Name = "50 Off", Type = DiscountType.FixedAmount, Value = 50m, Code = "BD50", IsActive = true });
         }
 
-        if (!await db.Settings.AnyAsync(s => s.Key == "store:config"))
+        var configuration = storeSettings ?? new StoreSettings();
+        var existingConfiguration = await db.Settings
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(setting => setting.Key == "store:config" &&
+                !db.SyncIdentities.Any(identity =>
+                    identity.EntityType == "settings" && identity.LocalId == setting.Id));
+        var serialized = System.Text.Json.JsonSerializer.Serialize(configuration);
+        if (existingConfiguration == null)
         {
-            var defaults = new StoreSettings();
-            db.Settings.Add(new Setting { Key = "store:config", Value = System.Text.Json.JsonSerializer.Serialize(defaults) });
+            db.Settings.Add(new Setting { Key = "store:config", Value = serialized });
+        }
+        else
+        {
+            existingConfiguration.Value = serialized;
+            existingConfiguration.UpdatedAt = DateTime.UtcNow;
         }
 
         await db.SaveChangesAsync();
@@ -81,7 +98,7 @@ public static class DbSeeder
 
     /// <summary>
     /// Adds the built-in sample catalog once. This is called only after the
-    /// first-run setup toggle has been explicitly enabled by the store owner.
+    /// online organization creation option has been explicitly enabled by the store owner.
     /// </summary>
     public static async Task<bool> SeedSampleProductsAsync(AppDbContext db)
     {
@@ -136,7 +153,7 @@ public static class DbSeeder
                     Quantity = product.StockQuantity.Value,
                     BalanceAfter = product.StockQuantity.Value,
                     UnitCost = product.CostPrice,
-                    Note = "Initial stock on first run"
+                    Note = "Initial stock for online organization"
                 });
             }
         }

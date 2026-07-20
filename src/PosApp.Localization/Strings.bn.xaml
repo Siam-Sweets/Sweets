@@ -102,6 +102,29 @@
     <!-- অনলাইন অ্যাকাউন্ট ও অফলাইন-ফার্স্ট সিঙ্ক -->
     <sys:String x:Key="Cloud_AccountTitle">অনলাইন PosApp অ্যাকাউন্ট</sys:String>
     <sys:String x:Key="Cloud_AccountSubtitle">এই রেজিস্টার অফলাইনে চালু রেখেই অনুমোদিত একাধিক কম্পিউটার থেকে একই প্রতিষ্ঠানের ডেটা নিরাপদে ব্যবহার করুন।</sys:String>
+    <sys:String x:Key="Cloud_OnlineOnlySubtitle">বিদ্যমান প্রতিষ্ঠানে সাইন ইন করুন অথবা নতুন প্রতিষ্ঠান তৈরি করুন। রেজিস্টার খোলার আগে PosApp সম্পূর্ণ স্টোর ডেটা ডাউনলোড বা আপলোড করবে।</sys:String>
+    <sys:String x:Key="Cloud_SignInExistingHelp">বিদ্যমান অনলাইন অ্যাকাউন্ট ব্যবহার করুন। সেটআপ শেষ হওয়ার আগে এই কম্পিউটারে নির্ধারিত স্টোর, ব্যবহারকারী, ক্যাটালগ, ইনভেন্টরি, সেটিংস ও লেনদেনের ইতিহাস ডাউনলোড হবে।</sys:String>
+    <sys:String x:Key="Cloud_SignInAndSync">সাইন ইন করে সবকিছু সিঙ্ক করুন</sys:String>
+    <sys:String x:Key="Cloud_CreateOrganizationHelp">প্রতিষ্ঠানের মালিক অ্যাকাউন্ট ও প্রথম স্টোর তৈরি করুন। এই তথ্য এবং সম্পূর্ণ প্রাথমিক ক্যাটালগ অনলাইনে সিঙ্ক হবে।</sys:String>
+    <sys:String x:Key="Cloud_OrganizationAndStore">প্রতিষ্ঠান ও স্টোর</sys:String>
+    <sys:String x:Key="Cloud_StorePhone">স্টোরের ফোন</sys:String>
+    <sys:String x:Key="Cloud_CurrencySymbol">মুদ্রার প্রতীক</sys:String>
+    <sys:String x:Key="Cloud_StoreAddress">স্টোরের ঠিকানা</sys:String>
+    <sys:String x:Key="Cloud_ReceiptFooter">রসিদের ফুটার</sys:String>
+    <sys:String x:Key="Cloud_OwnerAccount">মালিকের অ্যাকাউন্ট</sys:String>
+    <sys:String x:Key="Cloud_InitialPreferences">প্রাথমিক সিঙ্ক করা পছন্দ</sys:String>
+    <sys:String x:Key="Cloud_EnableAutomaticBackup">এই কম্পিউটারে স্বয়ংক্রিয় স্থানীয় নিরাপত্তা ব্যাকআপ চালু করুন</sys:String>
+    <sys:String x:Key="Cloud_AddSampleProducts">নতুন প্রতিষ্ঠানে সাধারণ নমুনা ক্যাটালগ যোগ করুন</sys:String>
+    <sys:String x:Key="Cloud_CreateAndSyncOrganization">প্রতিষ্ঠান তৈরি করে সবকিছু সিঙ্ক করুন</sys:String>
+    <sys:String x:Key="Cloud_PreparingOnlineSetup">অনলাইন প্রতিষ্ঠানের জন্য এই কম্পিউটার প্রস্তুত করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Cloud_UploadingCompleteStore">সম্পূর্ণ স্থানীয় স্টোর অনলাইন প্রতিষ্ঠানে আপলোড করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Cloud_DownloadingCompleteStore">প্রতিষ্ঠানের সব ডেটা এই কম্পিউটারে ডাউনলোড করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Cloud_InitialDownloadIncomplete">প্রতিষ্ঠানের সম্পূর্ণ সিঙ্ক শেষ হয়নি। সংযোগ পরীক্ষা করে আবার সাইন ইন করে চালিয়ে যান।</sys:String>
+    <sys:String x:Key="Cloud_OnlineSetupComplete">অনলাইন সেটআপ ও সম্পূর্ণ সিঙ্ক সফলভাবে শেষ হয়েছে।</sys:String>
+    <sys:String x:Key="Cloud_ValidationStorePhone">স্টোরের ফোন ৩০ অক্ষর বা কম হতে হবে।</sys:String>
+    <sys:String x:Key="Cloud_ValidationStoreAddress">স্টোরের ঠিকানা ৫০০ অক্ষর বা কম হতে হবে।</sys:String>
+    <sys:String x:Key="Cloud_ValidationCurrencySymbol">মুদ্রার প্রতীকে ১ থেকে ৮টি অক্ষর থাকতে হবে।</sys:String>
+    <sys:String x:Key="Cloud_ValidationReceiptFooter">রসিদের ফুটার ৫০০ অক্ষর বা কম হতে হবে।</sys:String>
     <sys:String x:Key="Cloud_SignIn">সাইন ইন</sys:String>
     <sys:String x:Key="Cloud_DeploymentEndpointMissing">এই বিল্ডে অনলাইন সিঙ্ক কনফিগার করা নেই। POSAPP_CLOUD_API_BASE_URL GitHub Actions সিক্রেট যোগ করে PosApp পুনরায় বিল্ড করুন।</sys:String>
     <sys:String x:Key="Cloud_ManagedEndpoint">এই PosApp বিল্ডের জন্য কনফিগার করা ক্লাউড সার্ভিসের মাধ্যমে সংযুক্ত।</sys:String>
@@ -269,7 +292,6 @@
     <sys:String x:Key="Cloud_ValidationFinishOnlineSetup">এই ইনস্টলেশনটি ইতিমধ্যে একটি অনলাইন প্রতিষ্ঠানের সঙ্গে যুক্ত। আলাদা স্থানীয় প্রশাসক তৈরি না করে অনলাইন সেটআপ শেষ করুন।</sys:String>
     <sys:String x:Key="Cloud_ValidationOfflineProfileMissing">অনলাইন সাইন-ইন কোনো অফলাইন ব্যবহারকারী প্রোফাইল তৈরি করেনি।</sys:String>
     <sys:String x:Key="Cloud_ValidationAssignedStoreMissing">অনলাইন অ্যাকাউন্টটি কোনো নির্ধারিত স্টোর দেয়নি।</sys:String>
-    <sys:String x:Key="Cloud_ValidationExistingUnconfiguredData">এই সেটআপ না-করা ডেটাবেসে ইতিমধ্যে ব্যবসায়িক ডেটা আছে। আগে স্থানীয় সেটআপ সম্পন্ন করুন, তারপর পর্যালোচিত প্রাথমিক মাইগ্রেশন প্রক্রিয়া ব্যবহার করুন।</sys:String>
     <sys:String x:Key="Cloud_ValidationOnlineSetupNotPrepared">এই কম্পিউটারে অনলাইন সেটআপ প্রস্তুত করা হয়নি।</sys:String>
     <sys:String x:Key="Cloud_Error_NETWORK_UNAVAILABLE">ইন্টারনেট সংযোগ নেই</sys:String>
     <sys:String x:Key="Cloud_Error_NETWORK_TIMEOUT">সংযোগের সময় শেষ</sys:String>
@@ -356,36 +378,6 @@
     <sys:String x:Key="Login_SetupHint">সেটআপের সময় তৈরি করা অ্যাডমিনিস্ট্রেটর অ্যাকাউন্ট দিয়ে সাইন ইন করুন।</sys:String>
 
     <!-- First-run setup -->
-    <sys:String x:Key="Setup_WindowTitle">পসঅ্যাপ সেটআপ</sys:String>
-    <sys:String x:Key="Setup_Title">পসঅ্যাপ সেটআপ করুন</sys:String>
-    <sys:String x:Key="Setup_Subtitle">প্রথম বিক্রয়ের আগে এই পিসি কনফিগার করুন</sys:String>
-    <sys:String x:Key="Setup_OnlineSection">ইতিমধ্যে PosApp Online ব্যবহার করেন?</sys:String>
-    <sys:String x:Key="Setup_OnlineHelp">এই কম্পিউটারে সাইন ইন করে আপনার প্রতিষ্ঠান, শাখা, ব্যবহারকারী, ক্যাটালগ ও লেনদেনের ইতিহাস ডাউনলোড করুন। সাইন ইনের সময় এই ডিভাইসের অফলাইন পিন নির্ধারণ করবেন।</sys:String>
-    <sys:String x:Key="Setup_OnlineButton">সাইন ইন বা অ্যাকাউন্ট তৈরি</sys:String>
-    <sys:String x:Key="Setup_OnlineDownloadIncomplete">প্রাথমিক ডাউনলোড সম্পূর্ণ হয়নি। সংযোগ পরীক্ষা করে আবার সাইন ইন করে চালিয়ে যান।</sys:String>
-    <sys:String x:Key="Setup_StoreSection">দোকানের তথ্য</sys:String>
-    <sys:String x:Key="Setup_StoreHelp">এই তথ্য অ্যাপের বিভিন্ন স্থানে ও মুদ্রিত রসিদে দেখা যাবে।</sys:String>
-    <sys:String x:Key="Setup_StoreName">দোকানের নাম</sys:String>
-    <sys:String x:Key="Setup_Phone">ফোন</sys:String>
-    <sys:String x:Key="Setup_Address">ঠিকানা</sys:String>
-    <sys:String x:Key="Setup_Currency">মুদ্রার প্রতীক</sys:String>
-    <sys:String x:Key="Setup_ReceiptFooter">রসিদের নিচের লেখা</sys:String>
-    <sys:String x:Key="Setup_AdminSection">অ্যাডমিনিস্ট্রেটর অ্যাকাউন্ট</sys:String>
-    <sys:String x:Key="Setup_AdminHelp">পণ্য, ব্যবহারকারী, রিপোর্ট ও সেটিংস পরিচালনার জন্য অ্যাডমিন লগইন তৈরি করুন।</sys:String>
-    <sys:String x:Key="Setup_AdminName">অ্যাডমিনিস্ট্রেটরের নাম</sys:String>
-    <sys:String x:Key="Setup_Username">ব্যবহারকারী নাম</sys:String>
-    <sys:String x:Key="Setup_Pin">পিন (৪-১২ সংখ্যা)</sys:String>
-    <sys:String x:Key="Setup_ConfirmPin">পিন নিশ্চিত করুন</sys:String>
-    <sys:String x:Key="Setup_DataSafety">ডেটা সুরক্ষা</sys:String>
-    <sys:String x:Key="Setup_EnableBackup">স্বয়ংক্রিয় স্থানীয় ব্যাকআপ চালু করুন</sys:String>
-    <sys:String x:Key="Setup_SampleProducts">নমুনা পণ্য</sys:String>
-    <sys:String x:Key="Setup_SampleProductsHelp">নির্দিষ্ট-মূল্য ও ওজনভিত্তিক পণ্যসহ ১৫টি উদাহরণ পণ্য যোগ করুন। খালি পণ্য তালিকা দিয়ে শুরু করতে এটি বন্ধ করুন।</sys:String>
-    <sys:String x:Key="Setup_On">চালু</sys:String>
-    <sys:String x:Key="Setup_Off">বন্ধ</sys:String>
-    <sys:String x:Key="Setup_OfflineNote">সেটআপ ও সংরক্ষিত সব তথ্য এই কম্পিউটারেই থাকবে।</sys:String>
-    <sys:String x:Key="Setup_Exit">প্রস্থান</sys:String>
-    <sys:String x:Key="Setup_Finish">সেটআপ শেষ করুন</sys:String>
-    <sys:String x:Key="Setup_PinMismatch">অ্যাডমিনিস্ট্রেটর পিন দুটি মিলছে না।</sys:String>
 
     <!-- Nav -->
     <sys:String x:Key="Nav_POS">পিওএস</sys:String>

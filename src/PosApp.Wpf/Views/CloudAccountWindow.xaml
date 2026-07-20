@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{DynamicResource Cloud_AccountTitle}"
         Icon="/PosApp;component/Assets/PosApp.ico"
-        Width="720" Height="700" MinWidth="560" MinHeight="500"
+        Width="780" Height="760" MinWidth="560" MinHeight="500"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize"
         Background="{DynamicResource BackgroundBrush}">
@@ -16,8 +16,10 @@
 
         <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}" Padding="26,20">
             <StackPanel>
-                <TextBlock Text="{DynamicResource Cloud_AccountTitle}" Foreground="White" FontSize="25" FontWeight="SemiBold"/>
-                <TextBlock Text="{DynamicResource Cloud_AccountSubtitle}" Foreground="#DBEAFE" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                <TextBlock Text="{DynamicResource Cloud_AccountTitle}" Foreground="White"
+                           FontSize="25" FontWeight="SemiBold"/>
+                <TextBlock Text="{DynamicResource Cloud_OnlineOnlySubtitle}" Foreground="#DBEAFE"
+                           Margin="0,4,0,0" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
 
@@ -29,17 +31,23 @@
                               CanContentScroll="False"
                               PanningMode="VerticalOnly"
                               IsManipulationEnabled="True">
-                    <StackPanel Margin="24">
+                    <StackPanel Margin="24" MaxWidth="620">
+                        <TextBlock Text="{DynamicResource Cloud_SignInExistingHelp}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   TextWrapping="Wrap" Margin="0,0,0,20"/>
+
                         <TextBlock Text="{DynamicResource Cloud_UsernameEmail}" Style="{StaticResource Muted}"/>
                         <TextBox x:Name="LoginIdentifier" Margin="0,5,0,13" Padding="10,8" MaxLength="255"/>
                         <TextBlock Text="{DynamicResource Cloud_OnlinePassword}" Style="{StaticResource Muted}"/>
                         <PasswordBox x:Name="LoginPassword" Margin="0,5,0,13" Padding="10,8" MaxLength="128"/>
                         <TextBlock Text="{DynamicResource Cloud_OfflinePin}" Style="{StaticResource Muted}"/>
-                        <PasswordBox x:Name="LoginOfflinePin" Margin="0,5,0,13" Padding="10,8" MaxLength="12"/>
-                        <TextBlock Text="{DynamicResource Cloud_OfflinePinHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
-                        <TextBlock Text="{DynamicResource Cloud_DeviceName}" Style="{StaticResource Muted}" Margin="0,13,0,0"/>
+                        <PasswordBox x:Name="LoginOfflinePin" Margin="0,5,0,8" Padding="10,8" MaxLength="12"/>
+                        <TextBlock Text="{DynamicResource Cloud_OfflinePinHelp}" Style="{StaticResource Muted}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{DynamicResource Cloud_DeviceName}" Style="{StaticResource Muted}"
+                                   Margin="0,13,0,0"/>
                         <TextBox x:Name="LoginDeviceName" Margin="0,5,0,18" Padding="10,8" MaxLength="160"/>
-                        <Button x:Name="LoginButton" Content="{DynamicResource Cloud_SignIn}"
+                        <Button x:Name="LoginButton" Content="{DynamicResource Cloud_SignInAndSync}"
                                 Style="{StaticResource PrimaryButton}" Padding="22,11"
                                 HorizontalAlignment="Left" Click="Login_Click"/>
                     </StackPanel>
@@ -53,6 +61,12 @@
                               PanningMode="VerticalOnly"
                               IsManipulationEnabled="True">
                     <StackPanel Margin="24">
+                        <TextBlock Text="{DynamicResource Cloud_CreateOrganizationHelp}"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   TextWrapping="Wrap" Margin="0,0,0,18"/>
+
+                        <TextBlock Text="{DynamicResource Cloud_OrganizationAndStore}"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -64,10 +78,34 @@
                             </StackPanel>
                             <StackPanel Grid.Column="1" Margin="8,0,0,12">
                                 <TextBlock Text="{DynamicResource Cloud_StoreName}" Style="{StaticResource Muted}"/>
-                                <TextBox x:Name="CreateStoreName" Margin="0,5,0,0" Padding="10,8" MaxLength="160"/>
+                                <TextBox x:Name="CreateStoreName" Margin="0,5,0,0" Padding="10,8" MaxLength="100"/>
                             </StackPanel>
                         </Grid>
 
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,8,12">
+                                <TextBlock Text="{DynamicResource Cloud_StorePhone}" Style="{StaticResource Muted}"/>
+                                <TextBox x:Name="CreateStorePhone" Margin="0,5,0,0" Padding="10,8" MaxLength="30"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="8,0,0,12">
+                                <TextBlock Text="{DynamicResource Cloud_CurrencySymbol}" Style="{StaticResource Muted}"/>
+                                <TextBox x:Name="CreateCurrencySymbol" Margin="0,5,0,0" Padding="10,8" MaxLength="8"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="{DynamicResource Cloud_StoreAddress}" Style="{StaticResource Muted}"/>
+                        <TextBox x:Name="CreateStoreAddress" Margin="0,5,0,12" Padding="10,8"
+                                 MaxLength="500" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="58"/>
+                        <TextBlock Text="{DynamicResource Cloud_ReceiptFooter}" Style="{StaticResource Muted}"/>
+                        <TextBox x:Name="CreateReceiptFooter" Margin="0,5,0,18" Padding="10,8"
+                                 MaxLength="500" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="{DynamicResource Cloud_OwnerAccount}"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -118,7 +156,38 @@
                             </StackPanel>
                         </Grid>
 
-                        <Button x:Name="CreateButton" Content="{DynamicResource Cloud_CreateOrganization}"
+                        <TextBlock Text="{DynamicResource Cloud_InitialPreferences}"
+                                   FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Text="{DynamicResource Set_Language}" Style="{StaticResource Muted}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                    <RadioButton x:Name="CreateLanguageEn" Content="English" GroupName="CreateLanguage"
+                                                 IsChecked="True" Margin="0,0,20,0"/>
+                                    <RadioButton x:Name="CreateLanguageBn" Content="বাংলা" GroupName="CreateLanguage"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                <TextBlock Text="{DynamicResource Set_Theme}" Style="{StaticResource Muted}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,7,0,0">
+                                    <RadioButton x:Name="CreateThemeLight" Content="{DynamicResource Set_Light}"
+                                                 GroupName="CreateTheme" IsChecked="True" Margin="0,0,20,0"/>
+                                    <RadioButton x:Name="CreateThemeDark" Content="{DynamicResource Set_Dark}"
+                                                 GroupName="CreateTheme"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <CheckBox x:Name="CreateAutomaticBackup" IsChecked="True" Margin="0,4,0,8"
+                                  Content="{DynamicResource Cloud_EnableAutomaticBackup}"/>
+                        <CheckBox x:Name="CreateSampleProducts" IsChecked="True" Margin="0,0,0,18"
+                                  Content="{DynamicResource Cloud_AddSampleProducts}"/>
+
+                        <Button x:Name="CreateButton" Content="{DynamicResource Cloud_CreateAndSyncOrganization}"
                                 Style="{StaticResource PrimaryButton}" Padding="22,11"
                                 HorizontalAlignment="Left" Click="Create_Click"/>
                     </StackPanel>

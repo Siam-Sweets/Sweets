@@ -26,13 +26,28 @@ public partial class CloudAccountWindow : Window
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly ICloudAccountService _accounts;
+    private readonly ISetupService _setup;
+    private readonly ICloudMigrationService _migration;
+    private readonly ICloudSyncService _sync;
+    private readonly ISettingsService _settings;
     private bool _busy;
+    private StoreSettings? _requestedStoreSettings;
+    private bool _includeSampleProducts;
 
-    public CloudAccountWindow(ICloudAccountService accounts)
+    public CloudAccountWindow(
+        ICloudAccountService accounts,
+        ISetupService setup,
+        ICloudMigrationService migration,
+        ICloudSyncService sync,
+        ISettingsService settings)
     {
         InitializeComponent();
         ConstrainToWorkingArea();
         _accounts = accounts;
+        _setup = setup;
+        _migration = migration;
+        _sync = sync;
+        _settings = settings;
         Loaded += CloudAccountWindow_Loaded;
     }
 
@@ -42,8 +57,8 @@ public partial class CloudAccountWindow : Window
 
     private void ConstrainToWorkingArea()
     {
-        const double preferredWidth = 720;
-        const double preferredHeight = 700;
+        const double preferredWidth = 780;
+        const double preferredHeight = 760;
         const double preferredMinWidth = 560;
         const double preferredMinHeight = 500;
         const double screenMargin = 16;
@@ -60,10 +75,37 @@ public partial class CloudAccountWindow : Window
         Height = Math.Min(preferredHeight, availableHeight);
     }
 
-    private void CloudAccountWindow_Loaded(object sender, RoutedEventArgs e)
+    private async void CloudAccountWindow_Loaded(object sender, RoutedEventArgs e)
     {
         LoginDeviceName.Text = Environment.MachineName;
         CreateDeviceName.Text = Environment.MachineName;
+
+        try
+        {
+            var defaults = await _settings.GetStoreSettingsAsync();
+            if (!string.Equals(defaults.StoreName, "My Store", StringComparison.OrdinalIgnoreCase))
+            {
+                CreateStoreName.Text = defaults.StoreName;
+                CreateOrganizationName.Text = defaults.StoreName;
+            }
+            CreateStorePhone.Text = defaults.Phone;
+            CreateStoreAddress.Text = defaults.Address;
+            CreateCurrencySymbol.Text = string.IsNullOrWhiteSpace(defaults.CurrencySymbol)
+                ? "৳"
+                : defaults.CurrencySymbol;
+            CreateReceiptFooter.Text = defaults.FooterNote;
+            CreateLanguageBn.IsChecked = string.Equals(defaults.Language, "bn", StringComparison.OrdinalIgnoreCase);
+            CreateLanguageEn.IsChecked = CreateLanguageBn.IsChecked != true;
+            CreateThemeDark.IsChecked = string.Equals(defaults.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
+            CreateThemeLight.IsChecked = CreateThemeDark.IsChecked != true;
+            CreateAutomaticBackup.IsChecked = defaults.AutomaticBackupEnabled;
+            CreateSampleProducts.IsChecked = true;
+        }
+        catch (Exception exception)
+        {
+            App.LogError("Load online account defaults", exception);
+        }
+
         if (!CloudDeploymentSettings.IsConfigured)
         {
             AccountTabs.IsEnabled = false;
@@ -77,6 +119,8 @@ public partial class CloudAccountWindow : Window
     {
         if (_busy || !ValidateLoginForm()) return;
 
+        _requestedStoreSettings = null;
+        _includeSampleProducts = false;
         await RunAsync(async () =>
         {
             var result = await _accounts.LoginAsync(new CloudLoginRequest
@@ -97,6 +141,8 @@ public partial class CloudAccountWindow : Window
     {
         if (_busy || !ValidateCreateForm()) return;
 
+        _requestedStoreSettings = BuildRequestedStoreSettings();
+        _includeSampleProducts = CreateSampleProducts.IsChecked == true;
         await RunAsync(async () =>
         {
             var result = await _accounts.CreateOrganizationAsync(new CloudOrganizationRequest
@@ -117,6 +163,26 @@ public partial class CloudAccountWindow : Window
         }, "Create online organization");
     }
 
+    private StoreSettings BuildRequestedStoreSettings()
+    {
+        var automaticBackup = CreateAutomaticBackup.IsChecked == true;
+        return new StoreSettings
+        {
+            StoreName = CreateStoreName.Text.Trim(),
+            Phone = CreateStorePhone.Text.Trim(),
+            Address = CreateStoreAddress.Text.Trim(),
+            CurrencySymbol = CreateCurrencySymbol.Text.Trim(),
+            CurrencyCode = "BDT",
+            Country = "Bangladesh",
+            FooterNote = CreateReceiptFooter.Text.Trim(),
+            Language = CreateLanguageBn.IsChecked == true ? "bn" : "en",
+            Theme = CreateThemeDark.IsChecked == true ? "Dark" : "Light",
+            AutomaticBackupEnabled = automaticBackup,
+            BackupOnStartup = automaticBackup,
+            BackupOnExit = automaticBackup
+        };
+    }
+
     private bool ValidateLoginForm()
     {
         if (string.IsNullOrWhiteSpace(LoginIdentifier.Text))
@@ -130,6 +196,10 @@ public partial class CloudAccountWindow : Window
             return ValidationFailure(Text("Cloud_ValidationOfflinePin",
                 "The offline PIN must contain 4 to 12 digits."), LoginOfflinePin);
 
+        if (LoginDeviceName.Text.Trim().Length > 160)
+            return ValidationFailure(Text("Cloud_ValidationDeviceName",
+                "Device name must be 160 characters or fewer."), LoginDeviceName);
+
         return true;
     }
 
@@ -138,12 +208,28 @@ public partial class CloudAccountWindow : Window
         if (string.IsNullOrWhiteSpace(CreateOrganizationName.Text) ||
             CreateOrganizationName.Text.Trim().Length > 160)
             return ValidationFailure(Text("Cloud_ValidationOrganizationName",
-                "Organization name is required and must be 160 characters or fewer."),
+                    "Organization name is required and must be 160 characters or fewer."),
                 CreateOrganizationName);
 
-        if (string.IsNullOrWhiteSpace(CreateStoreName.Text) || CreateStoreName.Text.Trim().Length > 160)
+        if (string.IsNullOrWhiteSpace(CreateStoreName.Text) || CreateStoreName.Text.Trim().Length > 100)
             return ValidationFailure(Text("Cloud_ValidationStoreName",
-                "Store name is required and must be 160 characters or fewer."), CreateStoreName);
+                "Store name is required and must be 100 characters or fewer."), CreateStoreName);
+
+        if (CreateStorePhone.Text.Trim().Length > 30)
+            return ValidationFailure(Text("Cloud_ValidationStorePhone",
+                "Store phone must be 30 characters or fewer."), CreateStorePhone);
+
+        if (CreateStoreAddress.Text.Trim().Length > 500)
+            return ValidationFailure(Text("Cloud_ValidationStoreAddress",
+                "Store address must be 500 characters or fewer."), CreateStoreAddress);
+
+        if (CreateCurrencySymbol.Text.Trim().Length is < 1 or > 8)
+            return ValidationFailure(Text("Cloud_ValidationCurrencySymbol",
+                "Currency symbol must contain 1 to 8 characters."), CreateCurrencySymbol);
+
+        if (CreateReceiptFooter.Text.Trim().Length > 500)
+            return ValidationFailure(Text("Cloud_ValidationReceiptFooter",
+                "Receipt footer must be 500 characters or fewer."), CreateReceiptFooter);
 
         if (string.IsNullOrWhiteSpace(CreateFullName.Text) || CreateFullName.Text.Trim().Length > 100)
             return ValidationFailure(Text("Cloud_ValidationFullName",
@@ -195,22 +281,24 @@ public partial class CloudAccountWindow : Window
         return false;
     }
 
-    private async Task RunAsync(Func<Task> operation, string logContext)
+    private async Task RunAsync(Func<Task> authenticationOperation, string logContext)
     {
         _busy = true;
         AccountTabs.IsEnabled = false;
         BusyBar.Visibility = Visibility.Visible;
         SetStatus(Text("Cloud_Connecting", "Connecting securely..."), StatusKind.Busy);
-
-        // Let WPF paint the busy state before validation, DNS, TLS, or database
-        // work begins. This prevents a network request from appearing as a dead click.
-        await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Render);
+        await RenderAsync();
 
         try
         {
-            await operation();
-            if (AuthenticatedUser == null)
-                throw new InvalidOperationException("The online account did not provide a local user profile.");
+            await authenticationOperation();
+            if (AuthenticatedUser == null || AuthenticationResult == null)
+                throw new InvalidOperationException(
+                    "The online account did not provide a protected local user profile.");
+
+            if (!await _setup.IsSetupCompleteAsync())
+                await CompleteOnlineOnboardingAsync();
+
             DialogResult = true;
         }
         catch (CloudApiException exception)
@@ -241,6 +329,68 @@ public partial class CloudAccountWindow : Window
             BusyBar.Visibility = Visibility.Collapsed;
         }
     }
+
+    private async Task CompleteOnlineOnboardingAsync()
+    {
+        var authentication = AuthenticationResult
+                             ?? throw new InvalidOperationException("Online authentication is unavailable.");
+
+        SetStatus(Text("Cloud_PreparingOnlineSetup",
+            "Preparing this computer for the online organization..."), StatusKind.Busy);
+        await RenderAsync();
+
+        var requiresInitialMigration = await _setup.CompleteOnlineSetupAsync(
+            authentication,
+            CreatedOrganization,
+            _requestedStoreSettings,
+            _includeSampleProducts);
+
+        await _accounts.InitializeCachedSessionAsync();
+        if (requiresInitialMigration)
+        {
+            SetStatus(Text("Cloud_UploadingCompleteStore",
+                "Uploading the complete local store to the online organization..."), StatusKind.Busy);
+            await RenderAsync();
+            await _migration.UploadExistingDataAsync();
+        }
+        else
+        {
+            SetStatus(Text("Cloud_DownloadingCompleteStore",
+                "Downloading all organization data to this computer..."), StatusKind.Busy);
+            await RenderAsync();
+            var status = await _sync.SyncNowAsync(true);
+            if (status.State != "up_to_date" || status.PendingUploadCount != 0 || status.ConflictCount != 0)
+                throw new InvalidOperationException(Text("Cloud_InitialDownloadIncomplete",
+                    "The complete organization download did not finish. Sign in again to resume after checking the connection."));
+
+            await EnsureStoreConfigurationAsync(authentication.Store.Name);
+        }
+
+        await _setup.FinalizeOnlineSetupAsync();
+        var settings = await _settings.GetStoreSettingsAsync();
+        App.PublishSettings(settings);
+        App.ApplyLanguage(settings.Language);
+        App.ApplyTheme(settings.Theme);
+        SetStatus(Text("Cloud_OnlineSetupComplete",
+            "Online setup and full synchronization completed successfully."), StatusKind.Normal);
+        await RenderAsync();
+    }
+
+    private async Task EnsureStoreConfigurationAsync(string storeName)
+    {
+        if (!string.IsNullOrWhiteSpace(await _settings.GetAsync("store:config")))
+            return;
+
+        var fallback = new StoreSettings { StoreName = storeName.Trim() };
+        await _settings.SetStoreSettingsAsync(fallback);
+        var status = await _sync.SyncNowAsync(true);
+        if (status.State != "up_to_date" || status.PendingUploadCount != 0)
+            throw new InvalidOperationException(Text("Cloud_InitialDownloadIncomplete",
+                "The complete organization download did not finish. Sign in again to resume after checking the connection."));
+    }
+
+    private Task RenderAsync()
+        => Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Render).Task;
 
     private void ShowOperationFailure(string message, MessageBoxImage icon = MessageBoxImage.Error)
     {
@@ -274,9 +424,6 @@ public partial class CloudAccountWindow : Window
 
     private string FriendlyError(string code, string fallback)
     {
-        // VALIDATION_ERROR is used by several API surfaces. Preserve the
-        // endpoint's field-specific message here instead of replacing it with
-        // the synchronization-oriented generic resource.
         if (string.Equals(code, "VALIDATION_ERROR", StringComparison.Ordinal))
             return fallback;
 
