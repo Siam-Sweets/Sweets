@@ -3,6 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2026-07-01"
 workers_dev = true
 
+[secrets]
+required = [ "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "JWT_SIGNING_SECRET", "REFRESH_TOKEN_SECRET" ]
+
 [vars]
 API_VERSION = "1"
 SCHEMA_VERSION = "4"
@@ -15,6 +18,9 @@ MAX_SYNC_BATCH = "2"
 [env.development]
 name = "posapp-cloud-api-development"
 
+[env.development.secrets]
+required = [ "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "JWT_SIGNING_SECRET", "REFRESH_TOKEN_SECRET" ]
+
 [env.development.vars]
 API_VERSION = "1"
 SCHEMA_VERSION = "4"
@@ -26,6 +32,9 @@ MAX_SYNC_BATCH = "2"
 
 [env.production]
 name = "posapp-cloud-api-production"
+
+[env.production.secrets]
+required = [ "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "JWT_SIGNING_SECRET", "REFRESH_TOKEN_SECRET" ]
 
 [env.production.vars]
 API_VERSION = "1"

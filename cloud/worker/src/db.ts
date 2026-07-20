@@ -4,7 +4,7 @@ import type { Env } from "./types";
 
 export function database(env: Env): Client {
   if (!env.TURSO_DATABASE_URL || !env.TURSO_AUTH_TOKEN) {
-    throw new ApiError(500, "SERVER_CONFIGURATION_ERROR", "The database service is unavailable.");
+    throw new ApiError(500, "DATABASE_CONFIGURATION_ERROR", "The Turso database bindings are missing.");
   }
   return createClient({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN });
 }

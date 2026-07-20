@@ -109,7 +109,7 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 function importHmacKey(secret: string, usages: KeyUsage[]): Promise<CryptoKey> {
-  if (!secret || secret.length < 32) throw new ApiError(500, "SERVER_CONFIGURATION_ERROR", "Authentication is unavailable.");
+  if (!secret || secret.length < 32) throw new ApiError(500, "AUTHENTICATION_CONFIGURATION_ERROR", "The authentication secrets are missing or too short.");
   return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, usages);
 }
 

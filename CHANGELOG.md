@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.9 — Worker runtime-secret deployment validation
+
+- Added the required Turso and authentication secret declarations to Wrangler configuration.
+- Updated GitHub Actions to validate and upload `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `JWT_SIGNING_SECRET`, and `REFRESH_TOKEN_SECRET` before deploying the selected Worker environment.
+- Split database and authentication configuration failures into actionable API error codes and desktop messages.
+- Added non-sensitive Worker readiness flags to `/api/v1/meta` so deployment configuration can be verified in a browser.
+- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.9.
+
 ## 2.0.8 — Visible online-account validation and responsive creation dialog
 
 - Added immediate field validation before online sign-in or organization creation, including the Worker-compatible username, email, password, offline PIN, and device-name rules.

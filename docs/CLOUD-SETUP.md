@@ -66,7 +66,7 @@ npm test
 npm run dev
 ```
 
-`GET http://127.0.0.1:8787/api/v1/meta` should return API/schema metadata and a request ID. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
+`GET http://127.0.0.1:8787/api/v1/meta` should return API/schema metadata, a request ID, and `configuration.ready: true`. If either configuration flag is false, add the missing bindings before testing account creation. The desktop permits plain HTTP only for a loopback Worker; every non-loopback endpoint must use HTTPS.
 
 ## 4. Deploy
 
@@ -88,6 +88,12 @@ Configure these GitHub environment or repository secrets for Worker deployment:
 
 - `CLOUDFLARE_API_TOKEN`: a narrowly scoped token that can edit Workers Scripts for the intended account.
 - `CLOUDFLARE_ACCOUNT_ID`: the target account ID.
+- `TURSO_DATABASE_URL`: the Turso/libSQL database URL for the selected environment.
+- `TURSO_AUTH_TOKEN`: the Worker-only Turso authentication token.
+- `JWT_SIGNING_SECRET`: an independent cryptographically random value of at least 32 characters.
+- `REFRESH_TOKEN_SECRET`: a second independent cryptographically random value of at least 32 characters.
+
+The deployment workflow validates these values, uploads the four runtime bindings as encrypted Cloudflare Worker secrets, and then deploys the selected environment. `wrangler.toml` declares them as required, so Wrangler rejects a deployment that would leave the Worker unable to create or authenticate accounts. Configure the secrets separately in protected `development` and `production` GitHub environments when the environments use different databases or keys.
 
 Configure this repository secret for the Windows desktop build:
 
@@ -95,7 +101,7 @@ Configure this repository secret for the Windows desktop build:
 
 The desktop workflow validates the value and embeds it into `PosApp.exe` as assembly metadata. Users do not type or choose the Worker address. The URL is not an authentication secret and remains discoverable from the distributed executable; account access is still protected by the Worker-issued user tokens. Main, tag, and manual builds require this secret. Pull-request verification builds can compile without it but disable new online sign-in and organization creation.
 
-Keep Worker runtime secrets in Cloudflare secret bindings, not GitHub. Create protected `development` and `production` GitHub environments; require approval for production. Turso migrations are deliberately separate from Worker deployment so a reviewed schema step cannot be hidden inside an application deploy.
+Keep Worker runtime secrets in protected GitHub environments; the deployment workflow transfers them to encrypted Cloudflare Worker secret bindings without writing their values to the repository or logs. Require approval for production. Turso migrations are deliberately separate from Worker deployment so a reviewed schema step cannot be hidden inside an application deploy.
 
 ## Desktop connection
 

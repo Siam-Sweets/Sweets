@@ -35,11 +35,20 @@ export default {
 
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });
       if (request.method === "GET" && url.pathname === "/api/v1/meta") {
+        const databaseConfigured = Boolean(env.TURSO_DATABASE_URL && env.TURSO_AUTH_TOKEN);
+        const authenticationConfigured = Boolean(
+          env.JWT_SIGNING_SECRET?.length >= 32 && env.REFRESH_TOKEN_SECRET?.length >= 32,
+        );
         return jsonResponse({
           service: "PosApp Cloud API",
           apiVersion: Number(env.API_VERSION ?? "1"),
           schemaVersion: Number(env.SCHEMA_VERSION ?? "4"),
           minimumClientSchemaVersion: Number(env.MINIMUM_CLIENT_SCHEMA_VERSION ?? "4"),
+          configuration: {
+            ready: databaseConfigured && authenticationConfigured,
+            databaseConfigured,
+            authenticationConfigured,
+          },
           requestId,
         }, 200, requestId);
       }

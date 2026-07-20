@@ -1103,7 +1103,7 @@ function refreshExpiry(env: Env): string {
 
 async function hashRefreshToken(token: string, env: Env): Promise<string> {
   if (!env.REFRESH_TOKEN_SECRET || env.REFRESH_TOKEN_SECRET.length < 32)
-    throw new ApiError(500, "SERVER_CONFIGURATION_ERROR", "Authentication is unavailable.");
+    throw new ApiError(500, "AUTHENTICATION_CONFIGURATION_ERROR", "The authentication secrets are missing or too short.");
   return sha256(`${token}.${env.REFRESH_TOKEN_SECRET}`);
 }
 
@@ -1118,7 +1118,7 @@ function schemaVersion(env: Env): number { return Number(env.SCHEMA_VERSION ?? "
 function assertAuthSecrets(env: Env): void {
   if (!env.JWT_SIGNING_SECRET || env.JWT_SIGNING_SECRET.length < 32 ||
       !env.REFRESH_TOKEN_SECRET || env.REFRESH_TOKEN_SECRET.length < 32)
-    throw new ApiError(500, "SERVER_CONFIGURATION_ERROR", "Authentication is unavailable.");
+    throw new ApiError(500, "AUTHENTICATION_CONFIGURATION_ERROR", "The authentication secrets are missing or too short.");
 }
 
 function assertClientSchema(source: Record<string, unknown>, env: Env): void {

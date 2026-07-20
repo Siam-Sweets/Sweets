@@ -329,6 +329,8 @@
     <sys:String x:Key="Cloud_Error_RECORD_NOT_FOUND">The synchronized record no longer exists</sys:String>
     <sys:String x:Key="Cloud_Error_REMOTE_SERVICE_ERROR">The online service is temporarily unavailable</sys:String>
     <sys:String x:Key="Cloud_Error_REQUEST_TOO_LARGE">The synchronization request is too large</sys:String>
+    <sys:String x:Key="Cloud_Error_AUTHENTICATION_CONFIGURATION_ERROR">The Cloud Worker is missing JWT_SIGNING_SECRET or REFRESH_TOKEN_SECRET. Add both GitHub Actions secrets with at least 32 random bytes and redeploy the Worker</sys:String>
+    <sys:String x:Key="Cloud_Error_DATABASE_CONFIGURATION_ERROR">The Cloud Worker is missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN. Add both GitHub Actions secrets and redeploy the Worker</sys:String>
     <sys:String x:Key="Cloud_Error_SERVER_CONFIGURATION_ERROR">The online service is not configured correctly</sys:String>
     <sys:String x:Key="Cloud_Error_SERVER_SCHEMA_MISMATCH">The online database schema is incompatible</sys:String>
     <sys:String x:Key="Cloud_Error_SESSION_NOT_FOUND">Online session not found</sys:String>

@@ -6,6 +6,8 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 |---|---|---|
 | `NETWORK_UNAVAILABLE`, `NETWORK_TIMEOUT` | Internet/Worker cannot be reached | Keep working locally; use Retry when connectivity returns. |
 | `REMOTE_SERVICE_ERROR`, `SYNC_FAILED` | Worker/Turso/proxy failure | Check Worker/Turso status and request ID; pending outbox rows remain local. |
+| `DATABASE_CONFIGURATION_ERROR` | The selected Worker environment is missing `TURSO_DATABASE_URL` or `TURSO_AUTH_TOKEN` | Add both secrets to the matching GitHub environment and rerun **Validate and deploy PosApp Cloud Worker**. |
+| `AUTHENTICATION_CONFIGURATION_ERROR` | The Worker is missing a valid `JWT_SIGNING_SECRET` or `REFRESH_TOKEN_SECRET` | Add two independent values of at least 32 characters to the matching GitHub environment and redeploy. |
 | `INVALID_CREDENTIALS` | Username/email/password mismatch | Check the account; repeated failures are rate-limited. |
 | `ACCESS_TOKEN_EXPIRED` | Short token expired | Client renews automatically; if renewal fails, sign in again. |
 | `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REVOKED`, `REFRESH_TOKEN_REUSE` | Session cannot be renewed | Sign in again; investigate reuse because the session family was revoked. |
@@ -37,7 +39,7 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 1. Run `npm ci`, `npm run check`, and `npm test` in `cloud/worker`.
 2. Confirm all four `schema_migrations` rows exist in the target Turso database.
 3. Confirm all four secrets exist for the exact Wrangler environment.
-4. Request `/api/v1/meta` over HTTPS and compare API/schema versions.
+4. Request `/api/v1/meta` over HTTPS; confirm the API/schema versions and `configuration.ready: true`.
 5. Use Cloudflare logs by request ID; do not enable body/header logging.
 
 ## Local database issues
