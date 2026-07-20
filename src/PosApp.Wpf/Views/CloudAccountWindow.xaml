@@ -19,8 +19,6 @@
             <TabItem Header="{DynamicResource Cloud_SignIn}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="24">
-                        <TextBlock Text="{DynamicResource Cloud_WorkerAddress}" Style="{StaticResource Muted}"/>
-                        <TextBox x:Name="LoginApiUrl" Margin="0,5,0,13" Padding="10,8" MaxLength="512"/>
                         <TextBlock Text="{DynamicResource Cloud_UsernameEmail}" Style="{StaticResource Muted}"/>
                         <TextBox x:Name="LoginIdentifier" Margin="0,5,0,13" Padding="10,8" MaxLength="255"/>
                         <TextBlock Text="{DynamicResource Cloud_OnlinePassword}" Style="{StaticResource Muted}"/>
@@ -50,8 +48,6 @@
                                 <TextBox x:Name="CreateStoreName" Margin="0,5,0,0" Padding="10,8" MaxLength="160"/>
                             </StackPanel>
                         </Grid>
-                        <TextBlock Text="{DynamicResource Cloud_WorkerAddress}" Style="{StaticResource Muted}"/>
-                        <TextBox x:Name="CreateApiUrl" Margin="0,5,0,12" Padding="10,8" MaxLength="512"/>
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,8,12">

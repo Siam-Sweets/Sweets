@@ -23,22 +23,16 @@ public partial class CloudAccountWindow : Window
     public CloudAuthenticationResult? AuthenticationResult { get; private set; }
     public bool CreatedOrganization { get; private set; }
 
-    private async void CloudAccountWindow_Loaded(object sender, RoutedEventArgs e)
+    private void CloudAccountWindow_Loaded(object sender, RoutedEventArgs e)
     {
         LoginDeviceName.Text = Environment.MachineName;
         CreateDeviceName.Text = Environment.MachineName;
-        try
+        if (!CloudDeploymentSettings.IsConfigured)
         {
-            var state = await _accounts.GetAccountStateAsync();
-            if (state != null)
-            {
-                LoginApiUrl.Text = state.ApiBaseUrl;
-                CreateApiUrl.Text = state.ApiBaseUrl;
-            }
-        }
-        catch
-        {
-            // The form remains usable; validation will run when submitted.
+            AccountTabs.IsEnabled = false;
+            StatusText.Text = Text("Cloud_DeploymentEndpointMissing",
+                CloudDeploymentSettings.ConfigurationError ??
+                "Online synchronization is not configured for this PosApp build.");
         }
     }
 
@@ -49,7 +43,7 @@ public partial class CloudAccountWindow : Window
         {
             var result = await _accounts.LoginAsync(new CloudLoginRequest
             {
-                ApiBaseUrl = LoginApiUrl.Text,
+                ApiBaseUrl = CloudDeploymentSettings.RequireApiBaseUrl(),
                 UsernameOrEmail = LoginIdentifier.Text,
                 Password = LoginPassword.Password,
                 OfflinePin = LoginOfflinePin.Password,
@@ -73,7 +67,7 @@ public partial class CloudAccountWindow : Window
         {
             var result = await _accounts.CreateOrganizationAsync(new CloudOrganizationRequest
             {
-                ApiBaseUrl = CreateApiUrl.Text,
+                ApiBaseUrl = CloudDeploymentSettings.RequireApiBaseUrl(),
                 OrganizationName = CreateOrganizationName.Text,
                 StoreName = CreateStoreName.Text,
                 FullName = CreateFullName.Text,
@@ -123,7 +117,7 @@ public partial class CloudAccountWindow : Window
         finally
         {
             _busy = false;
-            AccountTabs.IsEnabled = true;
+            AccountTabs.IsEnabled = CloudDeploymentSettings.IsConfigured;
             BusyBar.Visibility = Visibility.Collapsed;
         }
     }

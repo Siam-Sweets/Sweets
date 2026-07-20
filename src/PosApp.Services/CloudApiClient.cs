@@ -230,7 +230,7 @@ public sealed class CloudApiClient : IDisposable
     public static Uri BuildUri(string baseUrl, string path)
     {
         if (!Uri.TryCreate(baseUrl.Trim().TrimEnd('/') + "/", UriKind.Absolute, out var root))
-            throw new ArgumentException("Enter a valid Cloudflare Worker address.", nameof(baseUrl));
+            throw new ArgumentException("The configured online service address is invalid.", nameof(baseUrl));
         if (root.Scheme != Uri.UriSchemeHttps &&
             !(root.Scheme == Uri.UriSchemeHttp && root.IsLoopback))
             throw new ArgumentException("The online service address must use HTTPS.", nameof(baseUrl));

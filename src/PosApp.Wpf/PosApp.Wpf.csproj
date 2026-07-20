@@ -12,13 +12,21 @@
     <ApplicationIcon>Assets\PosApp.ico</ApplicationIcon>
     <AssemblyName>PosApp</AssemblyName>
     <RootNamespace>PosApp.Wpf</RootNamespace>
-    <Version>2.0.5</Version>
+    <Version>2.0.7</Version>
     <Company>PosApp</Company>
     <Product>PosApp - Offline-first POS</Product>
-    <AssemblyVersion>2.0.5.0</AssemblyVersion>
-    <FileVersion>2.0.5.0</FileVersion>
-    <InformationalVersion>2.0.5</InformationalVersion>
+    <AssemblyVersion>2.0.7.0</AssemblyVersion>
+    <FileVersion>2.0.7.0</FileVersion>
+    <InformationalVersion>2.0.7</InformationalVersion>
+    <PosAppCloudApiBaseUrl Condition="'$(PosAppCloudApiBaseUrl)' == ''">__NOT_CONFIGURED__</PosAppCloudApiBaseUrl>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>PosAppCloudApiBaseUrl</_Parameter1>
+      <_Parameter2>$(PosAppCloudApiBaseUrl)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

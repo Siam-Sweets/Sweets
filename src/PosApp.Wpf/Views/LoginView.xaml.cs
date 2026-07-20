@@ -18,9 +18,30 @@ public partial class LoginView : Window
         MainWindow mainWindow, IServiceProvider services)
     {
         InitializeComponent();
+        ConstrainToWorkingArea();
         _vm = new LoginViewModel(auth, accounts, settings, this, mainWindow);
         _services = services;
         DataContext = _vm;
+    }
+
+    private void ConstrainToWorkingArea()
+    {
+        const double preferredWidth = 520;
+        const double preferredHeight = 700;
+        const double preferredMinWidth = 420;
+        const double preferredMinHeight = 420;
+        const double screenMargin = 16;
+
+        var workArea = SystemParameters.WorkArea;
+        var availableWidth = Math.Max(320, workArea.Width - screenMargin);
+        var availableHeight = Math.Max(320, workArea.Height - screenMargin);
+
+        MinWidth = Math.Min(preferredMinWidth, availableWidth);
+        MinHeight = Math.Min(preferredMinHeight, availableHeight);
+        MaxWidth = availableWidth;
+        MaxHeight = availableHeight;
+        Width = Math.Min(preferredWidth, availableWidth);
+        Height = Math.Min(preferredHeight, availableHeight);
     }
 
     private async void PinBox_KeyDown(object sender, KeyEventArgs e)

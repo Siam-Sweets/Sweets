@@ -84,16 +84,22 @@ Do not proceed to production until migrations and all four production secrets ex
 
 The deployment uses the Node 24-compatible `cloudflare/wrangler-action@v4`, pins the same Wrangler version as `package-lock.json`, and checks that both Cloudflare credentials are present before invoking Wrangler. Missing credentials therefore produce a named GitHub Actions error instead of an opaque `npx` exit code.
 
-Configure these GitHub environment or repository secrets:
+Configure these GitHub environment or repository secrets for Worker deployment:
 
 - `CLOUDFLARE_API_TOKEN`: a narrowly scoped token that can edit Workers Scripts for the intended account.
 - `CLOUDFLARE_ACCOUNT_ID`: the target account ID.
+
+Configure this repository secret for the Windows desktop build:
+
+- `POSAPP_CLOUD_API_BASE_URL`: the deployed Worker origin, such as `https://posapp-cloud-api-production.example.workers.dev`. Do not include `/api/v1`, `/api/v1/meta`, query parameters, or fragments.
+
+The desktop workflow validates the value and embeds it into `PosApp.exe` as assembly metadata. Users do not type or choose the Worker address. The URL is not an authentication secret and remains discoverable from the distributed executable; account access is still protected by the Worker-issued user tokens. Main, tag, and manual builds require this secret. Pull-request verification builds can compile without it but disable new online sign-in and organization creation.
 
 Keep Worker runtime secrets in Cloudflare secret bindings, not GitHub. Create protected `development` and `production` GitHub environments; require approval for production. Turso migrations are deliberately separate from Worker deployment so a reviewed schema step cannot be hidden inside an application deploy.
 
 ## Desktop connection
 
-On a new computer, choose **Sign in or create account** directly in first-run setup. On an already configured computer, use **Online account** at login. Enter the HTTPS Worker address and either create an organization or sign in. The first organization user is its administrator. Each Windows installation generates a persistent UUID device identity and records its currently selected branch; the user also chooses a device-local PIN for cached offline login. No built-in default account or PIN is created.
+On a new computer, choose **Sign in or create account** directly in first-run setup. On an already configured computer, use **Online account** at login. The app uses the Worker endpoint embedded by GitHub Actions, so no address field is shown. Create an organization or sign in with an existing account. The first organization user is its administrator. Each Windows installation generates a persistent UUID device identity and records its currently selected branch; the user also chooses a device-local PIN for cached offline login. No built-in default account or PIN is created.
 
 A first-run computer joining an existing organization clears only its unused bootstrap catalog templates, retains the authenticated local user, and performs a cursor-zero pull. Creating a new organization from first-run setup keeps the standard templates and imports them through the same server-owned cloud-empty lease used by the reviewed migration flow. Setup writes a device-local preparation marker first and writes `app:setup-complete` only after that upload or download succeeds. Restart therefore resumes the original path; a lost migration-completion response is recovered by verifying the completed server lease and counts. Both `app:` markers are intentionally local-only and are never sent to Turso.
 

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v2.0.4) - leave empty for dev build'
+        description: 'Version tag (e.g. v2.0.7) - leave empty for dev build'
         required: false
         default: ''
 
@@ -104,6 +104,39 @@ jobs:
           "numeric_version=$numericVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Configure cloud API endpoint
+        shell: pwsh
+        env:
+          CLOUD_API_BASE_URL_SECRET: ${{ secrets.POSAPP_CLOUD_API_BASE_URL }}
+        run: |
+          $raw = $env:CLOUD_API_BASE_URL_SECRET
+          if ([string]::IsNullOrWhiteSpace($raw)) {
+            if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+              Write-Warning 'POSAPP_CLOUD_API_BASE_URL is unavailable for this pull request. The verification build will compile with online account creation disabled.'
+              'PosAppCloudApiBaseUrl=__NOT_CONFIGURED__' | Out-File -FilePath $env:GITHUB_ENV -Append
+              exit 0
+            }
+            throw 'Missing required GitHub Actions secret: POSAPP_CLOUD_API_BASE_URL'
+          }
+
+          $candidate = $raw.Trim().TrimEnd('/')
+          $uri = $null
+          if (-not [Uri]::TryCreate($candidate, [UriKind]::Absolute, [ref]$uri)) {
+            throw 'POSAPP_CLOUD_API_BASE_URL must be an absolute HTTPS URL.'
+          }
+          if ($uri.Scheme -ne 'https') {
+            throw 'POSAPP_CLOUD_API_BASE_URL must use HTTPS.'
+          }
+          if (-not [string]::IsNullOrWhiteSpace($uri.Query) -or
+              -not [string]::IsNullOrWhiteSpace($uri.Fragment) -or
+              $uri.AbsolutePath.Trim('/') -ne '') {
+            throw 'POSAPP_CLOUD_API_BASE_URL must contain only the Worker origin, without /api paths, query parameters, or fragments.'
+          }
+
+          $normalized = $uri.GetLeftPart([UriPartial]::Authority)
+          "PosAppCloudApiBaseUrl=$normalized" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host 'Cloud API endpoint validated and embedded into the desktop build.'
+
       - name: Build
         run: >-
           dotnet build ${{ env.PROJECT_PATH }}
@@ -113,6 +146,7 @@ jobs:
           -p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }}
           -p:FileVersion=${{ steps.ver.outputs.numeric_version }}
           -p:InformationalVersion=${{ steps.ver.outputs.version }}
+          -p:PosAppCloudApiBaseUrl="$env:PosAppCloudApiBaseUrl"
 
       - name: Publish single-file self-contained exe
         run: |
@@ -129,6 +163,7 @@ jobs:
             --p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }} `
             --p:FileVersion=${{ steps.ver.outputs.numeric_version }} `
             --p:InformationalVersion=${{ steps.ver.outputs.version }} `
+            --p:PosAppCloudApiBaseUrl="$env:PosAppCloudApiBaseUrl" `
             --output ./publish
 
       - name: Sign application executable

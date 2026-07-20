@@ -103,7 +103,8 @@
     <sys:String x:Key="Cloud_AccountTitle">Online PosApp account</sys:String>
     <sys:String x:Key="Cloud_AccountSubtitle">Securely use the same organization data across authorized computers while keeping this register usable offline.</sys:String>
     <sys:String x:Key="Cloud_SignIn">Sign in</sys:String>
-    <sys:String x:Key="Cloud_WorkerAddress">Cloudflare Worker API address</sys:String>
+    <sys:String x:Key="Cloud_DeploymentEndpointMissing">Online sync is not configured in this build. Add the POSAPP_CLOUD_API_BASE_URL GitHub Actions secret and rebuild PosApp.</sys:String>
+    <sys:String x:Key="Cloud_ManagedEndpoint">Connected through the cloud service configured for this PosApp build.</sys:String>
     <sys:String x:Key="Cloud_UsernameEmail">Username or email</sys:String>
     <sys:String x:Key="Cloud_OnlinePassword">Online password</sys:String>
     <sys:String x:Key="Cloud_OfflinePin">Offline PIN for this computer</sys:String>
@@ -246,7 +247,7 @@
     <sys:String x:Key="Cloud_ValidationUserRecordLinkConflict">The online user is already linked to a different local record. Resolve the synchronization conflict first.</sys:String>
     <sys:String x:Key="Cloud_ValidationUsernameOrEmail">Username or email is required.</sys:String>
     <sys:String x:Key="Cloud_ValidationPasswordLength">The online password must contain 10 to 128 characters.</sys:String>
-    <sys:String x:Key="Cloud_ValidationWorkerAddress">Enter a valid Cloudflare Worker address.</sys:String>
+    <sys:String x:Key="Cloud_ValidationWorkerAddress">The configured online service address is invalid.</sys:String>
     <sys:String x:Key="Cloud_ValidationHttpsAddress">The online service address must use HTTPS.</sys:String>
     <sys:String x:Key="Cloud_ValidationSignInMigration">Sign in to the online account before migrating data.</sys:String>
     <sys:String x:Key="Cloud_ValidationAccountUnavailable">The online account is unavailable.</sys:String>

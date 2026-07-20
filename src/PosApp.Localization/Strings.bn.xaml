@@ -103,7 +103,8 @@
     <sys:String x:Key="Cloud_AccountTitle">অনলাইন PosApp অ্যাকাউন্ট</sys:String>
     <sys:String x:Key="Cloud_AccountSubtitle">এই রেজিস্টার অফলাইনে চালু রেখেই অনুমোদিত একাধিক কম্পিউটার থেকে একই প্রতিষ্ঠানের ডেটা নিরাপদে ব্যবহার করুন।</sys:String>
     <sys:String x:Key="Cloud_SignIn">সাইন ইন</sys:String>
-    <sys:String x:Key="Cloud_WorkerAddress">Cloudflare Worker API ঠিকানা</sys:String>
+    <sys:String x:Key="Cloud_DeploymentEndpointMissing">এই বিল্ডে অনলাইন সিঙ্ক কনফিগার করা নেই। POSAPP_CLOUD_API_BASE_URL GitHub Actions সিক্রেট যোগ করে PosApp পুনরায় বিল্ড করুন।</sys:String>
+    <sys:String x:Key="Cloud_ManagedEndpoint">এই PosApp বিল্ডের জন্য কনফিগার করা ক্লাউড সার্ভিসের মাধ্যমে সংযুক্ত।</sys:String>
     <sys:String x:Key="Cloud_UsernameEmail">ইউজারনেম বা ইমেইল</sys:String>
     <sys:String x:Key="Cloud_OnlinePassword">অনলাইন পাসওয়ার্ড</sys:String>
     <sys:String x:Key="Cloud_OfflinePin">এই কম্পিউটারের অফলাইন পিন</sys:String>
@@ -246,7 +247,7 @@
     <sys:String x:Key="Cloud_ValidationUserRecordLinkConflict">অনলাইন ব্যবহারকারীটি ইতিমধ্যে ভিন্ন স্থানীয় রেকর্ডের সঙ্গে যুক্ত। আগে সিঙ্ক দ্বন্দ্ব সমাধান করুন।</sys:String>
     <sys:String x:Key="Cloud_ValidationUsernameOrEmail">ব্যবহারকারী নাম বা ইমেইল আবশ্যক।</sys:String>
     <sys:String x:Key="Cloud_ValidationPasswordLength">অনলাইন পাসওয়ার্ডে ১০ থেকে ১২৮টি অক্ষর থাকতে হবে।</sys:String>
-    <sys:String x:Key="Cloud_ValidationWorkerAddress">একটি বৈধ Cloudflare Worker ঠিকানা লিখুন।</sys:String>
+    <sys:String x:Key="Cloud_ValidationWorkerAddress">কনফিগার করা অনলাইন সার্ভিসের ঠিকানাটি সঠিক নয়।</sys:String>
     <sys:String x:Key="Cloud_ValidationHttpsAddress">অনলাইন সেবার ঠিকানায় HTTPS ব্যবহার করতে হবে।</sys:String>
     <sys:String x:Key="Cloud_ValidationSignInMigration">ডেটা মাইগ্রেশনের আগে অনলাইন অ্যাকাউন্টে সাইন ইন করুন।</sys:String>
     <sys:String x:Key="Cloud_ValidationAccountUnavailable">অনলাইন অ্যাকাউন্টটি পাওয়া যাচ্ছে না।</sys:String>

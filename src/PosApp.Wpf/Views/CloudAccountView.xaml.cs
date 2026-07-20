@@ -66,7 +66,7 @@ public partial class CloudAccountView : UserControl, IRefreshable
         }
 
         OrganizationText.Text = _state.TenantName;
-        EndpointText.Text = _state.ApiBaseUrl;
+        EndpointText.Text = Text("Cloud_ManagedEndpoint", "Connected through the cloud service configured for this PosApp build.");
         CurrentStoreText.Text = _state.CurrentStoreName;
         ReconciliationCard.Visibility = _state.RequiresReconciliation ? Visibility.Visible : Visibility.Collapsed;
         ReconciliationBackupText.Text = string.IsNullOrWhiteSpace(_state.ReconciliationBackupPath)

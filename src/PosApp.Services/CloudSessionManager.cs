@@ -29,7 +29,17 @@ public sealed class CloudSessionManager
         try
         {
             await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-            Account = await db.CloudAccountStates.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
+            var account = await db.CloudAccountStates.SingleOrDefaultAsync(cancellationToken);
+            if (account != null && CloudDeploymentSettings.IsConfigured &&
+                !string.Equals(account.ApiBaseUrl, CloudDeploymentSettings.ApiBaseUrl,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                account.ApiBaseUrl = CloudDeploymentSettings.ApiBaseUrl;
+                account.UpdatedAtUtc = DateTime.UtcNow;
+                db.SuppressSyncCapture = true;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            Account = account;
             Tokens = await _tokenStore.LoadAsync(cancellationToken);
             if (Account?.IsEnabled == true && Tokens != null && !Account.IsDeviceRevoked)
             {
@@ -56,6 +66,8 @@ public sealed class CloudSessionManager
         await _gate.WaitAsync(cancellationToken);
         try
         {
+            if (CloudDeploymentSettings.IsConfigured)
+                account.ApiBaseUrl = CloudDeploymentSettings.ApiBaseUrl;
             Account = account;
             Tokens = tokens;
             User = user;
@@ -84,6 +96,8 @@ public sealed class CloudSessionManager
 
     public void UpdateAccount(CloudAccountState account)
     {
+        if (CloudDeploymentSettings.IsConfigured)
+            account.ApiBaseUrl = CloudDeploymentSettings.ApiBaseUrl;
         Account = account;
         if (account.IsEnabled && !account.IsDeviceRevoked)
         {

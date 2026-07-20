@@ -13,7 +13,7 @@
 
 Only access/refresh tokens are present on a desktop. `DpapiTokenStore` encrypts them with Windows Data Protection API `CurrentUser` scope and atomically replaces `%LOCALAPPDATA%\PosApp\Security\cloud-session.dat`. Copying that file to another Windows account does not make it usable. Organization/store/device metadata is non-secret.
 
-The desktop never receives `TURSO_AUTH_TOKEN`, `JWT_SIGNING_SECRET`, `REFRESH_TOKEN_SECRET`, or a Cloudflare API token. `.dev.vars`, SQLite/WAL files, build outputs, and Worker dependencies are ignored by Git.
+The desktop never receives `TURSO_AUTH_TOKEN`, `JWT_SIGNING_SECRET`, `REFRESH_TOKEN_SECRET`, or a Cloudflare API token. The public Worker origin is embedded at build time from `POSAPP_CLOUD_API_BASE_URL`; it is routing configuration, not a credential, and is expected to be discoverable in the distributed executable. `.dev.vars`, SQLite/WAL files, build outputs, and Worker dependencies are ignored by Git.
 
 ## Authorization
 

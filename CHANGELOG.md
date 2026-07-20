@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.7 — Build-configured cloud endpoint
+
+- Removed the Cloudflare Worker address fields from online sign-in and organization creation; users now enter only their account, password, offline PIN, device, organization, and store details.
+- Added the `POSAPP_CLOUD_API_BASE_URL` GitHub Actions secret, strict HTTPS-origin validation, and build-time assembly metadata so the Windows executable receives one administrator-controlled Worker endpoint.
+- Made the embedded endpoint authoritative for existing cached cloud sessions, automatically replacing a previously stored endpoint after an application update.
+- Replaced the visible endpoint on the account-management page with a generic configured-service status so the deployment address is no longer part of normal UI workflow.
+- Kept pull-request verification builds possible when repository secrets are unavailable while requiring the endpoint secret for main, tag, and manually dispatched distributable builds.
+- Updated application, installer, cloud client, Worker package, tests, README, and cloud deployment documentation to version 2.0.7.
+
+## 2.0.6 — Responsive, scrollable login window
+
+- Wrapped the complete cashier login layout in a vertical `ScrollViewer` so mouse-wheel, touchpad, touchscreen, and scrollbar navigation work when the content exceeds the available height.
+- Constrained the login window to the active Windows working area, including high-DPI display scaling and the taskbar.
+- Allowed the login window to be resized while retaining safe minimum dimensions and horizontal layout constraints.
+- Preserved access to online-account, exit, offline-help, and footer controls on smaller displays.
+
 ## 2.0.5 — WPF localized message helper build fix
 
 - Imported `PosApp.Wpf.Helpers` in `MainWindow.xaml.cs`, resolving CS0103 for its unqualified `LocalizedMessageBox` calls, including the terminal cloud-session warning at line 279.

@@ -677,6 +677,8 @@ public sealed class CloudAccountService : ICloudAccountService
     private static void ValidateLoginRequest(CloudLoginRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (CloudDeploymentSettings.IsConfigured)
+            request.ApiBaseUrl = CloudDeploymentSettings.ApiBaseUrl;
         _ = CloudApiClient.BuildUri(request.ApiBaseUrl, "/api/v1/meta");
         if (string.IsNullOrWhiteSpace(request.UsernameOrEmail) || request.UsernameOrEmail.Length > 255)
             throw new ArgumentException("Username or email is required.");

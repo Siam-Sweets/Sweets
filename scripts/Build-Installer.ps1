@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$Configuration = "Release",
-    [string]$Runtime = "win-x64"
+    [string]$Runtime = "win-x64",
+    [string]$CloudApiBaseUrl = $env:POSAPP_CLOUD_API_BASE_URL
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +28,20 @@ $numericParts = @($numericParts | Select-Object -First 4 | ForEach-Object {
 })
 $numericVersion = $numericParts -join '.'
 
+if ([string]::IsNullOrWhiteSpace($CloudApiBaseUrl)) {
+    throw "Set POSAPP_CLOUD_API_BASE_URL or pass -CloudApiBaseUrl with the deployed HTTPS Worker origin."
+}
+$CloudApiBaseUrl = $CloudApiBaseUrl.Trim().TrimEnd('/')
+$cloudUri = $null
+if (-not [Uri]::TryCreate($CloudApiBaseUrl, [UriKind]::Absolute, [ref]$cloudUri) -or
+    $cloudUri.Scheme -ne 'https' -or
+    -not [string]::IsNullOrWhiteSpace($cloudUri.Query) -or
+    -not [string]::IsNullOrWhiteSpace($cloudUri.Fragment) -or
+    $cloudUri.AbsolutePath.Trim('/') -ne '') {
+    throw "CloudApiBaseUrl must be an HTTPS Worker origin without an API path, query, or fragment."
+}
+$CloudApiBaseUrl = $cloudUri.GetLeftPart([UriPartial]::Authority)
+
 $isccCandidates = @(
     (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
     (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
@@ -46,6 +61,7 @@ dotnet publish $projectPath `
     --property:IncludeNativeLibrariesForSelfExtract=true `
     --property:EnableCompressionInSingleFile=true `
     --property:PublishReadyToRun=false `
+    --property:PosAppCloudApiBaseUrl="$CloudApiBaseUrl" `
     --output $publishDirectory
 
 if ($LASTEXITCODE -ne 0) {
