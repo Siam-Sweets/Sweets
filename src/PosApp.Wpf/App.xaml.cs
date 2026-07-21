@@ -32,6 +32,7 @@ public partial class App : Application
     }
     private bool _startupCompleted;
     private bool _dispatcherErrorDialogOpen;
+    private bool _databaseRestoreShutdownRequested;
     private static IServiceScope? _activeSessionScope;
 
     public App()
@@ -281,6 +282,16 @@ public partial class App : Application
             }
             Log("Login window shown. Startup complete.");
         }
+        catch (DatabaseRestoreInUseException ex)
+        {
+            Log($"PENDING RESTORE DEFERRED: {ex}");
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                ex.Message,
+                "Restore waiting",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            Shutdown(2);
+        }
         catch (Exception ex)
         {
             Log($"FATAL DURING STARTUP: {ex}");
@@ -410,14 +421,29 @@ public partial class App : Application
             failedSession.Dispose();
     }
 
+    /// <summary>
+    /// Marks an exit that exists only to apply a staged database restore. A final
+    /// sync or exit backup would reopen SQLite after the restore workflow has
+    /// deliberately drained it, delaying the replacement process on Windows.
+    /// </summary>
+    internal static void RequestDatabaseRestoreShutdown()
+    {
+        if (Current is App app)
+        {
+            app._databaseRestoreShutdownRequested = true;
+            Log("Database restore shutdown requested; final sync and exit backup will be skipped.");
+        }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
-        if (_startupCompleted)
+        var sync = Services?.GetService<ICloudSyncService>();
+        if (_startupCompleted && !_databaseRestoreShutdownRequested)
         {
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                Services.GetService<ICloudSyncService>()?.SyncNowAsync(false, timeout.Token)
+                sync?.SyncNowAsync(false, timeout.Token)
                     .GetAwaiter().GetResult();
             }
             catch (Exception syncError)
@@ -426,7 +452,25 @@ public partial class App : Application
             }
         }
 
-        if (_startupCompleted && StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnExit)
+        // Stop the periodic loop and wait for any in-flight database operation
+        // before disposing view scopes. This is essential for a restore restart,
+        // and also prevents native SQLite handles lingering during a normal exit.
+        if (sync != null)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                sync.StopAsync(timeout.Token).GetAwaiter().GetResult();
+                sync.WaitForIdleAsync(timeout.Token).GetAwaiter().GetResult();
+            }
+            catch (Exception stopError)
+            {
+                Log($"Cloud sync shutdown was bounded: {stopError.GetType().Name}");
+            }
+        }
+
+        if (_startupCompleted && !_databaseRestoreShutdownRequested &&
+            StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnExit)
         {
             try
             {
@@ -454,6 +498,10 @@ public partial class App : Application
         }
         finally
         {
+            // Disposed EF contexts return Microsoft.Data.Sqlite connections to its
+            // native pool. Explicitly clear those handles before the process exits
+            // so a newly started PosApp can replace the database and WAL promptly.
+            DbPathResolver.ClearSqliteConnectionPools();
             base.OnExit(e);
         }
     }

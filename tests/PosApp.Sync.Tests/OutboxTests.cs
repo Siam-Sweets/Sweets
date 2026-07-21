@@ -301,6 +301,7 @@ public sealed class OutboxTests : IAsyncLifetime
 
         Assert.False(requiresInitialMigration);
         Assert.False(await setup.IsSetupCompleteAsync());
+        Assert.False(await setup.AddPreparedSampleCatalogAsync());
         await setup.FinalizeOnlineSetupAsync();
 
         Assert.True(await setup.IsSetupCompleteAsync());
@@ -312,7 +313,7 @@ public sealed class OutboxTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task FreshOrganizationStartsFromAnEmptyDownloadedCache()
+    public async Task FreshOrganizationAddsRequestedSampleCatalogAfterDownloadAndCanResume()
     {
         _db.SuppressSyncCapture = true;
         await DbSeeder.SeedAsync(_db);
@@ -378,6 +379,23 @@ public sealed class OutboxTests : IAsyncLifetime
             authentication,
             createdOrganization: false));
         Assert.False(await setup.IsSetupCompleteAsync());
+
+        SyncCaptureContext.Enable(
+            "00000000-0000-4000-8000-000000000020",
+            "00000000-0000-4000-8000-000000000021",
+            "00000000-0000-4000-8000-000000000023",
+            "00000000-0000-4000-8000-000000000022");
+        Assert.True(await setup.AddPreparedSampleCatalogAsync());
+        Assert.Equal(6, await _db.Categories.CountAsync());
+        Assert.Equal(15, await _db.Products.CountAsync());
+        Assert.Equal(15, await _db.StockTransactions.CountAsync());
+        Assert.Equal(6, await _db.SyncOutboxOperations.CountAsync(value =>
+            value.EntityType == "categories"));
+        Assert.Equal(15, await _db.SyncOutboxOperations.CountAsync(value =>
+            value.EntityType == "products"));
+        Assert.Equal(15, await _db.SyncOutboxOperations.CountAsync(value =>
+            value.EntityType == "inventory_movements"));
+        Assert.False(await setup.AddPreparedSampleCatalogAsync());
 
         await setup.FinalizeOnlineSetupAsync();
         Assert.True(await setup.IsSetupCompleteAsync());

@@ -18,18 +18,20 @@ public partial class SettingsView : UserControl, IRefreshable
     private readonly IHardwareService _hardware;
     private readonly IBackupService _backup;
     private readonly IUpdateService _updates;
+    private readonly ICloudSyncService _cloudSync;
     private StoreSettings _current = new();
     private bool _isLoading;
     private readonly SemaphoreSlim _appearanceSaveGate = new(1, 1);
 
     public SettingsView(ISettingsService settings, IHardwareService hardware, IBackupService backup,
-        IUpdateService updates)
+        IUpdateService updates, ICloudSyncService cloudSync)
     {
         InitializeComponent();
         _settings = settings;
         _hardware = hardware;
         _backup = backup;
         _updates = updates;
+        _cloudSync = cloudSync;
     }
 
     public async Task RefreshAsync()
@@ -354,7 +356,20 @@ public partial class SettingsView : UserControl, IRefreshable
         {
             IsEnabled = false;
             await _backup.StageRestoreAsync(dialog.FileName);
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Backup validated and staged. PosApp will now close; start it again to finish the restore.",
+            App.RequestDatabaseRestoreShutdown();
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _cloudSync.StopAsync(timeout.Token);
+                await _cloudSync.WaitForIdleAsync(timeout.Token);
+            }
+            catch (Exception stopError)
+            {
+                // Startup also waits for an exclusive database lease. Keep closing
+                // even if a network request needed the full bounded shutdown time.
+                App.LogError("Cloud sync did not drain before database restore shutdown", stopError);
+            }
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Backup validated and staged. PosApp will now close. Wait until it has closed completely, then start it again to finish the full replacement.",
                 "Restore Ready", MessageBoxButton.OK, MessageBoxImage.Information);
             Application.Current.Shutdown();
         }

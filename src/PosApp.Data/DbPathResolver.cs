@@ -81,74 +81,16 @@ public static class DbPathResolver
     /// The outgoing database is retained as a timestamped safety copy.
     /// </summary>
     public static string? ApplyPendingRestore()
-    {
-        var pending = PendingRestorePath();
-        if (!File.Exists(pending)) return null;
+        => DatabaseRestoreCoordinator.ApplyPendingRestore(
+            PendingRestorePath(),
+            DefaultPath(),
+            BackupFolder());
 
-        var live = DefaultPath();
-        var prepared = live + $".restore-{Guid.NewGuid():N}.tmp";
-        string? safetyCopy = null;
-        try
-        {
-            // Never touch the live store until a durable copy of the staged file has
-            // passed SQLite integrity and PosApp schema checks.
-            DatabaseFileValidator.ValidatePosAppDatabase(pending);
-            DatabaseFileValidator.CopyDurably(pending, prepared);
-            DatabaseFileValidator.ValidatePosAppDatabase(prepared);
-
-            if (File.Exists(live))
-            {
-                safetyCopy = Path.Combine(
-                    BackupFolder(),
-                    $"posapp-before-restore-{DateTime.Now:yyyyMMdd-HHmmss-fff}.db");
-                {
-                    // Keep the backup connections inside their own scope. Windows
-                    // does not allow the live database to be replaced while either
-                    // connection still owns a handle to it.
-                    using var source = new SqliteConnection(new SqliteConnectionStringBuilder
-                    {
-                        DataSource = live,
-                        Mode = SqliteOpenMode.ReadWrite,
-                        Cache = SqliteCacheMode.Private,
-                        Pooling = false
-                    }.ToString());
-                    using var target = new SqliteConnection(new SqliteConnectionStringBuilder
-                    {
-                        DataSource = safetyCopy,
-                        Mode = SqliteOpenMode.ReadWriteCreate,
-                        Cache = SqliteCacheMode.Private,
-                        Pooling = false
-                    }.ToString());
-                    source.Open();
-                    using (var checkpoint = source.CreateCommand())
-                    {
-                        checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
-                        checkpoint.ExecuteNonQuery();
-                    }
-                    target.Open();
-                    source.BackupDatabase(target);
-                }
-                DatabaseFileValidator.ValidatePosAppDatabase(safetyCopy);
-
-                // Sidecars now contain no uncheckpointed data and belong to the old
-                // database identity. Replace the main file atomically afterwards.
-                File.Delete(live + "-wal");
-                File.Delete(live + "-shm");
-                File.Replace(prepared, live, destinationBackupFileName: null, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(prepared, live);
-            }
-
-            File.Delete(pending);
-            return safetyCopy;
-        }
-        finally
-        {
-            if (File.Exists(prepared)) File.Delete(prepared);
-        }
-    }
+    /// <summary>
+    /// Releases native Microsoft.Data.Sqlite pooled connections after all EF
+    /// contexts have been disposed during application shutdown.
+    /// </summary>
+    public static void ClearSqliteConnectionPools() => SqliteConnection.ClearAllPools();
 
     public static string ConnectionString(string? path = null)
     {

@@ -136,6 +136,7 @@ public interface ISetupService
         bool createdOrganization,
         StoreSettings? initialStoreSettings = null,
         bool includeSampleProducts = false);
+    Task<bool> AddPreparedSampleCatalogAsync();
     Task FinalizeOnlineSetupAsync();
 }
 

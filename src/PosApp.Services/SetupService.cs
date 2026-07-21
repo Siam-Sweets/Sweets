@@ -72,9 +72,19 @@ public sealed class SetupService : ISetupService
 
             var prepared = await _db.Settings.IgnoreQueryFilters()
                 .SingleOrDefaultAsync(value => value.Key == OnlineSetupPreparedKey);
+            var previousPreparation = ReadPreparation(prepared?.Value);
+            var resumeSampleCatalog = !createdOrganization &&
+                                      previousPreparation != null &&
+                                      string.Equals(previousPreparation.OrganizationId,
+                                          authentication.OrganizationId,
+                                          StringComparison.OrdinalIgnoreCase) &&
+                                      previousPreparation.IncludeSampleProducts;
             var preparationJson = JsonSerializer.Serialize(new OnlineSetupPreparation(
                 authentication.OrganizationId,
-                RequiresInitialMigration: false));
+                RequiresInitialMigration: false,
+                IncludeSampleProducts: createdOrganization
+                    ? includeSampleProducts
+                    : resumeSampleCatalog));
             if (prepared == null)
                 _db.Settings.Add(new Setting { Key = OnlineSetupPreparedKey, Value = preparationJson });
             else
@@ -117,6 +127,38 @@ public sealed class SetupService : ISetupService
             _db.SuppressSyncCapture = previousSuppressSyncCapture;
             _db.BypassStoreFilter = previousBypassStoreFilter;
         }
+    }
+
+    public async Task<bool> AddPreparedSampleCatalogAsync()
+    {
+        var prepared = await _db.Settings.IgnoreQueryFilters()
+                           .AsNoTracking()
+                           .SingleOrDefaultAsync(value => value.Key == OnlineSetupPreparedKey)
+                       ?? throw new InvalidOperationException(
+                           "Online setup has not been prepared on this computer.");
+        var preparation = ReadPreparation(prepared.Value)
+                          ?? throw new InvalidOperationException(
+                              "The online setup preparation is invalid.");
+        if (!preparation.IncludeSampleProducts)
+            return false;
+
+        var state = await _db.CloudAccountStates.AsNoTracking().SingleAsync();
+        if (!string.Equals(state.TenantId, preparation.OrganizationId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "The prepared sample catalog does not belong to the active organization.");
+
+        var capture = SyncCaptureContext.Current;
+        if (!capture.Enabled || string.IsNullOrWhiteSpace(capture.UserId) ||
+            !string.Equals(capture.TenantId, preparation.OrganizationId,
+                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(capture.StoreId, state.CurrentStoreId,
+                StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "The synchronized session is not ready to add the sample catalog.");
+
+        _db.ChangeTracker.Clear();
+        return await DbSeeder.SeedSampleCatalogAsync(_db);
     }
 
     public async Task FinalizeOnlineSetupAsync()
@@ -279,5 +321,6 @@ public sealed class SetupService : ISetupService
 
     private sealed record OnlineSetupPreparation(
         string OrganizationId,
-        bool RequiresInitialMigration);
+        bool RequiresInitialMigration,
+        bool IncludeSampleProducts = false);
 }

@@ -58,7 +58,7 @@ export default {
         );
         return jsonResponse({
           service: "PosApp Cloud API",
-          deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.1.1",
+          deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.1.3",
           apiVersion: Number(env.API_VERSION ?? "1"),
           schemaVersion: expectedSchemaVersion,
           minimumClientSchemaVersion: Number(env.MINIMUM_CLIENT_SCHEMA_VERSION ?? "4"),

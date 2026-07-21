@@ -480,6 +480,26 @@ public partial class CloudAccountWindow : Window
 
         await EnsureStoreConfigurationAsync(authentication.Store.Name, _requestedStoreSettings);
 
+        await CloudDiagnosticLogger.WriteAsync("onboarding.sample_catalog_started", "started");
+        var sampleCatalogAdded = await _setup.AddPreparedSampleCatalogAsync();
+        if (sampleCatalogAdded)
+        {
+            SetStatus(Text("Cloud_UploadingSampleCatalog",
+                "Adding and synchronizing the standard sample catalog..."), StatusKind.Busy);
+            await RenderAsync();
+            var sampleStatus = await _sync.SyncNowAsync(true);
+            await CloudDiagnosticLogger.WriteStatusAsync(
+                "onboarding.sample_catalog_sync_finished", sampleStatus,
+                IsComplete(sampleStatus, requireNoConflicts: true) ? "success" : "incomplete");
+            if (!IsComplete(sampleStatus, requireNoConflicts: true))
+                throw new InvalidOperationException(BuildIncompleteSyncMessage(sampleStatus));
+        }
+        else
+        {
+            await CloudDiagnosticLogger.WriteAsync(
+                "onboarding.sample_catalog_skipped", "success");
+        }
+
         await CloudDiagnosticLogger.WriteAsync("onboarding.finalization_started", "started");
         await _setup.FinalizeOnlineSetupAsync();
         var settings = await _settings.GetStoreSettingsAsync();

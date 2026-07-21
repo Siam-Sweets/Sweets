@@ -115,6 +115,7 @@
     <sys:String x:Key="Cloud_InitialPreferences">Initial synchronized preferences</sys:String>
     <sys:String x:Key="Cloud_EnableAutomaticBackup">Enable automatic local safety backups on this computer</sys:String>
     <sys:String x:Key="Cloud_AddSampleProducts">Add the standard sample catalog to the new organization</sys:String>
+    <sys:String x:Key="Cloud_UploadingSampleCatalog">Adding and synchronizing the standard sample catalog...</sys:String>
     <sys:String x:Key="Cloud_CreateAndSyncOrganization">Create organization and sync everything</sys:String>
     <sys:String x:Key="Cloud_PreparingOnlineSetup">Preparing this computer for the online organization...</sys:String>
     <sys:String x:Key="Cloud_UploadingCompleteStore">Uploading the complete local store to the online organization...</sys:String>
@@ -459,6 +460,27 @@
 
     <!-- Products -->
     <sys:String x:Key="Prod_Title">Products</sys:String>
+    <sys:String x:Key="Prod_ManageCategories">Manage Categories</sys:String>
+    <sys:String x:Key="Cat_Title">Categories</sys:String>
+    <sys:String x:Key="Cat_Subtitle">Add categories and edit how products are grouped and ordered.</sys:String>
+    <sys:String x:Key="Cat_New">New Category</sys:String>
+    <sys:String x:Key="Cat_Name">Name</sys:String>
+    <sys:String x:Key="Cat_Description">Description</sys:String>
+    <sys:String x:Key="Cat_Color">Color</sys:String>
+    <sys:String x:Key="Cat_SortOrder">Sort order</sys:String>
+    <sys:String x:Key="Cat_EditorNew">New category</sys:String>
+    <sys:String x:Key="Cat_EditorEdit">Edit category</sys:String>
+    <sys:String x:Key="Cat_ColorHelp">Use a color in #RRGGBB format. Lower sort numbers appear first.</sys:String>
+    <sys:String x:Key="Cat_NameRequired">Enter a category name.</sys:String>
+    <sys:String x:Key="Cat_SortOrderInvalid">Sort order must be a whole number.</sys:String>
+    <sys:String x:Key="Cat_Saved">Category saved and queued for synchronization.</sys:String>
+    <sys:String x:Key="Cat_Deleted">Category deleted and queued for synchronization.</sys:String>
+    <sys:String x:Key="Cat_DeleteConfirm">Delete category '{0}'?</sys:String>
+    <sys:String x:Key="Cat_DeleteTitle">Delete category</sys:String>
+    <sys:String x:Key="Cat_InvalidTitle">Check category details</sys:String>
+    <sys:String x:Key="Cat_SaveErrorTitle">Unable to save category</sys:String>
+    <sys:String x:Key="Cat_DeleteErrorTitle">Unable to delete category</sys:String>
+    <sys:String x:Key="Cat_LoadErrorTitle">Unable to load categories</sys:String>
     <sys:String x:Key="Prod_Add">Add Product</sys:String>
     <sys:String x:Key="Prod_Edit">Edit</sys:String>
     <sys:String x:Key="Prod_Delete">Delete</sys:String>
@@ -612,6 +634,8 @@
     <sys:String x:Key="Set_BackupFolder">Local backup folder</sys:String>
     <sys:String x:Key="Set_BackupNow">Back Up Now</sys:String>
     <sys:String x:Key="Set_Restore">Restore…</sys:String>
+    <sys:String x:Key="Restore_ReadyMessage">Backup validated and staged. PosApp will now close. Wait until it has closed completely, then start it again to finish the full replacement.</sys:String>
+    <sys:String x:Key="Restore_DatabaseInUse">The backup restore is still waiting because another PosApp process is using this organization's database. Close every PosApp window (or end PosApp in Task Manager), then start PosApp again. The staged backup was retained and the current database was not replaced.</sys:String>
     <sys:String x:Key="Set_OpenFolder">Open Folder</sys:String>
     <sys:String x:Key="Set_Tax">Tax Rates</sys:String>
     <sys:String x:Key="Set_Discounts">Discounts</sys:String>

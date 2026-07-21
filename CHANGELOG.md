@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.3 — Exclusive all-or-nothing database restore
+
+- Fixed startup restore failure when a recently closed PosApp process still owned `posapp.db-wal` or `posapp.db-shm`.
+- Made restore shutdown stop and drain background synchronization, skip database-reopening exit work, dispose application scopes, and clear native Microsoft.Data.Sqlite connection pools before exit.
+- Added a bounded startup handoff that checkpoints the outgoing WAL and waits for exclusive access to the main database, WAL, shared-memory, and rollback-journal files.
+- Made successful restore fully replace the local SQLite state: the staged backup is validated privately, the outgoing database is preserved, old sidecars are removed under an exclusive lease, and the main file is atomically replaced and revalidated before the pending marker is deleted.
+- Left both the live database and staged backup unchanged when exclusive access cannot be obtained, with a clear retry message instead of a raw startup `IOException`.
+- Preserved the existing cloud reconciliation gate so restored records cannot overwrite newer synchronized data without an explicit administrator decision.
+- Added regression tests for complete replacement, stale sidecar removal, pre-restore safety-copy contents, contention rollback, retained pending state, and successful retry.
+- Added matching English/Bengali restore messages and updated application, installer, cloud client, Worker package, tests, README, workflow examples, and release metadata to version 2.1.3.
+
+## 2.1.2 — Category management and synchronized sample onboarding
+
+- Added a visible **Products → Manage Categories** workflow with create, edit, description, color, sort-order, and safe delete controls that preserve the existing light/dark theme, visible borders, and English/Bengali localization.
+- Routed category changes through the existing SQLite inventory service and transactional sync outbox; categories referenced by products remain protected from deletion.
+- Fixed the new-organization **Add the standard sample catalog** option being ignored. Checked setup now creates six categories, fifteen products, and their opening inventory movements after the authoritative first download, then uploads and verifies them before setup is finalized.
+- Kept existing-organization sign-in download-only and unchecked new organizations empty. The device-local setup marker preserves the sample choice across an interrupted onboarding retry without duplicating records.
+- Added synchronization regression coverage for sample categories, products, opening inventory, idempotent retries, and the existing-organization no-seed boundary.
+- Updated application, installer, cloud client, Worker package, tests, README, workflow examples, and release metadata to version 2.1.2.
+
 ## 2.1.1 — WPF organization-profile build correction
 
 - Added the explicit `System.IO` import required by WPF's temporary compilation project for `File.Exists` in `OrganizationProfileSwitcher`.

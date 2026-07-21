@@ -97,6 +97,76 @@ public static class DbSeeder
     }
 
     /// <summary>
+    /// Adds the standard categories and sample products through ordinary
+    /// SaveChanges calls so every row is captured by the local sync outbox.
+    /// The operation is idempotent and is intended only for a newly created
+    /// organization whose setup preparation explicitly requested samples.
+    /// </summary>
+    public static async Task<bool> SeedSampleCatalogAsync(AppDbContext db)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+
+        // Never mix the sample catalog into an organization that already has
+        // products. A resumed setup will pull any samples that reached the
+        // server before retrying this method.
+        if (await db.Products.AnyAsync())
+            return false;
+
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var categoryDefinitions = new[]
+            {
+                (Name: "Beverages", Color: "#2D7FF9", SortOrder: 1),
+                (Name: "Snacks", Color: "#F59E0B", SortOrder: 2),
+                (Name: "Groceries", Color: "#10B981", SortOrder: 3),
+                (Name: "Household", Color: "#8B5CF6", SortOrder: 4),
+                (Name: "Personal Care", Color: "#EC4899", SortOrder: 5),
+                (Name: "Produce", Color: "#22C55E", SortOrder: 6)
+            };
+            var categories = await db.Categories.ToListAsync();
+            var categoriesAdded = false;
+            foreach (var definition in categoryDefinitions)
+            {
+                if (categories.Any(category => string.Equals(
+                        category.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                var category = new Category
+                {
+                    Name = definition.Name,
+                    Color = definition.Color,
+                    SortOrder = definition.SortOrder,
+                    IsActive = true
+                };
+                db.Categories.Add(category);
+                categories.Add(category);
+                categoriesAdded = true;
+            }
+
+            // Persist categories first so product payloads can reference their
+            // stable globally unique sync identities. The caller transaction
+            // delays the outbox notification until the complete dependency set
+            // is durable, preventing a background upload from racing the seed.
+            if (categoriesAdded)
+                await db.SaveChangesAsync();
+
+            var productsAdded = await SeedSampleProductsAsync(db);
+            await transaction.CommitAsync();
+            if (categoriesAdded || productsAdded)
+                SyncCaptureContext.NotifyOutboxChanged();
+            db.ChangeTracker.Clear();
+            return categoriesAdded || productsAdded;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Adds the built-in sample catalog once. This is called only after the
     /// online organization creation option has been explicitly enabled by the store owner.
     /// </summary>

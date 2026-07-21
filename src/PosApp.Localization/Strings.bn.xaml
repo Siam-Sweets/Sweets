@@ -115,6 +115,7 @@
     <sys:String x:Key="Cloud_InitialPreferences">প্রাথমিক সিঙ্ক করা পছন্দ</sys:String>
     <sys:String x:Key="Cloud_EnableAutomaticBackup">এই কম্পিউটারে স্বয়ংক্রিয় স্থানীয় নিরাপত্তা ব্যাকআপ চালু করুন</sys:String>
     <sys:String x:Key="Cloud_AddSampleProducts">নতুন প্রতিষ্ঠানে সাধারণ নমুনা ক্যাটালগ যোগ করুন</sys:String>
+    <sys:String x:Key="Cloud_UploadingSampleCatalog">সাধারণ নমুনা ক্যাটালগ যোগ ও সিঙ্ক করা হচ্ছে...</sys:String>
     <sys:String x:Key="Cloud_CreateAndSyncOrganization">প্রতিষ্ঠান তৈরি করে সবকিছু সিঙ্ক করুন</sys:String>
     <sys:String x:Key="Cloud_PreparingOnlineSetup">অনলাইন প্রতিষ্ঠানের জন্য এই কম্পিউটার প্রস্তুত করা হচ্ছে...</sys:String>
     <sys:String x:Key="Cloud_UploadingCompleteStore">সম্পূর্ণ স্থানীয় স্টোর অনলাইন প্রতিষ্ঠানে আপলোড করা হচ্ছে...</sys:String>
@@ -459,6 +460,27 @@
 
     <!-- Products -->
     <sys:String x:Key="Prod_Title">পণ্য</sys:String>
+    <sys:String x:Key="Prod_ManageCategories">বিভাগ পরিচালনা</sys:String>
+    <sys:String x:Key="Cat_Title">বিভাগসমূহ</sys:String>
+    <sys:String x:Key="Cat_Subtitle">নতুন বিভাগ যোগ করুন এবং পণ্য কীভাবে সাজানো ও গোষ্ঠীবদ্ধ হবে তা সম্পাদনা করুন।</sys:String>
+    <sys:String x:Key="Cat_New">নতুন বিভাগ</sys:String>
+    <sys:String x:Key="Cat_Name">নাম</sys:String>
+    <sys:String x:Key="Cat_Description">বিবরণ</sys:String>
+    <sys:String x:Key="Cat_Color">রং</sys:String>
+    <sys:String x:Key="Cat_SortOrder">সাজানোর ক্রম</sys:String>
+    <sys:String x:Key="Cat_EditorNew">নতুন বিভাগ</sys:String>
+    <sys:String x:Key="Cat_EditorEdit">বিভাগ সম্পাদনা</sys:String>
+    <sys:String x:Key="Cat_ColorHelp">#RRGGBB ফরম্যাটে রং লিখুন। কম ক্রমের সংখ্যা আগে দেখাবে।</sys:String>
+    <sys:String x:Key="Cat_NameRequired">বিভাগের নাম লিখুন।</sys:String>
+    <sys:String x:Key="Cat_SortOrderInvalid">সাজানোর ক্রম অবশ্যই পূর্ণসংখ্যা হতে হবে।</sys:String>
+    <sys:String x:Key="Cat_Saved">বিভাগ সংরক্ষিত হয়েছে এবং সিঙ্কের জন্য সারিতে আছে।</sys:String>
+    <sys:String x:Key="Cat_Deleted">বিভাগ মুছে ফেলা হয়েছে এবং সিঙ্কের জন্য সারিতে আছে।</sys:String>
+    <sys:String x:Key="Cat_DeleteConfirm">'{0}' বিভাগটি মুছবেন?</sys:String>
+    <sys:String x:Key="Cat_DeleteTitle">বিভাগ মুছুন</sys:String>
+    <sys:String x:Key="Cat_InvalidTitle">বিভাগের তথ্য যাচাই করুন</sys:String>
+    <sys:String x:Key="Cat_SaveErrorTitle">বিভাগ সংরক্ষণ করা যায়নি</sys:String>
+    <sys:String x:Key="Cat_DeleteErrorTitle">বিভাগ মুছে ফেলা যায়নি</sys:String>
+    <sys:String x:Key="Cat_LoadErrorTitle">বিভাগ লোড করা যায়নি</sys:String>
     <sys:String x:Key="Prod_Add">পণ্য যোগ</sys:String>
     <sys:String x:Key="Prod_Edit">সম্পাদনা</sys:String>
     <sys:String x:Key="Prod_Delete">মুছুন</sys:String>
@@ -612,6 +634,8 @@
     <sys:String x:Key="Set_BackupFolder">স্থানীয় ব্যাকআপ ফোল্ডার</sys:String>
     <sys:String x:Key="Set_BackupNow">এখনই ব্যাকআপ</sys:String>
     <sys:String x:Key="Set_Restore">রিস্টোর…</sys:String>
+    <sys:String x:Key="Restore_ReadyMessage">ব্যাকআপ যাচাই করে প্রস্তুত করা হয়েছে। PosApp এখন বন্ধ হবে। এটি সম্পূর্ণ বন্ধ হওয়া পর্যন্ত অপেক্ষা করুন, তারপর পুরো প্রতিস্থাপন শেষ করতে আবার চালু করুন।</sys:String>
+    <sys:String x:Key="Restore_DatabaseInUse">অন্য একটি PosApp প্রক্রিয়া এই প্রতিষ্ঠানের ডেটাবেস ব্যবহার করায় ব্যাকআপ পুনরুদ্ধার এখনো অপেক্ষমাণ। সব PosApp উইন্ডো বন্ধ করুন (অথবা Task Manager থেকে PosApp বন্ধ করুন), তারপর PosApp আবার চালু করুন। প্রস্তুত করা ব্যাকআপ রাখা হয়েছে এবং বর্তমান ডেটাবেস প্রতিস্থাপন করা হয়নি।</sys:String>
     <sys:String x:Key="Set_OpenFolder">ফোল্ডার খুলুন</sys:String>
     <sys:String x:Key="Set_Tax">ট্যাক্স হার</sys:String>
     <sys:String x:Key="Set_Discounts">ছাড়</sys:String>

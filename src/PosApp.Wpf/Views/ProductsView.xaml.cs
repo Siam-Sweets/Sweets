@@ -99,6 +99,27 @@ public partial class ProductsView : UserControl, IRefreshable
         }
     }
 
+    private async void ManageCategories_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new CategoryManagementWindow(_inventory)
+            {
+                Owner = Window.GetWindow(this)
+            };
+            dialog.ShowDialog();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                ex.GetBaseException().Message,
+                DialogLayout.Text("Cat_LoadErrorTitle", "Unable to manage categories"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private async void Edit_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button btn && btn.Tag is Product p)

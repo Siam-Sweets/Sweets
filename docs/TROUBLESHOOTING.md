@@ -70,6 +70,8 @@ PosApp 2.0.20 may then expose the underlying `VALIDATION_ERROR` stating that `cl
 
 If startup reports migration failure or corruption, do not delete `posapp.db`. Preserve the database, WAL/SHM files, logs, and newest verified backups. Use the existing staged Restore flow. After any restore while cloud is configured, complete the reconciliation card before uploads resume.
 
+If startup reports that another PosApp process is using the database during restore, close every PosApp window and end any older `PosApp.exe` visible in Task Manager, then start PosApp again. The restore waits for exclusive access before deleting old SQLite sidecars or replacing the main file. When the bounded wait expires, `posapp.restore-pending.db` and the current database remain unchanged, so retrying is safe. Do not manually delete the pending file, WAL, or SHM.
+
 For added organization profiles, the database is under `%LOCALAPPDATA%\PosApp\Profiles\<profile-id>\posapp.db`; the original upgraded database remains `%LOCALAPPDATA%\PosApp\posapp.db`. Use the in-app profile selector instead of moving files. If a newly added profile is closed before onboarding completes, restart PosApp and use the profile selector in the account window to return to the former organization.
 
 If a batch is interrupted, press Retry. Synchronized operation IDs make uncertain retries idempotent. If Pending stays high, migrate in repeated bounded cycles and resolve Failed/Conflict entries first.

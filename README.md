@@ -1,6 +1,6 @@
 # PosApp 2.1 - Offline-first multi-organization Point of Sale
 
-A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.1.1** preserves the complete v1.4.24 desktop application, adds safely isolated organization profiles, and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
+A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.1.3** preserves the complete v1.4.24 desktop application, adds safely isolated organization profiles, and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
 
 ## Offline-first boundary
 
@@ -29,7 +29,7 @@ Version 2.0 evolves the existing v1.4.24 PosApp codebase in place. Its operation
 | **Reliable checkboxes** | User activation, product weighted status, promotion activation and settings checkboxes use consistent two-state controls; grid changes persist immediately |
 | **Receipt Printer** | ESC/POS thermal printer via raw spooler (58/80mm) AND fallback Windows PrintDocument path for any printer |
 | **Hardware**        | Barcode scanner (HID keyboard + serial) and receipt printer — both degrade safely when unavailable |
-| **Data Safety**     | Consistent SQLite backups on startup/exit, manual backup, retention control, validated staged restore, automatic pre-restore safety copy, and pre-migration safe-update snapshots |
+| **Data Safety**     | Consistent SQLite backups on startup/exit, manual backup, retention control, validated all-or-nothing restore of the database plus WAL/SHM state, automatic pre-restore safety copy, and pre-migration safe-update snapshots |
 | **Online account & sync** | Multiple isolated organization profiles, organization/store isolation, username or email login, rotating sessions, profile-specific DPAPI-protected tokens and device IDs, registered devices, background push/pull, tombstones, conflict review, migration from existing SQLite, and explicit post-restore reconciliation |
 
 ## Tech Stack
@@ -84,6 +84,10 @@ On first run, the app creates only the device-local SQLite schema at `%LOCALAPPD
 
 PosApp does not open the cashier login until the complete initial synchronization succeeds. Both a newly created organization and an existing organization start from a clean device cache and download the authorized store from cursor zero, including users, store settings, catalog, customers, suppliers, inventory, purchases, sales, payments, register data, discounts, taxes, and synchronization metadata. Store details entered during organization creation are then saved through the normal synchronized settings channel.
 
+For a newly created organization, **Add the standard sample catalog** is checked by default. When selected, PosApp creates six standard categories and fifteen sample products with opening inventory only after the authoritative first download, captures every row in the normal local outbox, uploads the dependency-ordered batch, and verifies that no uploads or conflicts remain before completing setup. Clear the option to start with an empty catalog. Signing in to an existing organization never injects sample data. If onboarding is interrupted, the device-local preparation marker preserves the new-organization choice so a retry cannot silently lose or duplicate the catalog.
+
+After setup, open **Products → Manage Categories** to create, rename, describe, color, reorder, or delete unused categories. Category changes are immediately available offline and use the same incremental outbox synchronization as product edits. A category referenced by a product cannot be deleted.
+
 Online onboarding is resumable and two-phase: a device-local preparation marker is written first, while `app:setup-complete` is written only after the full download and any initial synchronized settings upload finish with no pending operations or conflicts. Neither marker is synchronized. Before setup completes, local business rows are treated only as disposable cache state; interrupted migration/outbox state from an earlier build is cleared automatically so it cannot block sign-in.
 
 PosApp no longer offers first-run local database migration or offline setup. Turso is authoritative during onboarding, and the local SQLite database becomes the offline working cache only after the organization snapshot has been verified.
@@ -98,6 +102,12 @@ PosApp 2.1 allows one Windows installation to use any number of online organizat
 4. To return later, select the saved organization under **Organization profiles**, choose **Switch**, and let PosApp restart into that cache.
 
 Each profile has a separate SQLite database, backup folder, staged-restore file, globally unique device ID, cached users/PINs, sync cursor/outbox, and DPAPI-encrypted token file. The small `%LOCALAPPDATA%\PosApp\Profiles\profiles.json` selector contains friendly organization metadata only—never passwords, PINs, access tokens, refresh tokens, or cloud secrets. Restart-based switching is deliberate: the running EF Core container stays bound to one database for its entire lifetime, preventing a transaction from crossing tenant boundaries. Existing installations are registered as the `legacy` profile without moving or rewriting `posapp.db` or `Security\cloud-session.dat`.
+
+### Restore a local database safely
+
+Choose **Settings → Database → Restore**, select a verified PosApp `.db` backup, and confirm. PosApp stages a durable copy, stops background synchronization, drains active database work, skips the normal exit sync/backup, disposes EF scopes, clears native SQLite connection pools, and closes. Wait until PosApp has closed completely, then start it again.
+
+At startup, PosApp validates the staged backup, checkpoints the outgoing WAL, waits up to 15 seconds for exclusive access, preserves the outgoing main database as `posapp-before-restore-*.db`, removes the old `-wal`, `-shm`, and rollback-journal files, and atomically replaces the main database. The pending marker is removed only after the published database passes validation. If another PosApp process still owns the database, no replacement occurs: the live database and staged backup remain in place, and a clear retry message is shown. A successful restore still activates the cloud reconciliation gate; restored rows are never silently uploaded over newer server data.
 
 ### Publish a Single-File EXE Locally
 ```powershell
@@ -129,7 +139,7 @@ $env:POSAPP_CLOUD_API_BASE_URL = "https://your-worker.example.workers.dev"
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-2.1.1-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-2.1.3-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -155,21 +165,21 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.1.1-dev.27-Setup.exe` with resource version `2.1.1.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.1.3-dev.27-Setup.exe` with resource version `2.1.3.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v2.1.1`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v2.1.3`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v2.1.1
-git push origin v2.1.1
+git tag v2.1.3
+git push origin v2.1.3
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.1.1`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.1.3`.
 
 `.github/workflows/deploy-worker.yml` independently type-checks and tests the Worker, validates all ordered Turso migrations, performs a Wrangler dry run, applies every pending migration to the selected Turso database, verifies schema version 4 and required tables/columns, uploads the required Turso and authentication bindings, including the dedicated password pepper, from protected GitHub secrets, and deploys the selected `development` or `production` environment. After deployment it independently waits for `/api/v1/meta`, `/api/v1/diagnostics`, `/status`, and the root account portal to serve the expected Worker version. It fails unless the Free-plan password verifier, token signing, schema inspection, the complete atomic organization-provisioning batch, and forced rollback verification all pass. Opening the Worker base URL displays the account portal; deployment diagnostics remain available at `/status`. Follow [Cloud setup](docs/CLOUD-SETUP.md) before enabling deployment.
 
@@ -243,6 +253,8 @@ This project is provided as-is for your personal/commercial use. The architectur
 **Build fails on `dotnet restore`** — make sure you have the .NET 8 SDK installed: `dotnet --version` should report `8.x.x`.
 
 **Database upgrade errors** — do not delete the database. Review `%LOCALAPPDATA%\PosApp\posapp.log`; the active organization’s exact update-recovery folder is shown in **Settings → Update & Recovery**. The legacy profile uses `%LOCALAPPDATA%\PosApp\Backups\Updates`, while additional profiles keep it under their own profile folder. Reinstall the previous PosApp version if necessary, then restore the newest `posapp-before-update-*.db` or `posapp-before-startup-*.db` file for that organization.
+
+**Restore says another PosApp process is using the database** — close every PosApp window and check Task Manager for an older `PosApp.exe`, then start PosApp again. Do not delete `posapp.restore-pending.db`, `posapp.db-wal`, or `posapp.db-shm`. The pending backup and current database were deliberately left unchanged; startup will retry the complete replacement after exclusive access is available.
 
 **Online setup says synchronization did not finish** — note the diagnostic ID and state/count summary in the dialog, select **Open log folder**, and inspect only matching `attemptId` entries in `%LOCALAPPDATA%\PosApp\Logs\cloud-sync.jsonl`. Queue/error summaries and `requestId` show whether the failure occurred during compatibility validation, push, pull, local apply, or final verification. Do not share credentials, `cloud-session.dat`, the SQLite database, or unrelated log lines.
 
