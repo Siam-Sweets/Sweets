@@ -15,6 +15,7 @@ import {
   revokeDevice,
   signup,
   updateUser,
+  deleteUser,
 } from "./auth";
 import { ApiError, errorResponse, jsonResponse } from "./errors";
 import { createStore, listStores, verifySelectedStore } from "./stores";
@@ -24,6 +25,7 @@ import type { Env } from "./types";
 import { clampNumber } from "./crypto";
 import { inspectDatabaseReadiness } from "./db";
 import { diagnosticsJson, diagnosticsPage } from "./diagnostics";
+import { accountPortal } from "./portal";
 
 const requestWindows = new Map<string, { count: number; resetAt: number }>();
 const diagnosticWindows = new Map<string, { count: number; resetAt: number }>();
@@ -38,7 +40,8 @@ export default {
       enforceGeneralRateLimit(clientAddress);
 
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-      if (request.method === "GET" && url.pathname === "/") {
+      if (request.method === "GET" && url.pathname === "/") return accountPortal(env, requestId);
+      if (request.method === "GET" && url.pathname === "/status") {
         enforceDiagnosticRateLimit(clientAddress);
         return await diagnosticsPage(request, env, requestId);
       }
@@ -55,7 +58,7 @@ export default {
         );
         return jsonResponse({
           service: "PosApp Cloud API",
-          deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.16",
+          deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.17",
           apiVersion: Number(env.API_VERSION ?? "1"),
           schemaVersion: expectedSchemaVersion,
           minimumClientSchemaVersion: Number(env.MINIMUM_CLIENT_SCHEMA_VERSION ?? "4"),
@@ -110,6 +113,8 @@ export default {
       const userMatch = url.pathname.match(/^\/api\/v1\/users\/([0-9a-f-]+)$/i);
       if (request.method === "PATCH" && userMatch)
         return await updateUser(context, env, userMatch[1]!, await readJson(request, env));
+      if (request.method === "DELETE" && userMatch)
+        return await deleteUser(context, env, userMatch[1]!);
 
       if (request.method === "GET" && url.pathname === "/api/v1/stores")
         return await listStores(context, env);

@@ -1,6 +1,14 @@
 # Changelog
 
-## 2.0.16 — Online onboarding migration-state recovery
+## 2.0.17
+
+- Added a secure browser account portal at the Worker root URL.
+- Added browser sign-in and organization creation using the same API contract as the Windows client.
+- Added organization user counts and an administrator-only user list.
+- Added safe user deletion with current-user and final-administrator protection, session revocation, and synchronized tombstones.
+- Moved public deployment diagnostics to `/status` and updated deployment validation.
+
+## 2.0.17 — Online onboarding migration-state recovery
 
 - Removed the initial local-to-cloud migration branch from first-run onboarding. New installations now always treat Turso as authoritative and download the complete organization snapshot.
 - Cleared stale bootstrap rows, pending outbox operations, conflicts, identities, cursors, and interrupted migration markers before the first full download.
@@ -18,7 +26,7 @@
 - Preserved older local databases through the reviewed cloud-empty migration and safety-backup path instead of silently deleting or merging their users, catalog, inventory, and transaction history.
 - Added tests for fresh existing-organization downloads, complete new-organization snapshot seeding, resumable uploads, and preservation of legacy local data.
 - Removed unused setup views, DTOs, service methods, dependency registrations, and English/Bengali setup strings.
-- Updated application, installer, cloud client, Worker package, tests, README, architecture, deployment, security, and release metadata to version 2.0.16.
+- Updated application, installer, cloud client, Worker package, tests, README, architecture, deployment, security, and release metadata to version 2.0.17.
 
 ## 2.0.14 — Reliable public status-page deployment verification
 

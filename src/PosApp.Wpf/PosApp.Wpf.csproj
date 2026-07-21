@@ -12,12 +12,12 @@
     <ApplicationIcon>Assets\PosApp.ico</ApplicationIcon>
     <AssemblyName>PosApp</AssemblyName>
     <RootNamespace>PosApp.Wpf</RootNamespace>
-    <Version>2.0.16</Version>
+    <Version>2.0.17</Version>
     <Company>PosApp</Company>
     <Product>PosApp - Offline-first POS</Product>
-    <AssemblyVersion>2.0.16.0</AssemblyVersion>
-    <FileVersion>2.0.16.0</FileVersion>
-    <InformationalVersion>2.0.16</InformationalVersion>
+    <AssemblyVersion>2.0.17.0</AssemblyVersion>
+    <FileVersion>2.0.17.0</FileVersion>
+    <InformationalVersion>2.0.17</InformationalVersion>
     <PosAppCloudApiBaseUrl Condition="'$(PosAppCloudApiBaseUrl)' == ''">__NOT_CONFIGURED__</PosAppCloudApiBaseUrl>
   </PropertyGroup>
 

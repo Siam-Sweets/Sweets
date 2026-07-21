@@ -34,7 +34,7 @@ public sealed class SetupService : ISetupService
             return false;
 
         // Older releases could mark a completely local setup as finished. From
-        // 2.0.16 onward that marker is valid only when this database is linked to
+        // 2.0.17 onward that marker is valid only when this database is linked to
         // a real organization and store.
         return await _db.CloudAccountStates.AsNoTracking().AnyAsync(state =>
             state.TenantId != string.Empty && state.CurrentStoreId != string.Empty);
@@ -59,7 +59,7 @@ public sealed class SetupService : ISetupService
         // Online-only onboarding never uploads an old local bootstrap database.
         // Until setup is finalized, every business row is disposable cache state.
         // Clearing it also recovers installations left behind by an interrupted
-        // 2.0.16 migration attempt and guarantees that sign-in starts from the
+        // 2.0.17 migration attempt and guarantees that sign-in starts from the
         // authoritative organization snapshot in Turso.
         var previousBypassStoreFilter = _db.BypassStoreFilter;
         var previousSuppressSyncCapture = _db.SuppressSyncCapture;

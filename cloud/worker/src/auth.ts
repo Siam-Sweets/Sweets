@@ -1296,3 +1296,52 @@ interface AccountRow {
   customPermissions: string[];
   passwordVersion: number;
 }
+
+export async function deleteUser(context: AuthContext, env: Env, userId: string): Promise<Response> {
+  requirePermission(context.claims, "users.manage");
+  validateUuid(userId, "userId");
+  if (userId === context.claims.sub)
+    throw new ApiError(409, "CURRENT_USER_PROTECTED", "You cannot delete the currently signed-in user.");
+  const client = database(env);
+  let transaction: Transaction | undefined;
+  try {
+    transaction = await client.transaction("write");
+    const found = await transaction.execute({
+      sql: "SELECT username, email, full_name, role, is_active, created_at_utc FROM users WHERE id = ? AND tenant_id = ?",
+      args: [userId, context.claims.tid],
+    });
+    const target = found.rows[0];
+    if (!target) throw new ApiError(404, "USER_NOT_FOUND", "The user account was not found.");
+    if (parseRole(text(target.role)) === "admin" && booleanValue(target.is_active)) {
+      const admins = await transaction.execute({
+        sql: "SELECT COUNT(*) AS count FROM users WHERE tenant_id = ? AND role = 'admin' AND is_active = 1",
+        args: [context.claims.tid],
+      });
+      if (integer(admins.rows[0]?.count) <= 1)
+        throw new ApiError(409, "FINAL_ADMIN_PROTECTED", "The final active administrator cannot be deleted.");
+    }
+    const now = nowIso();
+    const payload = userSyncPayload(text(target.username), text(target.email), text(target.full_name), parseRole(text(target.role)), false, text(target.created_at_utc), now);
+    await transaction.batch([
+      { sql: "UPDATE users SET is_active = 0, deleted_at_utc = ?, updated_at_utc = ?, version = version + 1 WHERE id = ? AND tenant_id = ?", args: [now, now, userId, context.claims.tid] },
+      { sql: "UPDATE user_store_assignments SET is_active = 0 WHERE tenant_id = ? AND user_id = ?", args: [context.claims.tid, userId] },
+      { sql: "UPDATE login_sessions SET revoked_at_utc = COALESCE(revoked_at_utc, ?), revoke_reason = 'user_deleted' WHERE tenant_id = ? AND user_id = ?", args: [now, context.claims.tid, userId] },
+      { sql: `UPDATE refresh_tokens SET revoked_at_utc = COALESCE(revoked_at_utc, ?) WHERE session_id IN (SELECT id FROM login_sessions WHERE tenant_id = ? AND user_id = ?)`, args: [now, context.claims.tid, userId] },
+      { sql: `INSERT INTO user_sync_records (id, tenant_id, store_id, payload_json, created_at_utc, updated_at_utc, deleted_at_utc, version, created_by_user_id, updated_by_user_id, last_modified_device_id)
+              VALUES (?, ?, NULL, ?, ?, ?, ?, 1, ?, ?, ?)
+              ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json, updated_at_utc=excluded.updated_at_utc, deleted_at_utc=excluded.deleted_at_utc, version=user_sync_records.version+1, updated_by_user_id=excluded.updated_by_user_id, last_modified_device_id=excluded.last_modified_device_id
+              WHERE user_sync_records.tenant_id=excluded.tenant_id`, args: [userId, context.claims.tid, payload, text(target.created_at_utc), now, now, context.claims.sub, context.claims.sub, context.claims.did] },
+      { sql: `INSERT INTO sync_changes (tenant_id, store_id, entity_type, record_id, version, updated_at_utc, deleted_at_utc, last_modified_device_id, payload_json)
+              SELECT tenant_id, NULL, 'users', id, version, ?, ?, ?, payload_json FROM user_sync_records WHERE id = ? AND tenant_id = ?`, args: [now, now, context.claims.did, userId, context.claims.tid] },
+    ]);
+    await insertAudit(transaction, context, "user.deleted", "user", userId, {});
+    await transaction.commit();
+    return jsonResponse({ ok: true, requestId: context.requestId }, 200, context.requestId);
+  } catch (error) {
+    if (transaction) await safeRollback(transaction);
+    throw error;
+  } finally {
+    transaction?.close();
+    client.close();
+  }
+}

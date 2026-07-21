@@ -309,7 +309,7 @@ jobs:
               --connect-timeout 10 --max-time 30 \
               --dump-header "$status_page_headers" \
               --output "$status_page_file" --write-out '%{http_code}' \
-              "$base/?deployment_check=${GITHUB_RUN_ID:-manual}-$attempt" || true)"
+              "$base/status?deployment_check=${GITHUB_RUN_ID:-manual}-$attempt" || true)"
             status_page_version="$(header_value "$status_page_headers" "x-posapp-deployment-version")"
             status_page_marker="$(header_value "$status_page_headers" "x-posapp-status-page")"
             if [[ "$status_page_status" == "200" && "$status_page_version" == "$expected_version" && "$status_page_marker" == "1" ]]; then

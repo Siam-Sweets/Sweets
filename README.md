@@ -1,6 +1,6 @@
 # PosApp 2.0 - Offline-first online Point of Sale
 
-A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.16** preserves the complete v1.4.24 desktop application and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
+A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.17** preserves the complete v1.4.24 desktop application and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
 
 ## Offline-first boundary
 
@@ -116,7 +116,7 @@ $env:POSAPP_CLOUD_API_BASE_URL = "https://your-worker.example.workers.dev"
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-2.0.16-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-2.0.17-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -142,21 +142,21 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.16-dev.27-Setup.exe` with resource version `2.0.16.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.17-dev.27-Setup.exe` with resource version `2.0.17.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v2.0.16`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v2.0.17`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v2.0.16
-git push origin v2.0.16
+git tag v2.0.17
+git push origin v2.0.17
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.16`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.17`.
 
 `.github/workflows/deploy-worker.yml` independently type-checks and tests the Worker, validates all ordered Turso migrations, performs a Wrangler dry run, applies every pending migration to the selected Turso database, verifies schema version 4 and required tables/columns, uploads the required Turso and authentication bindings, including the dedicated password pepper, from protected GitHub secrets, and deploys the selected `development` or `production` environment. After deployment it independently waits for `/api/v1/meta`, `/api/v1/diagnostics`, and the public root status page to serve the expected Worker version. It fails unless the Free-plan password verifier, token signing, schema inspection, the complete atomic organization-provisioning batch, and forced rollback verification all pass. The root page exposes machine-readable deployment headers and metadata, while its detailed check cards are rendered from the already-validated diagnostic JSON. Opening the Worker base URL displays the status page instead of returning `AUTH_REQUIRED`. Follow [Cloud setup](docs/CLOUD-SETUP.md) before enabling deployment.
 
