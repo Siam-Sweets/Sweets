@@ -383,9 +383,36 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
                             ["requestId"] = response.RequestId
                         });
             }
-            catch
+            catch (Exception pushException)
             {
-                await ResetUploadingAsync(pending, cancellationToken);
+                if (CloudDiagnosticLogger.HasActiveAttempt)
+                    await CloudDiagnosticLogger.WriteAsync("sync.push_batch_failed", "error",
+                        new Dictionary<string, object?>
+                        {
+                            ["batchNumber"] = batchNumber + 1,
+                            ["operationCount"] = pending.Count,
+                            ["entitySummary"] = GroupSummary(pending.Select(value => value.EntityType)),
+                            ["errorCode"] = (pushException as CloudApiException)?.Code,
+                            ["requestId"] = (pushException as CloudApiException)?.RequestId
+                        }, pushException);
+                try
+                {
+                    await ResetUploadingAsync(pending, cancellationToken);
+                }
+                catch (Exception recoveryException)
+                {
+                    // Cleanup must never replace the actual Worker/API failure.
+                    // RecoverInterruptedUploadsAsync will safely reset these rows
+                    // before the next synchronization attempt if this fallback
+                    // itself cannot access SQLite.
+                    await CloudDiagnosticLogger.WriteAsync("sync.upload_reset_failed", "error",
+                        new Dictionary<string, object?>
+                        {
+                            ["batchNumber"] = batchNumber + 1,
+                            ["operationCount"] = pending.Count,
+                            ["originalExceptionType"] = pushException.GetType().FullName
+                        }, recoveryException);
+                }
                 throw;
             }
 
@@ -537,16 +564,10 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
         IReadOnlyList<SyncOutboxOperation> operations,
         CancellationToken cancellationToken)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var ids = operations.Select(value => value.OperationId).ToArray();
-        var rows = await db.SyncOutboxOperations.Where(value => ids.Contains(value.OperationId)).ToListAsync(cancellationToken);
-        foreach (var row in rows)
-        {
-            row.Status = SyncOutboxStatus.Pending;
-            row.NextAttemptAtUtc = DateTime.UtcNow + SyncBackoffPolicy.ForAttempt(row.AttemptCount);
-        }
-        db.SuppressSyncCapture = true;
-        await db.SaveChangesAsync(cancellationToken);
+        await SyncOutboxUploadRecovery.ResetAsync(
+            _dbFactory,
+            operations.Select(value => value.OperationId),
+            cancellationToken);
     }
 
     private async Task RecoverInterruptedUploadsAsync(
@@ -760,6 +781,38 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
     }
 
     private sealed class OkEnvelope { public bool Ok { get; set; } }
+}
+
+internal static class SyncOutboxUploadRecovery
+{
+    internal static async Task ResetAsync(
+        IDbContextFactory<AppDbContext> dbFactory,
+        IEnumerable<string> operationIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = operationIds
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (ids.Length == 0) return;
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        // Use Enumerable.Contains explicitly. With LangVersion=latest on some
+        // .NET 8 Windows runners, ids.Contains(...) binds to
+        // MemoryExtensions.Contains(ReadOnlySpan<T>, T). EF Core cannot place
+        // that ref-struct overload in an expression tree and throws before SQL
+        // is executed (ReadOnlySpan<T> violates the interpreter constraint).
+        var rows = await db.SyncOutboxOperations
+            .Where(value => Enumerable.Contains(ids, value.OperationId))
+            .ToListAsync(cancellationToken);
+        foreach (var row in rows)
+        {
+            row.Status = SyncOutboxStatus.Pending;
+            row.NextAttemptAtUtc = DateTime.UtcNow + SyncBackoffPolicy.ForAttempt(row.AttemptCount);
+        }
+        db.SuppressSyncCapture = true;
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }
 
 public static class SyncBackoffPolicy

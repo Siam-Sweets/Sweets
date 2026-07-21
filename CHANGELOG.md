@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.20 — Reliable outbox upload recovery
+
+- Fixed the online-onboarding upload failure identified by diagnostic attempt `59EC1AB93502`: `ids.Contains(...)` could bind to the .NET span overload, which EF Core cannot evaluate inside its query expression tree.
+- Forced the reset query through `Enumerable.Contains(...)`, preserving a parameterized SQL `IN` query without introducing per-record database round trips.
+- Prevented an outbox-cleanup exception from replacing the original Worker, Turso, network, or response error. Interrupted `Uploading` rows remain recoverable on the next synchronization cycle.
+- Added a privacy-safe `sync.push_batch_failed` entry containing the batch number, entity summary, structured API code, request ID, and original sanitized exception before cleanup begins.
+- Added regression coverage proving that only the selected failed-upload rows return to `Pending`, receive retry timing, and no longer trigger the `ReadOnlySpan<string>` expression-tree failure.
+- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.20.
+
 ## 2.0.19 — Correlated onboarding and synchronization diagnostics
 
 - Added a rotating, structured desktop cloud diagnostic log at `%LOCALAPPDATA%\PosApp\Logs\cloud-sync.jsonl` with one correlation ID for each online sign-in or organization-creation attempt.

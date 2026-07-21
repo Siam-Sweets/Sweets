@@ -502,6 +502,47 @@ public sealed class OutboxTests : IAsyncLifetime
         Assert.Equal("north", await settings.GetAsync("store:test"));
     }
 
+    [Fact]
+    public async Task FailedUploadBatchIsResetWithoutUsingTheSpanContainsOverload()
+    {
+        SyncCaptureContext.Disable();
+        var selected = new SyncOutboxOperation
+        {
+            EntityType = "settings",
+            RecordId = Guid.NewGuid().ToString("D"),
+            StoreId = "00000000-0000-4000-8000-000000000002",
+            CreatedByUserId = "00000000-0000-4000-8000-000000000004",
+            Status = SyncOutboxStatus.Uploading,
+            AttemptCount = 1
+        };
+        var untouched = new SyncOutboxOperation
+        {
+            EntityType = "customers",
+            RecordId = Guid.NewGuid().ToString("D"),
+            StoreId = "00000000-0000-4000-8000-000000000002",
+            CreatedByUserId = "00000000-0000-4000-8000-000000000004",
+            Status = SyncOutboxStatus.Uploading,
+            AttemptCount = 1
+        };
+        _db.SyncOutboxOperations.AddRange(selected, untouched);
+        _db.SuppressSyncCapture = true;
+        await _db.SaveChangesAsync();
+
+        await SyncOutboxUploadRecovery.ResetAsync(
+            new TestDbContextFactory(ConnectionString),
+            new[] { selected.OperationId },
+            CancellationToken.None);
+
+        _db.ChangeTracker.Clear();
+        var recovered = await _db.SyncOutboxOperations.SingleAsync(value =>
+            value.OperationId == selected.OperationId);
+        var stillUploading = await _db.SyncOutboxOperations.SingleAsync(value =>
+            value.OperationId == untouched.OperationId);
+        Assert.Equal(SyncOutboxStatus.Pending, recovered.Status);
+        Assert.NotNull(recovered.NextAttemptAtUtc);
+        Assert.Equal(SyncOutboxStatus.Uploading, stillUploading.Status);
+    }
+
     private static async Task DeleteDatabaseFilesAsync(string databasePath)
     {
         for (var attempt = 1; attempt <= 5; attempt++)
@@ -520,5 +561,20 @@ public sealed class OutboxTests : IAsyncLifetime
                 await Task.Delay(50 * attempt);
             }
         }
+    }
+
+    private sealed class TestDbContextFactory : IDbContextFactory<AppDbContext>
+    {
+        private readonly string _connectionString;
+
+        public TestDbContextFactory(string connectionString)
+        {
+            _connectionString = connectionString;
+        }
+
+        public AppDbContext CreateDbContext() => new(_connectionString);
+
+        public Task<AppDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(CreateDbContext());
     }
 }

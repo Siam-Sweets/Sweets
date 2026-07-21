@@ -52,6 +52,8 @@ The log records stage names, client/API/schema versions, non-sensitive queue sum
 
 For support, provide the diagnostic ID and only the matching JSON lines. If an entry contains `requestId`, use that value to correlate with Cloudflare Worker logs. Do not send `cloud-session.dat`, `.dev.vars`, `posapp.db`, Turso credentials, screenshots containing passwords, or an unreviewed complete log archive.
 
+PosApp 2.0.19 could report `SYNC_FAILED` with an inner `ReadOnlySpan<string>` or `FuncCallInstruction` error while returning a failed upload batch to `Pending`. That was a desktop EF Core expression-tree issue, not a Turso credential or connectivity problem. Upgrade the desktop client to 2.0.20 or later. The corrected client also logs and preserves the original API failure if a separate server-side problem remains.
+
 ## Worker deployment checks
 
 1. Run `npm ci`, `npm run check`, and `npm test` in `cloud/worker`.

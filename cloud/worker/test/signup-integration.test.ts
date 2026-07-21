@@ -45,7 +45,7 @@ const env: Env = {
   SCHEMA_VERSION: "4",
   MINIMUM_CLIENT_SCHEMA_VERSION: "4",
   API_VERSION: "1",
-  DEPLOYMENT_VERSION: "2.0.19-test",
+  DEPLOYMENT_VERSION: "2.0.20-test",
 };
 
 beforeAll(async () => {
@@ -76,13 +76,13 @@ describe("organization provisioning integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(response.headers.get("x-posapp-status-page")).toBe("1");
-    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.19-test");
+    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.20-test");
     const html = await response.text();
     expect(html).toContain("PosApp Cloud API");
     expect(html).toContain("Run diagnostics again");
     expect(html).toContain("/api/v1/diagnostics");
     expect(html).toContain('name="posapp-status-page" content="true"');
-    expect(html).toContain('name="posapp-deployment-version" content="2.0.19-test"');
+    expect(html).toContain('name="posapp-deployment-version" content="2.0.20-test"');
     expect(html).toContain("Checking deployment");
   });
 
@@ -91,7 +91,7 @@ describe("organization provisioning integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(response.headers.get("x-posapp-portal")).toBe("1");
-    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.19-test");
+    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.20-test");
     expect(response.headers.get("content-security-policy")).toContain("script-src 'nonce-");
     expect(response.headers.get("content-security-policy")).not.toContain("script-src 'unsafe-inline'");
     const html = await response.text();
@@ -100,14 +100,14 @@ describe("organization provisioning integration", () => {
     expect(html).toContain("Total users");
     expect(html).toContain("/api/v1/users");
     expect(html).toContain("method:'DELETE'");
-    expect(html).toContain('name="posapp-portal-version" content="2.0.19-test"');
+    expect(html).toContain('name="posapp-portal-version" content="2.0.20-test"');
   });
 
   it("publishes consistent portal, status, API, and schema metadata", async () => {
     const response = await worker.fetch(new Request("https://example.test/api/v1/meta"), env);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      deploymentVersion: "2.0.19-test",
+      deploymentVersion: "2.0.20-test",
       apiVersion: 1,
       schemaVersion: 4,
       accountPortal: "/",
