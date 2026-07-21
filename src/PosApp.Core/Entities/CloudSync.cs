@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace PosApp.Core.Entities;
 
 /// <summary>
-/// Non-secret linkage between this installation and one cloud organization.
+/// Non-secret linkage between the active local profile and one cloud organization.
 /// Access and refresh tokens are deliberately stored outside SQLite by the
 /// Windows protected token store.
 /// </summary>

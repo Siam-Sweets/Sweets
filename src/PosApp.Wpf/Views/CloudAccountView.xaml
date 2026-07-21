@@ -59,6 +59,29 @@
                     </StackPanel>
                 </Border>
 
+                <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="{DynamicResource Cloud_OrganizationProfiles}" Style="{StaticResource Heading2}"/>
+                            <TextBlock x:Name="OrganizationProfileHelpText"
+                                       Text="{DynamicResource Cloud_OrganizationProfilesHelp}"
+                                       Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,18,0"/>
+                        </StackPanel>
+                        <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                            <ComboBox x:Name="OrganizationProfilesCombo" Width="250" DisplayMemberPath="DisplayName"
+                                      Padding="9,7" Margin="0,0,8,0"/>
+                            <Button Content="{DynamicResource Cloud_SwitchOrganization}" Style="{StaticResource OutlineButton}"
+                                    Padding="15,9" Margin="0,0,8,0" Click="SwitchOrganization_Click"/>
+                            <Button Content="{DynamicResource Cloud_AddOrganization}" Style="{StaticResource PrimaryButton}"
+                                    Padding="15,9" Click="AddOrganization_Click"/>
+                        </WrapPanel>
+                    </Grid>
+                </Border>
+
                 <Border x:Name="ReconciliationCard" Style="{StaticResource Card}" Margin="0,14,0,0" Background="{DynamicResource DangerSurfaceBrush}" Visibility="Collapsed">
                     <StackPanel>
                         <TextBlock Text="{DynamicResource Cloud_ReconciliationTitle}" Style="{StaticResource Heading2}" Foreground="{DynamicResource DangerTextBrush}"/>

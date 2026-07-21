@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Data;
 
 namespace PosApp.Services;
 
@@ -14,10 +15,7 @@ public sealed class DpapiTokenStore : ISecureTokenStore
 
     public DpapiTokenStore()
     {
-        var folder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PosApp", "Security");
-        Directory.CreateDirectory(folder);
-        _tokenPath = Path.Combine(folder, "cloud-session.dat");
+        _tokenPath = DbPathResolver.CloudTokenPath();
     }
 
     public async Task<CloudAuthTokens?> LoadAsync(CancellationToken cancellationToken = default)

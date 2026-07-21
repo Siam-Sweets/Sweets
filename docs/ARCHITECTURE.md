@@ -1,4 +1,4 @@
-# PosApp 2.0 architecture
+# PosApp 2.1 architecture
 
 PosApp remains a local WPF application. Cloud connectivity is an optional synchronization boundary, not the runtime database for the register.
 
@@ -53,20 +53,22 @@ Every cloud business envelope has server-controlled `tenant_id`, optional `store
 ## Desktop composition
 
 - Existing entities, views, services, reports, printing, themes, localization, build, installer, updater, and local backup code remain in place.
+- `LocalOrganizationProfileStore` maintains a non-secret selector outside the tenant databases. The first upgraded installation remains the `legacy` profile at the original paths. Every added organization receives a random profile directory containing an independent SQLite cache, backup/restore scope, update migration-state records, and DPAPI token file; its device UUID, users, offline PIN verifiers, outbox, conflicts, identities, and cursors live only in that profile's database.
+- EF Core resolves the active profile once when the process starts. Adding or selecting a profile first makes a best-effort sync, stops the background engine, atomically changes the selector, and restarts PosApp. This restart boundary prevents an open DbContext, transaction, report, or cart from changing tenant database mid-operation. Failed cloud connectivity leaves the old profile's pending work untouched and switchable later.
 - `AppDbContext.SaveChangesAsync` snapshots tracked business changes and appends outbox rows in the same SQLite transaction.
 - `SyncIdentity` maps preserved local integer keys to global UUIDs without rewriting historical foreign keys.
 - `CloudSyncService` runs after login/startup, every two minutes, after outbox changes, after network recovery, on manual Sync, and during shutdown when time permits. Background calls coalesce immediately; a user-initiated/onboarding call waits asynchronously for an active cycle and then runs its own verified cycle, so a stale intermediate status cannot finalize or reject setup.
 - Each online onboarding attempt carries a short correlation ID through authentication and the foreground sync. `CloudDiagnosticLogger` writes bounded JSON-lines records under the local application-data folder, including stage, cursor, queue/conflict summaries, Worker request IDs, and sanitized exception metadata. The periodic task explicitly drops the onboarding scope so unrelated later cycles cannot be misattributed.
 - `SyncRecordApplier` applies ordered server pages in a SQLite transaction with outbox capture suppressed, then refreshable views see current local data without restart.
 - One SQLite file can cache several authorized branches. Store-scoped query filters select the active working set, while formerly global SKU, barcode, category, setting, receipt, purchase-document, and open-register constraints are branch-aware. Identical catalog identifiers in two branches remain separate local rows and UUID identities. Login and branch switching reload the selected store's settings; the switch confirmation warns that the current unsaved cart is cleared so no draft, filter, receipt, printer, currency, theme, or language state crosses stores.
-- DPAPI protects the access/refresh token bundle for the current Windows user. Non-secret organization/store/device metadata remains in SQLite.
+- DPAPI protects a separate access/refresh token bundle for each profile and the current Windows user. Non-secret organization/store/device metadata remains in that profile's SQLite database; the selector stores only friendly organization metadata and random profile IDs.
 - First run is online-only. The local database initially contains only the SQLite schema; no independent administrator, store configuration, or bootstrap catalog is created. Signing in or creating an organization clears incomplete disposable bootstrap cache state and downloads the authoritative organization snapshot from cursor zero. Preparation and completion are separate device-local phases, so restart safely resumes the same full download. Device-local `app:` settings never enter the outbox.
 - Linking an already-configured SQLite database first detects records without tenant-bound UUID identities, writes a verified safety backup, and raises the reconciliation gate. Background push and pull remain paused until an administrator either acquires the cloud-empty migration lease for the local snapshot or explicitly replaces the synchronized local working copy with server data.
 
 ## Cloud components
 
 - The Worker entry point is `cloud/worker/src/index.ts`.
-- The Worker root serves the tenant-scoped account portal; `/status` and `/api/v1/diagnostics` expose public deployment readiness without user data.
+- The Worker root serves the tenant-scoped account portal; `/status` and `/api/v1/diagnostics` expose public deployment readiness without user data. Explicitly creating another portal organization allocates a fresh browser device UUID, while remembered non-secret identifier/device mappings allow normal sign-in reuse. A mismatched tenant device is retried once with a new UUID; Worker-side cross-tenant validation is never weakened.
 - Authentication, store access, permissions, validation, synchronization, structured errors, and database access are separated by module.
 - Turso migrations are append-only and tracked in `schema_migrations`.
 - Domain data uses indexed server-owned envelope columns plus versioned JSON payloads. Branch-scoped normalized identifier indexes and a shared SKU/barcode namespace prevent duplicate master records without blocking the same identifier in another store. This keeps Worker CPU and migration cost low while retaining explicit tenant/version/tombstone enforcement.

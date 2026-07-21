@@ -171,6 +171,16 @@
     <sys:String x:Key="Cloud_OpenDiagnosticFolderFailed">The diagnostic log folder could not be opened.</sys:String>
     <sys:String x:Key="Cloud_SyncFailureSummary">State: {0} • Pending uploads: {1} • Conflicts: {2} • Downloaded: {3} • Cursor: {4}</sys:String>
     <sys:String x:Key="Cloud_CurrentAccount">Current online account</sys:String>
+    <sys:String x:Key="Cloud_OrganizationProfiles">Organization profiles</sys:String>
+    <sys:String x:Key="Cloud_OrganizationProfilesHelp">Switch or add an organization without mixing its offline data with another account.</sys:String>
+    <sys:String x:Key="Cloud_ActiveOrganizationProfile">Active local profile: {0}</sys:String>
+    <sys:String x:Key="Cloud_ProfileIsolationHelp">{0} local organization profile(s). Each has an isolated database, device ID, backups, and encrypted session.</sys:String>
+    <sys:String x:Key="Cloud_SwitchOrganization">Switch</sys:String>
+    <sys:String x:Key="Cloud_AddOrganization">Add organization</sys:String>
+    <sys:String x:Key="Cloud_SwitchOrganizationConfirm">PosApp will save pending synchronized work in this profile and restart using the selected organization. Any unsaved current cart will be cleared. Continue?</sys:String>
+    <sys:String x:Key="Cloud_AddOrganizationConfirm">PosApp will create an empty, isolated local profile and restart. Your current database and pending offline work remain unchanged, but any unsaved current cart will be cleared. Continue?</sys:String>
+    <sys:String x:Key="Cloud_ProfileRestarting">Saving this organization's local work and restarting PosApp...</sys:String>
+    <sys:String x:Key="Cloud_ProfileRestartFailed">PosApp could not restart into the selected organization profile. The current profile is still active.</sys:String>
     <sys:String x:Key="Cloud_LastSync">Last successful sync</sys:String>
     <sys:String x:Key="Cloud_PendingUploads">Pending uploads</sys:String>
     <sys:String x:Key="Cloud_Conflicts">Conflicts</sys:String>

@@ -10,6 +10,12 @@ namespace PosApp.Data;
 /// </summary>
 public static class DbPathResolver
 {
+    // The active ID is intentionally fixed for this process. Switching writes
+    // the registry and restarts PosApp so an existing DbContext can never begin
+    // using another organization's database halfway through a transaction.
+    private static readonly Lazy<string> RunningProfileId = new(() =>
+        new LocalOrganizationProfileStore(AppFolder()).GetActiveProfile().Id);
+
     public static string AppFolder()
     {
         var folder = Path.Combine(
@@ -21,12 +27,21 @@ public static class DbPathResolver
 
     public static string DefaultPath()
     {
-        return Path.Combine(AppFolder(), "posapp.db");
+        return new LocalOrganizationProfileStore(AppFolder())
+            .GetDatabasePath(CurrentProfileId());
     }
+
+    public static string CurrentProfileId() => RunningProfileId.Value;
+
+    public static string CurrentProfileFolder()
+        => new LocalOrganizationProfileStore(AppFolder()).GetProfileFolder(CurrentProfileId());
+
+    public static string CloudTokenPath()
+        => new LocalOrganizationProfileStore(AppFolder()).GetTokenPath(CurrentProfileId());
 
     public static string BackupFolder()
     {
-        var folder = Path.Combine(AppFolder(), "Backups");
+        var folder = Path.Combine(CurrentProfileFolder(), "Backups");
         Directory.CreateDirectory(folder);
         return folder;
     }
@@ -38,6 +53,13 @@ public static class DbPathResolver
         return folder;
     }
 
+    public static string ProfileUpdateStateFolder()
+    {
+        var folder = Path.Combine(CurrentProfileFolder(), "Updates");
+        Directory.CreateDirectory(folder);
+        return folder;
+    }
+
     public static string UpdateBackupFolder()
     {
         var folder = Path.Combine(BackupFolder(), "Updates");
@@ -45,13 +67,14 @@ public static class DbPathResolver
         return folder;
     }
 
-    public static string PendingUpdateRecordPath() => Path.Combine(UpdateFolder(), "update-pending.json");
+    public static string PendingUpdateRecordPath() => Path.Combine(ProfileUpdateStateFolder(), "update-pending.json");
 
-    public static string LastUpdateRecordPath() => Path.Combine(UpdateFolder(), "update-last.json");
+    public static string LastUpdateRecordPath() => Path.Combine(ProfileUpdateStateFolder(), "update-last.json");
 
-    public static string LastSuccessfulVersionPath() => Path.Combine(UpdateFolder(), "last-successful-version.txt");
+    public static string LastSuccessfulVersionPath()
+        => Path.Combine(ProfileUpdateStateFolder(), "last-successful-version.txt");
 
-    public static string PendingRestorePath() => Path.Combine(AppFolder(), "posapp.restore-pending.db");
+    public static string PendingRestorePath() => Path.Combine(CurrentProfileFolder(), "posapp.restore-pending.db");
 
     /// <summary>
     /// Applies a previously validated restore before EF opens the live database.

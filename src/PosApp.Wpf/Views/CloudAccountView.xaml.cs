@@ -19,6 +19,7 @@ public partial class CloudAccountView : UserControl, IRefreshable
     private readonly ICloudMigrationService _migration;
     private readonly ISettingsService _settings;
     private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly LocalOrganizationProfileStore _profiles;
     private CloudAccountState? _state;
     private bool _busy;
 
@@ -27,7 +28,8 @@ public partial class CloudAccountView : UserControl, IRefreshable
         ICloudSyncService sync,
         ICloudMigrationService migration,
         ISettingsService settings,
-        IDbContextFactory<AppDbContext> dbFactory)
+        IDbContextFactory<AppDbContext> dbFactory,
+        LocalOrganizationProfileStore profiles)
     {
         InitializeComponent();
         _accounts = accounts;
@@ -35,6 +37,7 @@ public partial class CloudAccountView : UserControl, IRefreshable
         _migration = migration;
         _settings = settings;
         _dbFactory = dbFactory;
+        _profiles = profiles;
         var roles = new[]
         {
             new OnlineRoleChoice(Text("Cloud_RoleCashier", "Cashier"), UserRole.Cashier),
@@ -50,6 +53,7 @@ public partial class CloudAccountView : UserControl, IRefreshable
 
     public async Task RefreshAsync()
     {
+        LoadOrganizationProfiles();
         _state = await _accounts.GetAccountStateAsync();
         ApplyStatus(_sync.CurrentStatus);
         if (_state == null || !_state.IsEnabled)
@@ -86,6 +90,60 @@ public partial class CloudAccountView : UserControl, IRefreshable
         if (OnlineUsersCard.Visibility == Visibility.Visible) await LoadUsersAsync();
         await LoadDevicesAsync();
         await LoadConflictsAsync();
+    }
+
+    private void LoadOrganizationProfiles()
+    {
+        var profiles = _profiles.GetProfiles();
+        OrganizationProfilesCombo.ItemsSource = profiles;
+        OrganizationProfilesCombo.SelectedItem = profiles.FirstOrDefault(profile => profile.IsActive);
+        OrganizationProfileHelpText.Text = string.Format(
+            Text("Cloud_ProfileIsolationHelp",
+                "{0} local organization profile(s). Each has an isolated database, device ID, backups, and encrypted session."),
+            profiles.Count);
+    }
+
+    private async void SwitchOrganization_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || OrganizationProfilesCombo.SelectedItem is not LocalOrganizationProfile selected ||
+            selected.IsActive) return;
+        if (LocalizedMessageBox.Show(
+                Text("Cloud_SwitchOrganizationConfirm",
+                    "PosApp will save pending synchronized work in this profile and restart using the selected organization. Any unsaved current cart will be cleared. Continue?"),
+                Text("Cloud_OrganizationProfiles", "Organization profiles"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        await RestartOrganizationProfileAsync(selected.Id, createProfile: false);
+    }
+
+    private async void AddOrganization_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy) return;
+        if (LocalizedMessageBox.Show(
+                Text("Cloud_AddOrganizationConfirm",
+                    "PosApp will create an empty, isolated local profile and restart. Your current database and pending offline work remain unchanged, but any unsaved current cart will be cleared. Continue?"),
+                Text("Cloud_AddOrganization", "Add organization"),
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        await RestartOrganizationProfileAsync(string.Empty, createProfile: true);
+    }
+
+    private async Task RestartOrganizationProfileAsync(string profileId, bool createProfile)
+    {
+        _busy = true;
+        IsEnabled = false;
+        try
+        {
+            await OrganizationProfileSwitcher.SwitchAndRestartAsync(
+                _profiles, _sync, profileId, createProfile);
+        }
+        catch (Exception exception)
+        {
+            App.LogError("Switch organization profile", exception);
+            ErrorDetailsText.Text = Text("Cloud_ProfileRestartFailed",
+                "PosApp could not restart into the selected organization profile. The current profile is still active.");
+            LoadOrganizationProfiles();
+            IsEnabled = true;
+            _busy = false;
+        }
     }
 
     private void Sync_StatusChanged(object? sender, CloudSyncStatus status)

@@ -45,7 +45,7 @@ const env: Env = {
   SCHEMA_VERSION: "4",
   MINIMUM_CLIENT_SCHEMA_VERSION: "4",
   API_VERSION: "1",
-  DEPLOYMENT_VERSION: "2.0.21-test",
+  DEPLOYMENT_VERSION: "2.1.0-test",
 };
 
 beforeAll(async () => {
@@ -76,13 +76,13 @@ describe("organization provisioning integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(response.headers.get("x-posapp-status-page")).toBe("1");
-    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.21-test");
+    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.1.0-test");
     const html = await response.text();
     expect(html).toContain("PosApp Cloud API");
     expect(html).toContain("Run diagnostics again");
     expect(html).toContain("/api/v1/diagnostics");
     expect(html).toContain('name="posapp-status-page" content="true"');
-    expect(html).toContain('name="posapp-deployment-version" content="2.0.21-test"');
+    expect(html).toContain('name="posapp-deployment-version" content="2.1.0-test"');
     expect(html).toContain("Checking deployment");
   });
 
@@ -91,23 +91,28 @@ describe("organization provisioning integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     expect(response.headers.get("x-posapp-portal")).toBe("1");
-    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.0.21-test");
+    expect(response.headers.get("x-posapp-deployment-version")).toBe("2.1.0-test");
     expect(response.headers.get("content-security-policy")).toContain("script-src 'nonce-");
     expect(response.headers.get("content-security-policy")).not.toContain("script-src 'unsafe-inline'");
     const html = await response.text();
     expect(html).toContain("PosApp Cloud Account");
     expect(html).toContain("Username or email");
     expect(html).toContain("Total users");
+    expect(html).toContain("Create another organization");
     expect(html).toContain("/api/v1/users");
     expect(html).toContain("method:'DELETE'");
-    expect(html).toContain('name="posapp-portal-version" content="2.0.21-test"');
+    expect(html).toContain("const candidateId=crypto.randomUUID()");
+    expect(html).toContain("error.code!=='DEVICE_TENANT_MISMATCH'");
+    expect(html).toContain("posappPortalDeviceProfiles");
+    expect(html).toContain("sessionStorage.posappPortalDeviceId");
+    expect(html).toContain('name="posapp-portal-version" content="2.1.0-test"');
   });
 
   it("publishes consistent portal, status, API, and schema metadata", async () => {
     const response = await worker.fetch(new Request("https://example.test/api/v1/meta"), env);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      deploymentVersion: "2.0.21-test",
+      deploymentVersion: "2.1.0-test",
       apiVersion: 1,
       schemaVersion: 4,
       accountPortal: "/",
@@ -235,6 +240,51 @@ describe("organization provisioning integration", () => {
     } finally {
       client.close();
     }
+  });
+
+  it("creates another organization only with a separate browser device identity", async () => {
+    const signupBody = (username: string, email: string, deviceId: string) => JSON.stringify({
+      organizationName: `${username} organization`,
+      storeName: `${username} store`,
+      fullName: `${username} owner`,
+      username,
+      email,
+      password: "anotherPassword123",
+      clientSchemaVersion: 4,
+      device: {
+        id: deviceId,
+        name: "Multi-organization browser",
+        operatingSystem: "Web",
+        machineName: "Browser",
+      },
+    });
+    const request = (body: string) => new Request("https://example.test/api/v1/auth/signup", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+
+    const firstDevice = "30000000-0000-4000-8000-000000000001";
+    const first = await worker.fetch(request(signupBody(
+      "multiownerone", "multiownerone@example.test", firstDevice,
+    )), env);
+    expect(first.status).toBe(201);
+
+    const unsafeReuse = await worker.fetch(request(signupBody(
+      "multiownertwo", "multiownertwo@example.test", firstDevice,
+    )), env);
+    expect(unsafeReuse.status).toBe(409);
+    expect(await unsafeReuse.json()).toMatchObject({
+      error: { code: "DEVICE_TENANT_MISMATCH" },
+    });
+
+    const isolated = await worker.fetch(request(signupBody(
+      "multiownertwo", "multiownertwo@example.test",
+      "30000000-0000-4000-8000-000000000002",
+    )), env);
+    expect(isolated.status).toBe(201);
+    const isolatedBody = await isolated.json() as { organizationId: string; deviceId: string };
+    expect(isolatedBody.deviceId).toBe("30000000-0000-4000-8000-000000000002");
   });
 
   it("returns exact tenant user counts and safely deletes a non-current user", async () => {

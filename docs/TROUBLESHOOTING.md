@@ -36,6 +36,7 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 | `VALIDATION_ERROR`, `PAYLOAD_TOO_LARGE`, `REQUEST_TOO_LARGE` | Invalid or excessive payload | Correct local data/import; inspect error details without exposing PII. |
 | `PARTIAL_BATCH_FAILURE` | Some operations were accepted while others failed | Accepted rows remain idempotent; resolve the listed failed/conflict rows and Retry. |
 | `RESTORE_RECONCILIATION_REQUIRED` | A restored or newly linked local database may differ from cloud data | Explicitly use server state, or upload local data only after proving the cloud organization is empty. |
+| `DEVICE_TENANT_MISMATCH`, “already linked/registered” | A device or local cache already belongs to another organization | In PosApp 2.1, choose **Add organization** so a separate database and device UUID are created. In the portal, use **Create another organization**. Do not erase or repurpose the existing tenant database. |
 
 ## Desktop onboarding and sync diagnostic log
 
@@ -68,6 +69,8 @@ PosApp 2.0.20 may then expose the underlying `VALIDATION_ERROR` stating that `cl
 ## Local database issues
 
 If startup reports migration failure or corruption, do not delete `posapp.db`. Preserve the database, WAL/SHM files, logs, and newest verified backups. Use the existing staged Restore flow. After any restore while cloud is configured, complete the reconciliation card before uploads resume.
+
+For added organization profiles, the database is under `%LOCALAPPDATA%\PosApp\Profiles\<profile-id>\posapp.db`; the original upgraded database remains `%LOCALAPPDATA%\PosApp\posapp.db`. Use the in-app profile selector instead of moving files. If a newly added profile is closed before onboarding completes, restart PosApp and use the profile selector in the account window to return to the former organization.
 
 If a batch is interrupted, press Retry. Synchronized operation IDs make uncertain retries idempotent. If Pending stays high, migrate in repeated bounded cycles and resolve Failed/Conflict entries first.
 

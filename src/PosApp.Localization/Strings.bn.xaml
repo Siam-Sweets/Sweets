@@ -171,6 +171,16 @@
     <sys:String x:Key="Cloud_OpenDiagnosticFolderFailed">ডায়াগনস্টিক লগ ফোল্ডার খোলা যায়নি।</sys:String>
     <sys:String x:Key="Cloud_SyncFailureSummary">অবস্থা: {0} • অপেক্ষমাণ আপলোড: {1} • দ্বন্দ্ব: {2} • ডাউনলোড: {3} • কার্সর: {4}</sys:String>
     <sys:String x:Key="Cloud_CurrentAccount">বর্তমান অনলাইন অ্যাকাউন্ট</sys:String>
+    <sys:String x:Key="Cloud_OrganizationProfiles">প্রতিষ্ঠান প্রোফাইল</sys:String>
+    <sys:String x:Key="Cloud_OrganizationProfilesHelp">এক অ্যাকাউন্টের অফলাইন ডেটা অন্যটির সঙ্গে না মিশিয়ে প্রতিষ্ঠান পরিবর্তন বা যোগ করুন।</sys:String>
+    <sys:String x:Key="Cloud_ActiveOrganizationProfile">সক্রিয় স্থানীয় প্রোফাইল: {0}</sys:String>
+    <sys:String x:Key="Cloud_ProfileIsolationHelp">{0}টি স্থানীয় প্রতিষ্ঠান প্রোফাইল। প্রতিটির ডেটাবেস, ডিভাইস আইডি, ব্যাকআপ ও এনক্রিপ্ট করা সেশন আলাদা।</sys:String>
+    <sys:String x:Key="Cloud_SwitchOrganization">পরিবর্তন</sys:String>
+    <sys:String x:Key="Cloud_AddOrganization">প্রতিষ্ঠান যোগ করুন</sys:String>
+    <sys:String x:Key="Cloud_SwitchOrganizationConfirm">PosApp এই প্রোফাইলের অপেক্ষমাণ সিঙ্ক কাজ সংরক্ষণ করে নির্বাচিত প্রতিষ্ঠানে পুনরায় চালু হবে। বর্তমানে সংরক্ষণ না করা কার্ট মুছে যাবে। চালিয়ে যাবেন?</sys:String>
+    <sys:String x:Key="Cloud_AddOrganizationConfirm">PosApp একটি খালি, আলাদা স্থানীয় প্রোফাইল তৈরি করে পুনরায় চালু হবে। বর্তমান ডেটাবেস ও অপেক্ষমাণ অফলাইন কাজ অপরিবর্তিত থাকবে, তবে বর্তমানে সংরক্ষণ না করা কার্ট মুছে যাবে। চালিয়ে যাবেন?</sys:String>
+    <sys:String x:Key="Cloud_ProfileRestarting">এই প্রতিষ্ঠানের স্থানীয় কাজ সংরক্ষণ করে PosApp পুনরায় চালু করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Cloud_ProfileRestartFailed">নির্বাচিত প্রতিষ্ঠান প্রোফাইলে PosApp পুনরায় চালু করা যায়নি। বর্তমান প্রোফাইলই সক্রিয় আছে।</sys:String>
     <sys:String x:Key="Cloud_LastSync">সর্বশেষ সফল সিঙ্ক</sys:String>
     <sys:String x:Key="Cloud_PendingUploads">অপেক্ষমাণ আপলোড</sys:String>
     <sys:String x:Key="Cloud_Conflicts">দ্বন্দ্ব</sys:String>

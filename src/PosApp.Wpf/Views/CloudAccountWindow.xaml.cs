@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Data;
 using PosApp.Services;
 using PosApp.Wpf.Helpers;
 
@@ -31,6 +32,7 @@ public partial class CloudAccountWindow : Window
     private readonly ISetupService _setup;
     private readonly ICloudSyncService _sync;
     private readonly ISettingsService _settings;
+    private readonly LocalOrganizationProfileStore _profiles;
     private bool _busy;
     private StoreSettings? _requestedStoreSettings;
     private bool _includeSampleProducts;
@@ -40,7 +42,8 @@ public partial class CloudAccountWindow : Window
         ICloudAccountService accounts,
         ISetupService setup,
         ICloudSyncService sync,
-        ISettingsService settings)
+        ISettingsService settings,
+        LocalOrganizationProfileStore profiles)
     {
         InitializeComponent();
         ConstrainToWorkingArea();
@@ -48,6 +51,7 @@ public partial class CloudAccountWindow : Window
         _setup = setup;
         _sync = sync;
         _settings = settings;
+        _profiles = profiles;
         Loaded += CloudAccountWindow_Loaded;
     }
 
@@ -77,6 +81,7 @@ public partial class CloudAccountWindow : Window
 
     private async void CloudAccountWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        LoadOrganizationProfiles();
         LoginDeviceName.Text = Environment.MachineName;
         CreateDeviceName.Text = Environment.MachineName;
 
@@ -139,7 +144,16 @@ public partial class CloudAccountWindow : Window
 
     private async void Create_Click(object sender, RoutedEventArgs e)
     {
-        if (_busy || !ValidateCreateForm()) return;
+        if (_busy) return;
+
+        var linkedState = await _accounts.GetAccountStateAsync();
+        if (!string.IsNullOrWhiteSpace(linkedState?.TenantId))
+        {
+            await AddOrganizationProfileAsync();
+            return;
+        }
+
+        if (!ValidateCreateForm()) return;
 
         _requestedStoreSettings = BuildRequestedStoreSettings();
         _includeSampleProducts = CreateSampleProducts.IsChecked == true;
@@ -161,6 +175,71 @@ public partial class CloudAccountWindow : Window
             CreatedOrganization = true;
             AuthenticatedUser = result.LocalUser;
         }, "Create online organization");
+    }
+
+    private void LoadOrganizationProfiles()
+    {
+        var profiles = _profiles.GetProfiles();
+        OrganizationProfileCombo.ItemsSource = profiles;
+        OrganizationProfileCombo.SelectedItem = profiles.FirstOrDefault(profile => profile.IsActive);
+        var active = profiles.First(profile => profile.IsActive);
+        ActiveProfileText.Text = string.Format(
+            Text("Cloud_ActiveOrganizationProfile", "Active local profile: {0}"),
+            active.DisplayName);
+    }
+
+    private async void SwitchOrganizationProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || OrganizationProfileCombo.SelectedItem is not LocalOrganizationProfile selected ||
+            selected.IsActive) return;
+
+        var answer = LocalizedMessageBox.Show(this,
+            Text("Cloud_SwitchOrganizationConfirm",
+                "PosApp will save pending synchronized work in this profile and restart using the selected organization. Any unsaved current cart will be cleared. Continue?"),
+            Text("Cloud_OrganizationProfiles", "Organization profiles"),
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+        await RestartIntoProfileAsync(selected.Id, createProfile: false);
+    }
+
+    private async void AddOrganizationProfile_Click(object sender, RoutedEventArgs e)
+        => await AddOrganizationProfileAsync();
+
+    private async Task AddOrganizationProfileAsync()
+    {
+        if (_busy) return;
+        var answer = LocalizedMessageBox.Show(this,
+            Text("Cloud_AddOrganizationConfirm",
+                "PosApp will create an empty, isolated local profile and restart. Your current database and pending offline work remain unchanged, but any unsaved current cart will be cleared. Continue?"),
+            Text("Cloud_AddOrganization", "Add organization"),
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return;
+        await RestartIntoProfileAsync(string.Empty, createProfile: true);
+    }
+
+    private async Task RestartIntoProfileAsync(string profileId, bool createProfile)
+    {
+        _busy = true;
+        AccountTabs.IsEnabled = false;
+        BusyBar.Visibility = Visibility.Visible;
+        SetStatus(Text("Cloud_ProfileRestarting",
+            "Saving this organization's local work and restarting PosApp..."), StatusKind.Busy);
+        await RenderAsync();
+        try
+        {
+            await OrganizationProfileSwitcher.SwitchAndRestartAsync(
+                _profiles, _sync, profileId, createProfile);
+        }
+        catch (Exception exception)
+        {
+            App.LogError("Switch organization profile", exception);
+            ShowOperationFailure(Text("Cloud_ProfileRestartFailed",
+                "PosApp could not restart into the selected organization profile. The current profile is still active."));
+            _busy = false;
+            AccountTabs.IsEnabled = CloudDeploymentSettings.IsConfigured;
+            BusyBar.Visibility = Visibility.Collapsed;
+            LoadOrganizationProfiles();
+        }
     }
 
     private StoreSettings BuildRequestedStoreSettings()

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0 — Isolated multi-organization profiles
+
+- Added local organization profiles so one Windows installation can create, sign in to, and switch among multiple cloud organizations without mixing tenant data.
+- Kept existing installations in a backward-compatible `legacy` profile without moving their SQLite database, backups, device identity, pending outbox, or DPAPI token file.
+- Gave every additional organization a separate SQLite database, backup/restore scope, device ID, offline users and PINs, synchronization cursor/outbox, and DPAPI-encrypted cloud-session file.
+- Made successful-version markers profile-specific so every organization receives its own validated pre-migration backup on first launch after an application upgrade.
+- Added organization profile selectors and **Add organization** / **Switch** actions to onboarding and Online account & sync, with a best-effort pre-switch sync and a process restart that keeps EF Core bound to one tenant database for its entire lifetime.
+- Preserved unsynchronized offline work when switching profiles; an unavailable Worker or Turso service cannot erase or transfer the original profile's outbox.
+- Updated the Worker account portal with **Create another organization**, fresh cross-tenant browser device identities, remembered non-secret browser device mappings, and a safe retry when an existing device belongs to a different tenant.
+- Added English and Bengali profile UI text, profile-isolation tests, portal regression checks, README usage instructions, architecture/security/troubleshooting guidance, and consistent version 2.1.0 metadata.
+
 ## 2.0.21 — UTC-safe synchronization timestamps
 
 - Fixed store-configuration and other pending uploads being rejected with `VALIDATION_ERROR: clientTimestampUtc must be a UTC timestamp` after SQLite materialized an operation timestamp with `DateTimeKind.Unspecified`.

@@ -13,24 +13,30 @@ public sealed class CloudAccountService : ICloudAccountService
     private readonly CloudSessionManager _session;
     private readonly ICloudSyncService _sync;
     private readonly IBackupService _backup;
+    private readonly LocalOrganizationProfileStore _profiles;
 
     public CloudAccountService(
         IDbContextFactory<AppDbContext> dbFactory,
         CloudApiClient api,
         CloudSessionManager session,
         ICloudSyncService sync,
-        IBackupService backup)
+        IBackupService backup,
+        LocalOrganizationProfileStore profiles)
     {
         _dbFactory = dbFactory;
         _api = api;
         _session = session;
         _sync = sync;
         _backup = backup;
+        _profiles = profiles;
     }
 
     public async Task InitializeCachedSessionAsync(CancellationToken cancellationToken = default)
     {
         await _session.InitializeAsync(cancellationToken);
+        if (_session.Account is { } account && !string.IsNullOrWhiteSpace(account.TenantId))
+            _profiles.UpdateActiveProfile(account.TenantId, account.TenantName,
+                account.CurrentStoreName, string.Empty);
         if (_session.IsSignedIn)
             await _sync.StartAsync(cancellationToken);
     }
@@ -100,12 +106,15 @@ public sealed class CloudAccountService : ICloudAccountService
         CancellationToken cancellationToken = default)
     {
         ValidateLoginRequest(request);
+        // A linked profile must never be repurposed for another tenant. The UI
+        // creates and restarts into an empty isolated profile before invoking
+        // this method for an additional organization.
         await using (var existingDb = await _dbFactory.CreateDbContextAsync(cancellationToken))
         {
             if (await existingDb.CloudAccountStates.AsNoTracking()
                     .AnyAsync(value => value.TenantId != string.Empty, cancellationToken))
                 throw new InvalidOperationException(
-                    "This installation is already linked to an online organization. Use its account or reconcile a different local database.");
+                    "This organization profile is already linked. Select Add organization to create a separate protected profile.");
         }
         if (string.IsNullOrWhiteSpace(request.OrganizationName) || request.OrganizationName.Trim().Length > 160)
             throw new ArgumentException("Organization name is required and must be 160 characters or fewer.");
@@ -233,6 +242,8 @@ public sealed class CloudAccountService : ICloudAccountService
         state.UpdatedAtUtc = DateTime.UtcNow;
         db.SuppressSyncCapture = true;
         await db.SaveChangesAsync(cancellationToken);
+        _profiles.UpdateActiveProfile(state.TenantId, state.TenantName,
+            state.CurrentStoreName, string.Empty);
         _session.UpdateAccount(state);
         await _sync.StartAsync(cancellationToken);
         await _sync.SyncNowAsync(true, cancellationToken);
@@ -458,6 +469,8 @@ public sealed class CloudAccountService : ICloudAccountService
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             committed = true;
+            _profiles.UpdateActiveProfile(result.OrganizationId, result.OrganizationName,
+                result.Store.Name, result.User.Username);
             await _session.SetAuthenticatedAsync(state, result.Tokens, result.User, cancellationToken);
             if (setupComplete)
             {

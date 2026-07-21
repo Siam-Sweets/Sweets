@@ -144,6 +144,9 @@ public partial class App : Application
 
         try
         {
+            var runningProfile = new LocalOrganizationProfileStore().GetProfiles()
+                .Single(profile => profile.Id == DbPathResolver.CurrentProfileId());
+            Log($"Organization profile: {runningProfile.DisplayName} ({runningProfile.Id})");
             var preRestoreBackup = DbPathResolver.ApplyPendingRestore();
             if (preRestoreBackup != null)
                 Log($"Pending restore applied. Previous database preserved at: {preRestoreBackup}");
@@ -334,6 +337,7 @@ public partial class App : Application
         services.AddTransient<ICatalogTransferService, CatalogTransferService>();
         services.AddSingleton<IBackupService, BackupService>();
         services.AddSingleton<IUpdateService, SafeUpdateService>();
+        services.AddSingleton<LocalOrganizationProfileStore>();
         services.AddSingleton<ISecureTokenStore, DpapiTokenStore>();
         services.AddSingleton<CloudSessionManager>();
         services.AddSingleton<CloudApiClient>();

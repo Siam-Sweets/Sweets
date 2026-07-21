@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v2.0.19) - leave empty for dev build'
+        description: 'Version tag (e.g. v2.1.0) - leave empty for dev build'
         required: false
         default: ''
 
@@ -229,8 +229,10 @@ jobs:
           2. Verify that Windows shows the expected PosApp publisher. If Windows
              cannot verify the publisher, obtain a signed installer from the trusted
              PosApp release source instead of bypassing the warning.
-          3. First run will create the database in:
+          3. The first organization keeps its database in:
              %LOCALAPPDATA%\PosApp\posapp.db
+             Additional organizations use isolated databases under:
+             %LOCALAPPDATA%\PosApp\Profiles\<profile-id>\posapp.db
           4. Sign in to an existing online organization or create one, then let
              the complete initial synchronization finish before cashier login.
 
