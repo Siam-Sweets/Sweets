@@ -312,7 +312,7 @@ public sealed class OutboxTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task FreshOrganizationSeedsOneCompleteSynchronizedStoreSnapshot()
+    public async Task FreshOrganizationStartsFromAnEmptyDownloadedCache()
     {
         _db.SuppressSyncCapture = true;
         await DbSeeder.SeedAsync(_db);
@@ -361,26 +361,20 @@ public sealed class OutboxTests : IAsyncLifetime
             AutomaticBackupEnabled = true
         };
 
-        Assert.True(await setup.CompleteOnlineSetupAsync(
+        Assert.False(await setup.CompleteOnlineSetupAsync(
             authentication,
             createdOrganization: true,
             initialStoreSettings: requestedSettings,
             includeSampleProducts: true));
 
-        Assert.Equal(6, await _db.Categories.CountAsync());
-        Assert.Equal(2, await _db.Taxes.CountAsync());
-        Assert.Equal(3, await _db.Discounts.CountAsync());
-        Assert.Equal(15, await _db.Products.CountAsync());
-        var storedSettings = await new SettingsService(_db).GetStoreSettingsAsync();
-        Assert.Equal("Chattogram Branch", storedSettings.StoreName);
-        Assert.Equal("01234567890", storedSettings.Phone);
-        Assert.Equal("Chattogram", storedSettings.Address);
-        Assert.Equal("bn", storedSettings.Language);
-        Assert.Equal("Dark", storedSettings.Theme);
+        Assert.Empty(await _db.Categories.ToListAsync());
+        Assert.Empty(await _db.Taxes.ToListAsync());
+        Assert.Empty(await _db.Discounts.ToListAsync());
+        Assert.Empty(await _db.Products.ToListAsync());
 
-        // A restart loses the transient created-organization flag. The local
-        // preparation marker must retain the protected full-upload path.
-        Assert.True(await setup.CompleteOnlineSetupAsync(
+        // A restart also remains download-only. No stale migration marker may
+        // turn a new online organization into a local snapshot upload.
+        Assert.False(await setup.CompleteOnlineSetupAsync(
             authentication,
             createdOrganization: false));
         Assert.False(await setup.IsSetupCompleteAsync());
@@ -390,7 +384,7 @@ public sealed class OutboxTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task LegacyLocalStoreIsPreservedForProtectedInitialOnlineMigration()
+    public async Task LegacyLocalStoreIsDiscardedBeforeOnlineOnlyDownload()
     {
         _db.SuppressSyncCapture = true;
         await DbSeeder.SeedAsync(_db);
@@ -443,12 +437,11 @@ public sealed class OutboxTests : IAsyncLifetime
                 CurrencySymbol = "৳"
             });
 
-        Assert.True(requiresInitialMigration);
-        Assert.Equal(2, await _db.Users.CountAsync());
-        Assert.Single(await _db.Customers.Where(value => value.Name == "Existing Customer").ToListAsync());
-        var settings = await new SettingsService(_db).GetStoreSettingsAsync();
-        Assert.Equal("Feni Branch", settings.StoreName);
-        Assert.Equal("Feni, Bangladesh", settings.Address);
+        Assert.False(requiresInitialMigration);
+        Assert.Single(await _db.Users.ToListAsync());
+        Assert.Empty(await _db.Customers.ToListAsync());
+        Assert.Empty(await _db.Categories.ToListAsync());
+        Assert.Empty(await _db.Settings.Where(value => !value.Key.StartsWith("app:")).ToListAsync());
     }
 
     [Fact]

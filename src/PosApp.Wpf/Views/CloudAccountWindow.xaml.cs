@@ -27,7 +27,6 @@ public partial class CloudAccountWindow : Window
 
     private readonly ICloudAccountService _accounts;
     private readonly ISetupService _setup;
-    private readonly ICloudMigrationService _migration;
     private readonly ICloudSyncService _sync;
     private readonly ISettingsService _settings;
     private bool _busy;
@@ -37,7 +36,6 @@ public partial class CloudAccountWindow : Window
     public CloudAccountWindow(
         ICloudAccountService accounts,
         ISetupService setup,
-        ICloudMigrationService migration,
         ICloudSyncService sync,
         ISettingsService settings)
     {
@@ -45,7 +43,6 @@ public partial class CloudAccountWindow : Window
         ConstrainToWorkingArea();
         _accounts = accounts;
         _setup = setup;
-        _migration = migration;
         _sync = sync;
         _settings = settings;
         Loaded += CloudAccountWindow_Loaded;
@@ -339,32 +336,35 @@ public partial class CloudAccountWindow : Window
             "Preparing this computer for the online organization..."), StatusKind.Busy);
         await RenderAsync();
 
-        var requiresInitialMigration = await _setup.CompleteOnlineSetupAsync(
+        await _setup.CompleteOnlineSetupAsync(
             authentication,
             CreatedOrganization,
             _requestedStoreSettings,
             _includeSampleProducts);
 
         await _accounts.InitializeCachedSessionAsync();
-        if (requiresInitialMigration)
-        {
-            SetStatus(Text("Cloud_UploadingCompleteStore",
-                "Uploading the complete local store to the online organization..."), StatusKind.Busy);
-            await RenderAsync();
-            await _migration.UploadExistingDataAsync();
-        }
-        else
-        {
-            SetStatus(Text("Cloud_DownloadingCompleteStore",
-                "Downloading all organization data to this computer..."), StatusKind.Busy);
-            await RenderAsync();
-            var status = await _sync.SyncNowAsync(true);
-            if (status.State != "up_to_date" || status.PendingUploadCount != 0 || status.ConflictCount != 0)
-                throw new InvalidOperationException(Text("Cloud_InitialDownloadIncomplete",
-                    "The complete organization download did not finish. Sign in again to resume after checking the connection."));
+        SetStatus(Text("Cloud_DownloadingCompleteStore",
+            "Downloading all organization data to this computer..."), StatusKind.Busy);
+        await RenderAsync();
 
-            await EnsureStoreConfigurationAsync(authentication.Store.Name);
+        var status = await _sync.SyncNowAsync(true);
+        if (status.State != "up_to_date" || status.PendingUploadCount != 0 || status.ConflictCount != 0)
+        {
+            var detail = string.Join(" • ", new[]
+            {
+                status.LastErrorCode,
+                status.LastErrorMessage,
+                string.IsNullOrWhiteSpace(status.LastRequestId)
+                    ? null
+                    : $"{Text("Cloud_RequestId", "Request ID")}: {status.LastRequestId}"
+            }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
+                ? Text("Cloud_InitialDownloadIncomplete",
+                    "The complete organization download did not finish. Sign in again to resume after checking the connection.")
+                : detail);
         }
+
+        await EnsureStoreConfigurationAsync(authentication.Store.Name, _requestedStoreSettings);
 
         await _setup.FinalizeOnlineSetupAsync();
         var settings = await _settings.GetStoreSettingsAsync();
@@ -376,13 +376,14 @@ public partial class CloudAccountWindow : Window
         await RenderAsync();
     }
 
-    private async Task EnsureStoreConfigurationAsync(string storeName)
+    private async Task EnsureStoreConfigurationAsync(string storeName, StoreSettings? requestedSettings)
     {
         if (!string.IsNullOrWhiteSpace(await _settings.GetAsync("store:config")))
             return;
 
-        var fallback = new StoreSettings { StoreName = storeName.Trim() };
-        await _settings.SetStoreSettingsAsync(fallback);
+        var settings = requestedSettings ?? new StoreSettings();
+        settings.StoreName = storeName.Trim();
+        await _settings.SetStoreSettingsAsync(settings);
         var status = await _sync.SyncNowAsync(true);
         if (status.State != "up_to_date" || status.PendingUploadCount != 0)
             throw new InvalidOperationException(Text("Cloud_InitialDownloadIncomplete",

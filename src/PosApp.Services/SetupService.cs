@@ -34,7 +34,7 @@ public sealed class SetupService : ISetupService
             return false;
 
         // Older releases could mark a completely local setup as finished. From
-        // 2.0.15 onward that marker is valid only when this database is linked to
+        // 2.0.16 onward that marker is valid only when this database is linked to
         // a real organization and store.
         return await _db.CloudAccountStates.AsNoTracking().AnyAsync(state =>
             state.TenantId != string.Empty && state.CurrentStoreId != string.Empty);
@@ -56,6 +56,11 @@ public sealed class SetupService : ISetupService
             string.IsNullOrWhiteSpace(authentication.Store.Name))
             throw new InvalidOperationException("The online account did not provide an assigned store.");
 
+        // Online-only onboarding never uploads an old local bootstrap database.
+        // Until setup is finalized, every business row is disposable cache state.
+        // Clearing it also recovers installations left behind by an interrupted
+        // 2.0.16 migration attempt and guarantees that sign-in starts from the
+        // authoritative organization snapshot in Turso.
         var previousBypassStoreFilter = _db.BypassStoreFilter;
         var previousSuppressSyncCapture = _db.SuppressSyncCapture;
         _db.BypassStoreFilter = true;
@@ -63,69 +68,44 @@ public sealed class SetupService : ISetupService
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
+            await RemoveUnlinkedBootstrapStateAsync(currentUser.Id);
+
             var prepared = await _db.Settings.IgnoreQueryFilters()
                 .SingleOrDefaultAsync(value => value.Key == OnlineSetupPreparedKey);
-            var preparation = ReadPreparation(prepared?.Value);
-            var resuming = string.Equals(
-                preparation?.OrganizationId,
-                authentication.OrganizationId,
-                StringComparison.OrdinalIgnoreCase);
-
-            // This is evaluated after authentication has created/updated the
-            // current local user. Exclude that one user so a genuinely fresh
-            // device remains a download-only onboarding path.
-            var existingLocalData = await HasExistingLocalStoreDataAsync(currentUser.Id);
-            var requiresInitialMigration = resuming
-                ? preparation!.RequiresInitialMigration
-                : createdOrganization || existingLocalData;
-
-            if (!resuming && !requiresInitialMigration)
-            {
-                // A new device joining an existing organization must begin from
-                // a clean synchronized working copy. There is no offline setup or
-                // bootstrap catalog to merge with the server.
-                await RemoveUnlinkedBootstrapStateAsync(currentUser.Id);
-            }
-
-            if (!resuming && createdOrganization && !existingLocalData)
-            {
-                var settings = initialStoreSettings ?? new StoreSettings();
-                settings.StoreName = authentication.Store.Name.Trim();
-                await DbSeeder.SeedOnlineOrganizationDefaultsAsync(_db, settings);
-
-                if (includeSampleProducts)
-                    await DbSeeder.SeedSampleProductsAsync(_db);
-            }
-            else if (!resuming && requiresInitialMigration)
-            {
-                // An older local installation is being linked online. Preserve
-                // its real catalog and transactions exactly as they are; only
-                // apply the store details entered in the online account form.
-                var settings = initialStoreSettings ?? await ReadUnlinkedStoreSettingsAsync();
-                settings.StoreName = authentication.Store.Name.Trim();
-                await UpsertUnlinkedStoreSettingsAsync(settings);
-            }
-
             var preparationJson = JsonSerializer.Serialize(new OnlineSetupPreparation(
                 authentication.OrganizationId,
-                requiresInitialMigration));
+                RequiresInitialMigration: false));
             if (prepared == null)
-            {
-                _db.Settings.Add(new Setting
-                {
-                    Key = OnlineSetupPreparedKey,
-                    Value = preparationJson
-                });
-            }
+                _db.Settings.Add(new Setting { Key = OnlineSetupPreparedKey, Value = preparationJson });
             else
             {
                 prepared.Value = preparationJson;
                 prepared.UpdatedAt = DateTime.UtcNow;
             }
 
+            var staleOperations = await _db.SyncOutboxOperations.ToListAsync();
+            var staleConflicts = await _db.SyncConflicts.ToListAsync();
+            var staleCursors = await _db.SyncCursorStates.ToListAsync();
+            var staleIdentities = await _db.SyncIdentities
+                .Where(identity => identity.EntityType != "users" || identity.LocalId != currentUser.Id)
+                .ToListAsync();
+            _db.SyncOutboxOperations.RemoveRange(staleOperations);
+            _db.SyncConflicts.RemoveRange(staleConflicts);
+            _db.SyncCursorStates.RemoveRange(staleCursors);
+            _db.SyncIdentities.RemoveRange(staleIdentities);
+
+            var state = await _db.CloudAccountStates.SingleAsync();
+            state.ActiveMigrationId = null;
+            state.ActiveMigrationStoreId = null;
+            state.ActiveMigrationBackupPath = null;
+            state.IsMigrationSnapshotQueued = false;
+            state.RequiresReconciliation = false;
+            state.LastServerCursor = 0;
+            state.UpdatedAtUtc = DateTime.UtcNow;
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
-            return requiresInitialMigration;
+            return false;
         }
         catch
         {
@@ -209,17 +189,37 @@ public sealed class SetupService : ISetupService
 
     private async Task RemoveUnlinkedBootstrapStateAsync(int authenticatedUserId)
     {
+        // Delete in dependency order. These rows are an unfinished local cache,
+        // not authoritative business data: online-only onboarding always
+        // rebuilds them from the selected organization.
+        var deleteStatements = new[]
+        {
+            "DELETE FROM \"CashMovements\"",
+            "DELETE FROM \"SalePayments\"",
+            "DELETE FROM \"SaleItems\"",
+            "DELETE FROM \"PurchaseItems\"",
+            "DELETE FROM \"StockTransactions\"",
+            "DELETE FROM \"Expenses\"",
+            "DELETE FROM \"Sales\"",
+            "DELETE FROM \"PurchaseDocuments\"",
+            "DELETE FROM \"CashSessions\"",
+            "DELETE FROM \"Products\"",
+            "DELETE FROM \"Categories\"",
+            "DELETE FROM \"Taxes\"",
+            "DELETE FROM \"Discounts\"",
+            "DELETE FROM \"Customers\"",
+            "DELETE FROM \"Suppliers\""
+        };
+        foreach (var statement in deleteStatements)
+            await _db.Database.ExecuteSqlRawAsync(statement);
+
+        await _db.Database.ExecuteSqlRawAsync(
+            "DELETE FROM \"Settings\" WHERE \"Key\" NOT LIKE 'app:%'");
+
         var unusedUsers = await _db.Users.IgnoreQueryFilters()
             .Where(user => user.Id != authenticatedUserId)
             .ToListAsync();
         _db.Users.RemoveRange(unusedUsers);
-
-        _db.Discounts.RemoveRange(await _db.Discounts.IgnoreQueryFilters().ToListAsync());
-        _db.Taxes.RemoveRange(await _db.Taxes.IgnoreQueryFilters().ToListAsync());
-        _db.Categories.RemoveRange(await _db.Categories.IgnoreQueryFilters().ToListAsync());
-        _db.Settings.RemoveRange(await _db.Settings.IgnoreQueryFilters()
-            .Where(setting => !setting.Key.StartsWith("app:"))
-            .ToListAsync());
     }
 
 

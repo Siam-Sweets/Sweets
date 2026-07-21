@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.16 — Online onboarding migration-state recovery
+
+- Removed the initial local-to-cloud migration branch from first-run onboarding. New installations now always treat Turso as authoritative and download the complete organization snapshot.
+- Cleared stale bootstrap rows, pending outbox operations, conflicts, identities, cursors, and interrupted migration markers before the first full download.
+- Preserved only the authenticated local user mapping and device-local `app:` settings while rebuilding the synchronized cache.
+- Applied organization-creation store details through normal synchronized settings after the initial download instead of through the migration snapshot.
+- Added exact synchronization error code, message, and request ID reporting when onboarding cannot complete.
+
 ## 2.0.15 — Online-only onboarding and complete initial synchronization
 
 - Removed the independent offline setup wizard and its local store, administrator, currency, receipt, backup, and sample-catalog form.
@@ -10,7 +18,7 @@
 - Preserved older local databases through the reviewed cloud-empty migration and safety-backup path instead of silently deleting or merging their users, catalog, inventory, and transaction history.
 - Added tests for fresh existing-organization downloads, complete new-organization snapshot seeding, resumable uploads, and preservation of legacy local data.
 - Removed unused setup views, DTOs, service methods, dependency registrations, and English/Bengali setup strings.
-- Updated application, installer, cloud client, Worker package, tests, README, architecture, deployment, security, and release metadata to version 2.0.15.
+- Updated application, installer, cloud client, Worker package, tests, README, architecture, deployment, security, and release metadata to version 2.0.16.
 
 ## 2.0.14 — Reliable public status-page deployment verification
 

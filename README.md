@@ -1,6 +1,6 @@
 # PosApp 2.0 - Offline-first online Point of Sale
 
-A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.15** preserves the complete v1.4.24 desktop application and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
+A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.16** preserves the complete v1.4.24 desktop application and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
 
 ## Offline-first boundary
 
@@ -82,11 +82,11 @@ dotnet run --project src/PosApp.Wpf/PosApp.Wpf.csproj
 
 On first run, the app creates only the device-local SQLite schema at `%LOCALAPPDATA%\PosApp\posapp.db`, then opens the online account window. There is no local/offline setup wizard and no independent local administrator. The user must either **Sign in** to an existing organization or **Create organization**. The account form also creates the device-only offline PIN used for cached login after onboarding.
 
-PosApp does not open the cashier login until the complete initial synchronization succeeds. A new device signing in downloads the authorized store from cursor zero, including users, store settings, catalog, customers, suppliers, inventory, purchases, sales, payments, register data, discounts, taxes, and synchronization metadata. A newly created organization builds its selected store settings, standard categories/taxes/discounts, and optional sample products, then uploads that entire snapshot through the protected cloud-empty migration lease.
+PosApp does not open the cashier login until the complete initial synchronization succeeds. Both a newly created organization and an existing organization start from a clean device cache and download the authorized store from cursor zero, including users, store settings, catalog, customers, suppliers, inventory, purchases, sales, payments, register data, discounts, taxes, and synchronization metadata. Store details entered during organization creation are then saved through the normal synchronized settings channel.
 
-Online onboarding is resumable and two-phase: a device-local preparation marker is written first, while `app:setup-complete` is written only after the protected upload or full download finishes with no pending operations or conflicts. Neither marker is synchronized. Existing local databases from older releases are preserved, backed up, and migrated through the same reviewed initial-migration path instead of being silently discarded or merged.
+Online onboarding is resumable and two-phase: a device-local preparation marker is written first, while `app:setup-complete` is written only after the full download and any initial synchronized settings upload finish with no pending operations or conflicts. Neither marker is synchronized. Before setup completes, local business rows are treated only as disposable cache state; interrupted migration/outbox state from an earlier build is cleared automatically so it cannot block sign-in.
 
-When an already-configured v1.x database is linked, PosApp first creates a verified backup and pauses all push/pull activity. The administrator must explicitly upload that local snapshot to a server-verified empty organization or replace the local synchronized working copy with server data. It never silently combines populated local and cloud datasets.
+PosApp no longer offers first-run local database migration or offline setup. Turso is authoritative during onboarding, and the local SQLite database becomes the offline working cache only after the organization snapshot has been verified.
 
 ### Publish a Single-File EXE Locally
 ```powershell
@@ -116,7 +116,7 @@ $env:POSAPP_CLOUD_API_BASE_URL = "https://your-worker.example.workers.dev"
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-2.0.15-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-2.0.16-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -142,21 +142,21 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.15-dev.27-Setup.exe` with resource version `2.0.15.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.16-dev.27-Setup.exe` with resource version `2.0.16.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v2.0.15`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v2.0.16`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v2.0.15
-git push origin v2.0.15
+git tag v2.0.16
+git push origin v2.0.16
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.15`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.16`.
 
 `.github/workflows/deploy-worker.yml` independently type-checks and tests the Worker, validates all ordered Turso migrations, performs a Wrangler dry run, applies every pending migration to the selected Turso database, verifies schema version 4 and required tables/columns, uploads the required Turso and authentication bindings, including the dedicated password pepper, from protected GitHub secrets, and deploys the selected `development` or `production` environment. After deployment it independently waits for `/api/v1/meta`, `/api/v1/diagnostics`, and the public root status page to serve the expected Worker version. It fails unless the Free-plan password verifier, token signing, schema inspection, the complete atomic organization-provisioning batch, and forced rollback verification all pass. The root page exposes machine-readable deployment headers and metadata, while its detailed check cards are rendered from the already-validated diagnostic JSON. Opening the Worker base URL displays the status page instead of returning `AUTH_REQUIRED`. Follow [Cloud setup](docs/CLOUD-SETUP.md) before enabling deployment.
 
