@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1 — WPF organization-profile build correction
+
+- Added the explicit `System.IO` import required by WPF's temporary compilation project for `File.Exists` in `OrganizationProfileSwitcher`.
+- Fixed GitHub Actions build error `CS0103: The name 'File' does not exist in the current context` without changing profile isolation, switching behavior, synchronization, or tenant security.
+- Updated application, installer, cloud client, Worker package, tests, README, workflow examples, and release metadata to version 2.1.1.
+
 ## 2.1.0 — Isolated multi-organization profiles
 
 - Added local organization profiles so one Windows installation can create, sign in to, and switch among multiple cloud organizations without mixing tenant data.
