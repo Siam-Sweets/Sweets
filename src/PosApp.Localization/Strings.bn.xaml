@@ -164,6 +164,12 @@
     <sys:String x:Key="Cloud_ManualSync">সিঙ্ক</sys:String>
     <sys:String x:Key="Cloud_Retry">আবার চেষ্টা</sys:String>
     <sys:String x:Key="Cloud_RequestId">অনুরোধ আইডি</sys:String>
+    <sys:String x:Key="Cloud_DiagnosticId">ডায়াগনস্টিক আইডি</sys:String>
+    <sys:String x:Key="Cloud_DiagnosticLogSaved">ডায়াগনস্টিক লগ</sys:String>
+    <sys:String x:Key="Cloud_DiagnosticUnavailable">পাওয়া যায়নি</sys:String>
+    <sys:String x:Key="Cloud_OpenDiagnosticFolder">লগ ফোল্ডার খুলুন</sys:String>
+    <sys:String x:Key="Cloud_OpenDiagnosticFolderFailed">ডায়াগনস্টিক লগ ফোল্ডার খোলা যায়নি।</sys:String>
+    <sys:String x:Key="Cloud_SyncFailureSummary">অবস্থা: {0} • অপেক্ষমাণ আপলোড: {1} • দ্বন্দ্ব: {2} • ডাউনলোড: {3} • কার্সর: {4}</sys:String>
     <sys:String x:Key="Cloud_CurrentAccount">বর্তমান অনলাইন অ্যাকাউন্ট</sys:String>
     <sys:String x:Key="Cloud_LastSync">সর্বশেষ সফল সিঙ্ক</sys:String>
     <sys:String x:Key="Cloud_PendingUploads">অপেক্ষমাণ আপলোড</sys:String>

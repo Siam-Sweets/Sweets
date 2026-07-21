@@ -37,6 +37,21 @@ The UI maps Worker codes to localized, user-safe messages and retains the reques
 | `PARTIAL_BATCH_FAILURE` | Some operations were accepted while others failed | Accepted rows remain idempotent; resolve the listed failed/conflict rows and Retry. |
 | `RESTORE_RECONCILIATION_REQUIRED` | A restored or newly linked local database may differ from cloud data | Explicitly use server state, or upload local data only after proving the cloud organization is empty. |
 
+## Desktop onboarding and sync diagnostic log
+
+Every online sign-in and organization-creation attempt now receives a short diagnostic ID. If setup does not finish, the dialog shows that ID, the exact log path, the current sync state, pending-upload and conflict counts, downloaded-change count, and cursor. Select **Open log folder** directly from the account window.
+
+The current log is `%LOCALAPPDATA%\PosApp\Logs\cloud-sync.jsonl`. It contains one JSON object per line and rotates at 2 MiB to `cloud-sync.jsonl.1` through `.4`. Entries for the same attempt share `attemptId`. To isolate one attempt in PowerShell, replace the sample ID with the value displayed by PosApp:
+
+```powershell
+Get-Content "$env:LOCALAPPDATA\PosApp\Logs\cloud-sync.jsonl" |
+  Select-String '"attemptId":"A1B2C3D4E5F6"'
+```
+
+The log records stage names, client/API/schema versions, non-sensitive queue summaries, retry counts, cursor progress, Worker request IDs, and sanitized exception metadata. It does not intentionally record usernames, emails, passwords, PINs, access/refresh tokens, authorization headers, cookies, request payloads, SQL, customer fields, phone numbers, or addresses. Log writing is best-effort and can never block the local register.
+
+For support, provide the diagnostic ID and only the matching JSON lines. If an entry contains `requestId`, use that value to correlate with Cloudflare Worker logs. Do not send `cloud-session.dat`, `.dev.vars`, `posapp.db`, Turso credentials, screenshots containing passwords, or an unreviewed complete log archive.
+
 ## Worker deployment checks
 
 1. Run `npm ci`, `npm run check`, and `npm test` in `cloud/worker`.

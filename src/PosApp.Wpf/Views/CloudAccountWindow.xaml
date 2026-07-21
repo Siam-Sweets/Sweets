@@ -201,6 +201,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <ProgressBar x:Name="BusyBar" Height="3" IsIndeterminate="True"
@@ -209,7 +210,12 @@
                                Foreground="{DynamicResource TextMutedBrush}" FontSize="12"
                                TextWrapping="Wrap"/>
                 </StackPanel>
-                <Button Grid.Column="1" Content="{DynamicResource Common_Cancel}"
+                <Button x:Name="OpenDiagnosticFolderButton" Grid.Column="1"
+                        Content="{DynamicResource Cloud_OpenDiagnosticFolder}"
+                        Style="{StaticResource OutlineButton}" Padding="14,9" Margin="16,0,0,0"
+                        VerticalAlignment="Center" Visibility="Collapsed"
+                        Click="OpenDiagnosticFolder_Click"/>
+                <Button Grid.Column="2" Content="{DynamicResource Common_Cancel}"
                         Style="{StaticResource OutlineButton}" Padding="18,9" Margin="16,0,0,0"
                         VerticalAlignment="Center" Click="Cancel_Click"/>
             </Grid>

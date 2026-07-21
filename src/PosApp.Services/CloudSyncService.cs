@@ -42,7 +42,10 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
         {
             if (_periodicTask != null) return;
             _periodicCancellation = new CancellationTokenSource();
-            _periodicTask = RunPeriodicAsync(_periodicCancellation.Token);
+            // A periodic loop started during sign-in must not retain that
+            // sign-in's AsyncLocal diagnostic ID after the UI attempt ends.
+            using (CloudDiagnosticLogger.SuppressScope())
+                _periodicTask = RunPeriodicAsync(_periodicCancellation.Token);
             NetworkChange.NetworkAvailabilityChanged += NetworkAvailabilityChanged;
             SyncCaptureContext.OutboxChanged += OutboxChanged;
         }
@@ -88,22 +91,51 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
             await _syncGate.WaitAsync(cancellationToken);
         else if (!await _syncGate.WaitAsync(TimeSpan.Zero, cancellationToken))
             return CurrentStatus;
+        var currentStage = "gate_acquired";
         try
         {
+            if (CloudDiagnosticLogger.HasActiveAttempt)
+                await CloudDiagnosticLogger.WriteAsync("sync.gate_acquired", details:
+                    new Dictionary<string, object?> { ["userInitiated"] = userInitiated });
+
             var account = _session.Account;
+            currentStage = "session_validation";
             if (!_session.IsSignedIn || account == null)
-                return await SetStateAsync("signed_out", false, "AUTH_REQUIRED", null, cancellationToken);
+            {
+                var signedOut = await SetStateAsync("signed_out", false, "AUTH_REQUIRED", null,
+                    cancellationToken);
+                await WriteStatusDiagnosticsAsync("sync.session_unavailable", signedOut, "blocked",
+                    cancellationToken);
+                return signedOut;
+            }
+            currentStage = "cursor_load";
             await LoadStoredCursorAsync(account, cancellationToken);
             if (account.IsDeviceRevoked)
-                return await SetStateAsync("revoked", false, "DEVICE_REVOKED", null, cancellationToken);
+            {
+                var revoked = await SetStateAsync("revoked", false, "DEVICE_REVOKED", null,
+                    cancellationToken);
+                await WriteStatusDiagnosticsAsync("sync.device_revoked", revoked, "blocked",
+                    cancellationToken);
+                return revoked;
+            }
             if (account.RequiresReconciliation)
-                return await SetStateAsync("reconciliation_required", false,
+            {
+                var reconciliation = await SetStateAsync("reconciliation_required", false,
                     "RESTORE_RECONCILIATION_REQUIRED", null, cancellationToken);
+                await WriteStatusDiagnosticsAsync("sync.reconciliation_required", reconciliation, "blocked",
+                    cancellationToken);
+                return reconciliation;
+            }
             // Windows network-availability notifications are only a scheduling
             // hint. They can report offline while HTTPS to the Worker is already
             // usable, so let the bounded API request determine connectivity.
+            currentStage = "interrupted_upload_recovery";
             await RecoverInterruptedUploadsAsync(account, cancellationToken);
-            await SetStateAsync("syncing", true, null, null, cancellationToken);
+            currentStage = "sync_state_update";
+            var syncing = await SetStateAsync("syncing", true, null, null, cancellationToken);
+            if (CloudDiagnosticLogger.HasActiveAttempt)
+                await WriteStatusDiagnosticsAsync("sync.started", syncing, "started", cancellationToken);
+            currentStage = "server_compatibility_check";
             var meta = await _api.GetAuthorizedAsync<ServerMetaEnvelope>("/api/v1/meta", cancellationToken);
             if (meta.ApiVersion != CloudProtocol.ApiVersion ||
                 meta.MinimumClientSchemaVersion > CloudProtocol.ClientSchemaVersion ||
@@ -112,12 +144,26 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
                     "This PosApp version must be updated before it can synchronize.",
                     System.Net.HttpStatusCode.Conflict);
 
-            if (!account.RequiresReconciliation)
-                await PushPendingAsync(account, cancellationToken);
+            if (CloudDiagnosticLogger.HasActiveAttempt)
+                await CloudDiagnosticLogger.WriteAsync("sync.server_compatibility_validated", "success",
+                    new Dictionary<string, object?>
+                    {
+                        ["serverApiVersion"] = meta.ApiVersion,
+                        ["serverSchemaVersion"] = meta.SchemaVersion,
+                        ["minimumClientSchemaVersion"] = meta.MinimumClientSchemaVersion
+                    });
 
+            if (!account.RequiresReconciliation)
+            {
+                currentStage = "push_pending_operations";
+                await PushPendingAsync(account, cancellationToken);
+            }
+
+            currentStage = "pull_server_changes";
             var downloadedChanges = await PullChangesAsync(account, cancellationToken);
             account.LastSuccessfulSyncAtUtc = DateTime.UtcNow;
             account.UpdatedAtUtc = DateTime.UtcNow;
+            currentStage = "persist_sync_completion";
             await using (var db = await _dbFactory.CreateDbContextAsync(cancellationToken))
             {
                 db.SuppressSyncCapture = true;
@@ -125,24 +171,46 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
                 await db.SaveChangesAsync(cancellationToken);
             }
             _session.UpdateAccount(account);
-            return await SetStateAsync(account.RequiresReconciliation ? "reconciliation_required" : "up_to_date",
+            var completed = await SetStateAsync(
+                account.RequiresReconciliation ? "reconciliation_required" : "up_to_date",
                 false, account.RequiresReconciliation ? "RESTORE_RECONCILIATION_REQUIRED" : null,
                 null, cancellationToken, downloadedChanges: downloadedChanges);
+            await WriteStatusDiagnosticsAsync("sync.completed", completed,
+                completed.PendingUploadCount == 0 && completed.ConflictCount == 0 ? "success" : "attention",
+                cancellationToken);
+            return completed;
         }
         catch (CloudApiException exception)
         {
+            await CloudDiagnosticLogger.WriteAsync("sync.api_exception_captured", "error",
+                new Dictionary<string, object?>
+                {
+                    ["failedStage"] = currentStage,
+                    ["errorCode"] = exception.Code,
+                    ["requestId"] = exception.RequestId,
+                    ["httpStatus"] = (int)exception.StatusCode
+                }, exception);
             await HandleSecurityStateAsync(exception, cancellationToken);
-            return await SetStateAsync(MapState(exception.Code), false, exception.Code, exception.Message,
+            var failure = await SetStateAsync(MapState(exception.Code), false, exception.Code, exception.Message,
                 cancellationToken, exception.RequestId);
+            await WriteStatusDiagnosticsAsync("sync.api_failed", failure, "error", cancellationToken, exception);
+            return failure;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            if (CloudDiagnosticLogger.HasActiveAttempt)
+                await CloudDiagnosticLogger.WriteAsync("sync.cancelled", "cancelled");
             throw;
         }
-        catch
+        catch (Exception exception)
         {
-            return await SetStateAsync("error", false, "SYNC_FAILED",
+            await CloudDiagnosticLogger.WriteAsync("sync.unexpected_exception_captured", "error",
+                new Dictionary<string, object?> { ["failedStage"] = currentStage }, exception);
+            var failure = await SetStateAsync("error", false, "SYNC_FAILED",
                 "Synchronization could not be completed. Local work is safe and will be retried.", cancellationToken);
+            await WriteStatusDiagnosticsAsync("sync.unexpected_failure", failure, "error",
+                cancellationToken, exception);
+            return failure;
         }
         finally
         {
@@ -254,6 +322,16 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
                     .Take(CloudProtocol.MaxPushBatch)
                     .ToList();
                 if (pending.Count == 0) return;
+
+                if (CloudDiagnosticLogger.HasActiveAttempt)
+                    await CloudDiagnosticLogger.WriteAsync("sync.push_batch_started", "started",
+                        new Dictionary<string, object?>
+                        {
+                            ["batchNumber"] = batchNumber + 1,
+                            ["operationCount"] = pending.Count,
+                            ["entitySummary"] = GroupSummary(pending.Select(value => value.EntityType)),
+                            ["maximumPreviousAttempts"] = pending.Max(value => value.AttemptCount)
+                        });
                 foreach (var operation in pending)
                 {
                     operation.Status = SyncOutboxStatus.Uploading;
@@ -288,6 +366,22 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
                     cancellationToken);
                 await PersistCursorAsync(account, pulled: false, pushed: true,
                     cancellationToken: cancellationToken);
+
+                if (CloudDiagnosticLogger.HasActiveAttempt)
+                    await CloudDiagnosticLogger.WriteAsync("sync.push_batch_received", "success",
+                        new Dictionary<string, object?>
+                        {
+                            ["batchNumber"] = batchNumber + 1,
+                            ["resultCount"] = response.Results.Count,
+                            ["accepted"] = response.Results.Count(value => value.Accepted),
+                            ["duplicates"] = response.Results.Count(value => value.Duplicate),
+                            ["rejected"] = response.Results.Count(value => !value.Accepted && !value.Duplicate),
+                            ["errorCodeSummary"] = GroupSummary(response.Results
+                                .Where(value => !string.IsNullOrWhiteSpace(value.ErrorCode))
+                                .Select(value => value.ErrorCode!)),
+                            ["serverCursor"] = response.ServerCursor,
+                            ["requestId"] = response.RequestId
+                        });
             }
             catch
             {
@@ -353,8 +447,22 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
             var response = await _api.GetAuthorizedAsync<SyncPullResponse>(
                 $"/api/v1/sync/pull?cursor={account.LastServerCursor}&storeId={Uri.EscapeDataString(account.CurrentStoreId)}&limit={CloudProtocol.MaxPullBatch}",
                 cancellationToken);
-            downloaded += await _applier.ApplyAsync(response.Changes, account.TenantId,
+            var applied = await _applier.ApplyAsync(response.Changes, account.TenantId,
                 account.DeviceId, cancellationToken);
+            downloaded += applied;
+
+            if (CloudDiagnosticLogger.HasActiveAttempt)
+                await CloudDiagnosticLogger.WriteAsync("sync.pull_page_applied", "success",
+                    new Dictionary<string, object?>
+                    {
+                        ["pageNumber"] = page + 1,
+                        ["receivedChanges"] = response.Changes.Count,
+                        ["appliedChanges"] = applied,
+                        ["entitySummary"] = GroupSummary(response.Changes.Select(value => value.EntityType)),
+                        ["nextCursor"] = response.NextCursor,
+                        ["hasMore"] = response.HasMore,
+                        ["requestId"] = response.RequestId
+                    });
             account.LastServerCursor = response.NextCursor;
             await PersistCursorAsync(account, pulled: true, pushed: false,
                 cancellationToken: cancellationToken);
@@ -364,6 +472,66 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
             "More synchronized changes remain on the server. Run synchronization again to continue safely.",
             System.Net.HttpStatusCode.ServiceUnavailable);
     }
+
+    private async Task WriteStatusDiagnosticsAsync(
+        string stage,
+        CloudSyncStatus status,
+        string outcome,
+        CancellationToken cancellationToken,
+        Exception? exception = null)
+    {
+        if (!CloudDiagnosticLogger.HasActiveAttempt && exception == null) return;
+
+        IReadOnlyDictionary<string, object?>? details = null;
+        if (status.PendingUploadCount > 0 || status.ConflictCount > 0 || exception != null)
+        {
+            try { details = await BuildQueueDiagnosticSummaryAsync(cancellationToken); }
+            catch { /* A failed diagnostic query must not change sync behavior. */ }
+        }
+
+        await CloudDiagnosticLogger.WriteStatusAsync(stage, status, outcome, details, exception);
+    }
+
+    private async Task<IReadOnlyDictionary<string, object?>> BuildQueueDiagnosticSummaryAsync(
+        CancellationToken cancellationToken)
+    {
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
+        var outbox = await db.SyncOutboxOperations.AsNoTracking()
+            .Where(value => value.Status == SyncOutboxStatus.Pending ||
+                            value.Status == SyncOutboxStatus.Uploading ||
+                            value.Status == SyncOutboxStatus.Failed ||
+                            value.Status == SyncOutboxStatus.Conflict)
+            .Select(value => new
+            {
+                value.EntityType,
+                value.Status,
+                value.LastErrorCode,
+                value.AttemptCount
+            })
+            .ToListAsync(cancellationToken);
+        var conflicts = await db.SyncConflicts.AsNoTracking()
+            .Where(value => value.Status == SyncConflictStatus.Unresolved)
+            .Select(value => value.EntityType)
+            .ToListAsync(cancellationToken);
+
+        return new Dictionary<string, object?>
+        {
+            ["outboxStatusSummary"] = GroupSummary(outbox.Select(value => value.Status.ToString())),
+            ["outboxEntitySummary"] = GroupSummary(outbox.Select(value => value.EntityType)),
+            ["outboxErrorCodeSummary"] = GroupSummary(outbox
+                .Where(value => !string.IsNullOrWhiteSpace(value.LastErrorCode))
+                .Select(value => value.LastErrorCode!)),
+            ["maximumAttemptCount"] = outbox.Count == 0 ? 0 : outbox.Max(value => value.AttemptCount),
+            ["conflictEntitySummary"] = GroupSummary(conflicts)
+        };
+    }
+
+    private static string GroupSummary(IEnumerable<string> values)
+        => string.Join(",", values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .GroupBy(value => value.Trim(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(group => $"{group.Key}:{group.Count()}"));
 
     private async Task ResetUploadingAsync(
         IReadOnlyList<SyncOutboxOperation> operations,

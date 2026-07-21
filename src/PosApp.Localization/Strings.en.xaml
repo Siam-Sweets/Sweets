@@ -164,6 +164,12 @@
     <sys:String x:Key="Cloud_ManualSync">Sync</sys:String>
     <sys:String x:Key="Cloud_Retry">Retry</sys:String>
     <sys:String x:Key="Cloud_RequestId">Request ID</sys:String>
+    <sys:String x:Key="Cloud_DiagnosticId">Diagnostic ID</sys:String>
+    <sys:String x:Key="Cloud_DiagnosticLogSaved">Diagnostic log</sys:String>
+    <sys:String x:Key="Cloud_DiagnosticUnavailable">Unavailable</sys:String>
+    <sys:String x:Key="Cloud_OpenDiagnosticFolder">Open log folder</sys:String>
+    <sys:String x:Key="Cloud_OpenDiagnosticFolderFailed">The diagnostic log folder could not be opened.</sys:String>
+    <sys:String x:Key="Cloud_SyncFailureSummary">State: {0} • Pending uploads: {1} • Conflicts: {2} • Downloaded: {3} • Cursor: {4}</sys:String>
     <sys:String x:Key="Cloud_CurrentAccount">Current online account</sys:String>
     <sys:String x:Key="Cloud_LastSync">Last successful sync</sys:String>
     <sys:String x:Key="Cloud_PendingUploads">Pending uploads</sys:String>

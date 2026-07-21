@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -32,6 +34,7 @@ public partial class CloudAccountWindow : Window
     private bool _busy;
     private StoreSettings? _requestedStoreSettings;
     private bool _includeSampleProducts;
+    private string? _diagnosticAttemptId;
 
     public CloudAccountWindow(
         ICloudAccountService accounts,
@@ -280,26 +283,53 @@ public partial class CloudAccountWindow : Window
 
     private async Task RunAsync(Func<Task> authenticationOperation, string logContext)
     {
+        _diagnosticAttemptId = CloudDiagnosticLogger.CreateAttemptId();
+        using var diagnosticScope = CloudDiagnosticLogger.BeginScope(_diagnosticAttemptId);
         _busy = true;
         AccountTabs.IsEnabled = false;
         BusyBar.Visibility = Visibility.Visible;
+        OpenDiagnosticFolderButton.Visibility = Visibility.Collapsed;
         SetStatus(Text("Cloud_Connecting", "Connecting securely..."), StatusKind.Busy);
         await RenderAsync();
 
         try
         {
+            await CloudDiagnosticLogger.WriteAsync("onboarding.authentication_started", "started",
+                new Dictionary<string, object?>
+                {
+                    ["operation"] = _requestedStoreSettings != null
+                        ? "create_organization"
+                        : "sign_in",
+                    ["setupAlreadyComplete"] = await _setup.IsSetupCompleteAsync()
+                });
             await authenticationOperation();
             if (AuthenticatedUser == null || AuthenticationResult == null)
                 throw new InvalidOperationException(
                     "The online account did not provide a protected local user profile.");
 
+            await CloudDiagnosticLogger.WriteAsync("onboarding.authentication_completed", "success",
+                new Dictionary<string, object?>
+                {
+                    ["createdOrganization"] = CreatedOrganization,
+                    ["role"] = AuthenticationResult.User.Role,
+                    ["permissionCount"] = AuthenticationResult.User.Permissions?.Count ?? 0
+                });
+
             if (!await _setup.IsSetupCompleteAsync())
                 await CompleteOnlineOnboardingAsync();
 
+            await CloudDiagnosticLogger.WriteAsync("onboarding.completed", "success");
             DialogResult = true;
         }
         catch (CloudApiException exception)
         {
+            await CloudDiagnosticLogger.WriteAsync("onboarding.api_failed", "error",
+                new Dictionary<string, object?>
+                {
+                    ["errorCode"] = exception.Code,
+                    ["requestId"] = exception.RequestId,
+                    ["httpStatus"] = (int)exception.StatusCode
+                }, exception);
             var message = string.IsNullOrWhiteSpace(exception.RequestId)
                 ? FriendlyError(exception.Code, exception.Message)
                 : $"{FriendlyError(exception.Code, exception.Message)} • {Text("Cloud_RequestId", "Request ID")}: {exception.RequestId}";
@@ -307,15 +337,18 @@ public partial class CloudAccountWindow : Window
         }
         catch (ArgumentException exception)
         {
+            await CloudDiagnosticLogger.WriteAsync("onboarding.validation_failed", "error", exception: exception);
             ShowOperationFailure(RuntimeUiText.Translate(exception.Message), MessageBoxImage.Warning);
         }
         catch (InvalidOperationException exception)
         {
+            await CloudDiagnosticLogger.WriteAsync("onboarding.incomplete", "error", exception: exception);
             ShowOperationFailure(RuntimeUiText.Translate(exception.Message), MessageBoxImage.Warning);
         }
         catch (Exception exception)
         {
             App.LogError(logContext, exception);
+            await CloudDiagnosticLogger.WriteAsync("onboarding.unexpected_failure", "error", exception: exception);
             ShowOperationFailure(Text("Cloud_UnexpectedError",
                 "The online account request could not be completed."));
         }
@@ -335,43 +368,40 @@ public partial class CloudAccountWindow : Window
         SetStatus(Text("Cloud_PreparingOnlineSetup",
             "Preparing this computer for the online organization..."), StatusKind.Busy);
         await RenderAsync();
+        await CloudDiagnosticLogger.WriteAsync("onboarding.cache_preparation_started", "started",
+            new Dictionary<string, object?> { ["createdOrganization"] = CreatedOrganization });
 
         // Startup may still be completing a cached-session sync from a previous
         // onboarding attempt. Stop future background scheduling and wait for
         // the active database cycle before resetting the disposable cache.
         await _sync.StopAsync();
+        await CloudDiagnosticLogger.WriteAsync("onboarding.background_sync_stopped", "success");
         await _sync.WaitForIdleAsync();
+        await CloudDiagnosticLogger.WriteAsync("onboarding.sync_idle_confirmed", "success");
 
         await _setup.CompleteOnlineSetupAsync(
             authentication,
             CreatedOrganization,
             _requestedStoreSettings,
             _includeSampleProducts);
+        await CloudDiagnosticLogger.WriteAsync("onboarding.local_cache_prepared", "success");
 
         await _accounts.InitializeCachedSessionAsync();
+        await CloudDiagnosticLogger.WriteAsync("onboarding.cached_session_initialized", "success");
         SetStatus(Text("Cloud_DownloadingCompleteStore",
             "Downloading all organization data to this computer..."), StatusKind.Busy);
         await RenderAsync();
 
+        await CloudDiagnosticLogger.WriteAsync("onboarding.initial_sync_started", "started");
         var status = await _sync.SyncNowAsync(true);
+        await CloudDiagnosticLogger.WriteStatusAsync("onboarding.initial_sync_finished", status,
+            IsComplete(status, requireNoConflicts: true) ? "success" : "incomplete");
         if (status.State != "up_to_date" || status.PendingUploadCount != 0 || status.ConflictCount != 0)
-        {
-            var detail = string.Join(" • ", new[]
-            {
-                status.LastErrorCode,
-                status.LastErrorMessage,
-                string.IsNullOrWhiteSpace(status.LastRequestId)
-                    ? null
-                    : $"{Text("Cloud_RequestId", "Request ID")}: {status.LastRequestId}"
-            }.Where(value => !string.IsNullOrWhiteSpace(value)));
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
-                ? Text("Cloud_InitialDownloadIncomplete",
-                    "The complete organization download did not finish. Sign in again to resume after checking the connection.")
-                : detail);
-        }
+            throw new InvalidOperationException(BuildIncompleteSyncMessage(status));
 
         await EnsureStoreConfigurationAsync(authentication.Store.Name, _requestedStoreSettings);
 
+        await CloudDiagnosticLogger.WriteAsync("onboarding.finalization_started", "started");
         await _setup.FinalizeOnlineSetupAsync();
         var settings = await _settings.GetStoreSettingsAsync();
         App.PublishSettings(settings);
@@ -380,20 +410,56 @@ public partial class CloudAccountWindow : Window
         SetStatus(Text("Cloud_OnlineSetupComplete",
             "Online setup and full synchronization completed successfully."), StatusKind.Normal);
         await RenderAsync();
+        await CloudDiagnosticLogger.WriteAsync("onboarding.finalization_completed", "success");
     }
 
     private async Task EnsureStoreConfigurationAsync(string storeName, StoreSettings? requestedSettings)
     {
         if (!string.IsNullOrWhiteSpace(await _settings.GetAsync("store:config")))
+        {
+            await CloudDiagnosticLogger.WriteAsync("onboarding.store_configuration_present", "success");
             return;
+        }
 
+        await CloudDiagnosticLogger.WriteAsync("onboarding.store_configuration_created", "started");
         var settings = requestedSettings ?? new StoreSettings();
         settings.StoreName = storeName.Trim();
         await _settings.SetStoreSettingsAsync(settings);
         var status = await _sync.SyncNowAsync(true);
+        await CloudDiagnosticLogger.WriteStatusAsync("onboarding.store_configuration_sync_finished", status,
+            IsComplete(status, requireNoConflicts: false) ? "success" : "incomplete");
         if (status.State != "up_to_date" || status.PendingUploadCount != 0)
-            throw new InvalidOperationException(Text("Cloud_InitialDownloadIncomplete",
-                "The complete organization download did not finish. Sign in again to resume after checking the connection."));
+            throw new InvalidOperationException(BuildIncompleteSyncMessage(status));
+    }
+
+    private static bool IsComplete(CloudSyncStatus status, bool requireNoConflicts)
+        => status.State == "up_to_date" && status.PendingUploadCount == 0 &&
+           (!requireNoConflicts || status.ConflictCount == 0);
+
+    private string BuildIncompleteSyncMessage(CloudSyncStatus status)
+    {
+        var summary = string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            Text("Cloud_SyncFailureSummary",
+                "State: {0} • Pending uploads: {1} • Conflicts: {2} • Downloaded: {3} • Cursor: {4}"),
+            status.State,
+            status.PendingUploadCount,
+            status.ConflictCount,
+            status.DownloadedChangeCount,
+            status.Cursor);
+        var detail = string.Join(" • ", new[]
+        {
+            status.LastErrorCode,
+            status.LastErrorMessage,
+            string.IsNullOrWhiteSpace(status.LastRequestId)
+                ? null
+                : $"{Text("Cloud_RequestId", "Request ID")}: {status.LastRequestId}"
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        var message = Text("Cloud_InitialDownloadIncomplete",
+            "The complete organization synchronization did not finish. Sign in again to resume after checking the connection.");
+        return string.IsNullOrWhiteSpace(detail)
+            ? $"{message}\n\n{summary}"
+            : $"{message}\n\n{summary}\n{detail}";
     }
 
     private Task RenderAsync()
@@ -401,10 +467,39 @@ public partial class CloudAccountWindow : Window
 
     private void ShowOperationFailure(string message, MessageBoxImage icon = MessageBoxImage.Error)
     {
-        SetStatus(message, StatusKind.Error);
-        LocalizedMessageBox.Show(this, message,
+        var diagnosticId = _diagnosticAttemptId ?? Text("Cloud_DiagnosticUnavailable", "Unavailable");
+        var diagnosticMessage =
+            $"{message}\n\n{Text("Cloud_DiagnosticId", "Diagnostic ID")}: {diagnosticId}\n" +
+            $"{Text("Cloud_DiagnosticLogSaved", "Diagnostic log")}: {CloudDiagnosticLogger.LogFilePath}";
+        SetStatus($"{message} • {Text("Cloud_DiagnosticId", "Diagnostic ID")}: {diagnosticId}",
+            StatusKind.Error);
+        OpenDiagnosticFolderButton.Visibility = Visibility.Visible;
+        LocalizedMessageBox.Show(this, diagnosticMessage,
             Text("Cloud_AccountTitle", "Online PosApp account"),
             MessageBoxButton.OK, icon);
+    }
+
+    private void OpenDiagnosticFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Directory.CreateDirectory(CloudDiagnosticLogger.LogDirectoryPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = CloudDiagnosticLogger.LogDirectoryPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            App.LogError("Open cloud diagnostic folder", exception);
+            LocalizedMessageBox.Show(this,
+                Text("Cloud_OpenDiagnosticFolderFailed",
+                    "The diagnostic log folder could not be opened."),
+                Text("Cloud_AccountTitle", "Online PosApp account"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void SetStatus(string message, StatusKind kind)

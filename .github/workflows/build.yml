@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v2.0.15) - leave empty for dev build'
+        description: 'Version tag (e.g. v2.0.19) - leave empty for dev build'
         required: false
         default: ''
 
@@ -231,8 +231,8 @@ jobs:
              PosApp release source instead of bypassing the warning.
           3. First run will create the database in:
              %LOCALAPPDATA%\PosApp\posapp.db
-          4. Complete the one-time store and administrator setup, then sign in
-             with the administrator username and PIN you selected.
+          4. Sign in to an existing online organization or create one, then let
+             the complete initial synchronization finish before cashier login.
 
           To remove only the program: delete PosApp.exe. Business data remains in
           %LOCALAPPDATA%\PosApp. Delete that data folder only after making a backup

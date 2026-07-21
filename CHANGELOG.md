@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.19 — Correlated onboarding and synchronization diagnostics
+
+- Added a rotating, structured desktop cloud diagnostic log at `%LOCALAPPDATA%\PosApp\Logs\cloud-sync.jsonl` with one correlation ID for each online sign-in or organization-creation attempt.
+- Recorded the complete onboarding path—authentication, background-sync shutdown, cache preparation, session initialization, server compatibility, batched push, paged pull, settings upload, and final verification—without recording credentials or business payloads.
+- Preserved unexpected synchronization exceptions that were previously swallowed by the generic `SYNC_FAILED` fallback, including the failed stage, exception type, HRESULT, sanitized message, inner error, and stack trace.
+- Added safe outbox diagnostics grouped only by entity, status, structured error code, and retry count, plus conflicts, cursor, downloaded count, and Worker request IDs.
+- Added log rotation at 2 MiB with four retained history files so repeated offline retries cannot grow storage without bound.
+- Added a diagnostic ID, exact log path, detailed sync-state summary, and localized **Open log folder** action to the online-account failure UI.
+- Prevented the periodic background loop from retaining an expired onboarding diagnostic scope after the sign-in window closes.
+- Documented how to collect and correlate desktop diagnostics with Cloudflare Worker request IDs while keeping tokens, passwords, PINs, SQL, payloads, and customer data out of support material.
+- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.19.
+
 ## 2.0.18 — Account portal and deterministic onboarding synchronization
 
 - Published the tenant-scoped browser account portal at the Worker root URL and kept deployment diagnostics at `/status`.

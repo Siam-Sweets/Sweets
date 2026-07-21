@@ -197,7 +197,7 @@ export async function runCloudDiagnostics(env: Env, requestId: string): Promise<
   const ready = checks.every((check) => check.status === "pass") && accountCreationReady;
   return {
     service: "PosApp Cloud API",
-    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.18",
+    deploymentVersion: env.DEPLOYMENT_VERSION ?? "2.0.19",
     checkedAtUtc: nowIso(),
     requestId,
     ready,
@@ -219,7 +219,7 @@ export async function diagnosticsJson(env: Env, requestId: string): Promise<Resp
 
 export async function diagnosticsPage(request: Request, env: Env, requestId: string): Promise<Response> {
   const origin = new URL(request.url).origin;
-  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.18";
+  const deploymentVersion = env.DEPLOYMENT_VERSION ?? "2.0.19";
   const nonce = crypto.randomUUID().replace(/-/g, "");
   const html = `<!doctype html>
 <html lang="en">

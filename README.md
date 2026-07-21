@@ -1,6 +1,6 @@
 # PosApp 2.0 - Offline-first online Point of Sale
 
-A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.18** preserves the complete v1.4.24 desktop application and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
+A feature-rich Windows POS built with C# and WPF on .NET 8. Version **2.0.19** preserves the complete v1.4.24 desktop application and requires secure online account onboarding through a Cloudflare Worker and Turso/libSQL. SQLite remains the operational working database after onboarding, so checkout, lookup, printing, reports, and normal back-office work continue when the network or cloud service is temporarily unavailable.
 
 ## Offline-first boundary
 
@@ -105,6 +105,8 @@ dotnet publish src/PosApp.Wpf/PosApp.Wpf.csproj `
 
 The organization-creation dialog validates every field before contacting the Worker. Online passwords must contain 10–128 characters with at least one letter and one number, and the device-local offline PIN must contain 4–12 digits. Validation, network, and server failures are shown in a visible dialog instead of being limited to a footer message.
 
+Each online sign-in or organization-creation attempt also receives a diagnostic ID. If the complete initial synchronization cannot finish, the dialog shows that ID, a sync-state/count/cursor summary, the exact `%LOCALAPPDATA%\PosApp\Logs\cloud-sync.jsonl` path, and an **Open log folder** button. The rotating JSON-lines log follows authentication, local-cache preparation, server compatibility, push, pull, settings upload, and final verification. It records structured error codes and sanitized exception metadata but excludes passwords, PINs, tokens, authorization headers, request payloads, SQL, usernames/emails, and customer contact data. See [Troubleshooting](docs/TROUBLESHOOTING.md) for correlation instructions.
+
 The output is a single `PosApp.exe` (~150 MB) that runs on any Windows 10/11 x64 machine — no .NET install required. Drop it on a USB stick and run it on the POS terminal when a portable copy is preferred.
 
 ### Build the Guided Windows Installer
@@ -116,7 +118,7 @@ $env:POSAPP_CLOUD_API_BASE_URL = "https://your-worker.example.workers.dev"
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-2.0.18-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-2.0.19-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -142,21 +144,21 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.18-dev.27-Setup.exe` with resource version `2.0.18.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers retain the real application version in their filename and Windows metadata, for example `PosApp-2.0.19-dev.27-Setup.exe` with resource version `2.0.19.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v2.0.18`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v2.0.19`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v2.0.18
-git push origin v2.0.18
+git tag v2.0.19
+git push origin v2.0.19
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.18`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v2.0.19`.
 
 `.github/workflows/deploy-worker.yml` independently type-checks and tests the Worker, validates all ordered Turso migrations, performs a Wrangler dry run, applies every pending migration to the selected Turso database, verifies schema version 4 and required tables/columns, uploads the required Turso and authentication bindings, including the dedicated password pepper, from protected GitHub secrets, and deploys the selected `development` or `production` environment. After deployment it independently waits for `/api/v1/meta`, `/api/v1/diagnostics`, `/status`, and the root account portal to serve the expected Worker version. It fails unless the Free-plan password verifier, token signing, schema inspection, the complete atomic organization-provisioning batch, and forced rollback verification all pass. Opening the Worker base URL displays the account portal; deployment diagnostics remain available at `/status`. Follow [Cloud setup](docs/CLOUD-SETUP.md) before enabling deployment.
 
@@ -230,6 +232,8 @@ This project is provided as-is for your personal/commercial use. The architectur
 **Build fails on `dotnet restore`** — make sure you have the .NET 8 SDK installed: `dotnet --version` should report `8.x.x`.
 
 **Database upgrade errors** — do not delete the database. Review `%LOCALAPPDATA%\PosApp\posapp.log`; update recovery copies are under `%LOCALAPPDATA%\PosApp\Backups\Updates`. Reinstall the previous PosApp version if necessary, then use **Settings → Database → Restore** with the newest `posapp-before-update-*.db` or `posapp-before-startup-*.db` file.
+
+**Online setup says synchronization did not finish** — note the diagnostic ID and state/count summary in the dialog, select **Open log folder**, and inspect only matching `attemptId` entries in `%LOCALAPPDATA%\PosApp\Logs\cloud-sync.jsonl`. Queue/error summaries and `requestId` show whether the failure occurred during compatibility validation, push, pull, local apply, or final verification. Do not share credentials, `cloud-session.dat`, the SQLite database, or unrelated log lines.
 
 **Receipt doesn't print** — in Settings, ensure the printer name matches exactly what's shown in `Control Panel → Devices and Printers`. Try the **Test Print** button.
 
