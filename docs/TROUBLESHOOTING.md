@@ -54,6 +54,8 @@ For support, provide the diagnostic ID and only the matching JSON lines. If an e
 
 PosApp 2.0.19 could report `SYNC_FAILED` with an inner `ReadOnlySpan<string>` or `FuncCallInstruction` error while returning a failed upload batch to `Pending`. That was a desktop EF Core expression-tree issue, not a Turso credential or connectivity problem. Upgrade the desktop client to 2.0.20 or later. The corrected client also logs and preserves the original API failure if a separate server-side problem remains.
 
+PosApp 2.0.20 may then expose the underlying `VALIDATION_ERROR` stating that `clientTimestampUtc must be a UTC timestamp`. SQLite preserved the UTC value but did not preserve its .NET `DateTimeKind`, so JSON omitted the `Z` marker required by the Worker. Upgrade the desktop client to 2.0.21 or later. No Cloudflare or Turso secret needs to be changed for this correction.
+
 ## Worker deployment checks
 
 1. Run `npm ci`, `npm run check`, and `npm test` in `cloud/worker`.

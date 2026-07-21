@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PosApp.Core.Entities;
 using PosApp.Core.Models;
 using PosApp.Data;
@@ -62,8 +63,28 @@ public sealed class ProtocolTests
     {
         Assert.Equal(1, CloudProtocol.ApiVersion);
         Assert.Equal(4, CloudProtocol.ClientSchemaVersion);
-        Assert.Equal("2.0.20", CloudProtocol.ClientVersion);
+        Assert.Equal("2.0.21", CloudProtocol.ClientVersion);
         Assert.Equal(2, CloudProtocol.MaxPushBatch);
         Assert.InRange(CloudProtocol.MaxPullBatch, 1, 200);
+    }
+
+    [Fact]
+    public void SqliteTimestampIsSerializedWithTheRequiredUtcMarker()
+    {
+        var sqliteTimestamp = new DateTime(2026, 7, 21, 12, 22, 7, 599,
+            DateTimeKind.Unspecified).AddTicks(9_547);
+        var normalized = SyncWireTimestamp.NormalizeUtc(sqliteTimestamp);
+
+        Assert.Equal(DateTimeKind.Utc, normalized.Kind);
+        Assert.Equal(sqliteTimestamp.Ticks, normalized.Ticks);
+
+        var operation = new SyncOperationDto { ClientTimestampUtc = normalized };
+        var json = JsonSerializer.Serialize(operation, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        using var document = JsonDocument.Parse(json);
+        var wireValue = document.RootElement.GetProperty("clientTimestampUtc").GetString() ?? string.Empty;
+
+        Assert.NotEmpty(wireValue);
+        Assert.True(wireValue.EndsWith("Z", StringComparison.Ordinal));
+        Assert.True(DateTimeOffset.TryParse(wireValue, out _));
     }
 }

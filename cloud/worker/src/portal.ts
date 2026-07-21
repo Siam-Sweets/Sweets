@@ -1,7 +1,7 @@
 import type { Env } from "./types";
 
 export function accountPortal(env: Env, requestId: string): Response {
-  const version = escapeHtml(env.DEPLOYMENT_VERSION ?? "2.0.20");
+  const version = escapeHtml(env.DEPLOYMENT_VERSION ?? "2.0.21");
   const nonce = crypto.randomUUID().replaceAll("-", "");
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

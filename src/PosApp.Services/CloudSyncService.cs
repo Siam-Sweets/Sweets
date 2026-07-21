@@ -359,7 +359,7 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
                         Operation = value.Operation == SyncOperationKind.Delete ? "delete" : "upsert",
                         BaseVersion = value.BaseVersion,
                         Payload = JsonDocument.Parse(value.PayloadJson).RootElement.Clone(),
-                        ClientTimestampUtc = value.CreatedAtUtc
+                        ClientTimestampUtc = SyncWireTimestamp.NormalizeUtc(value.CreatedAtUtc)
                     }).ToArray()
                 };
                 response = await _api.PostAuthorizedAsync<SyncPushResponse>("/api/v1/sync/push", request,
@@ -813,6 +813,20 @@ internal static class SyncOutboxUploadRecovery
         db.SuppressSyncCapture = true;
         await db.SaveChangesAsync(cancellationToken);
     }
+}
+
+internal static class SyncWireTimestamp
+{
+    internal static DateTime NormalizeUtc(DateTime timestamp)
+        => timestamp.Kind switch
+        {
+            DateTimeKind.Utc => timestamp,
+            DateTimeKind.Local => timestamp.ToUniversalTime(),
+            // Microsoft.Data.Sqlite materializes a stored UTC DateTime with an
+            // unspecified Kind. Its ticks already represent UTC, so converting
+            // it as local time would shift the actual business timestamp.
+            _ => DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
+        };
 }
 
 public static class SyncBackoffPolicy

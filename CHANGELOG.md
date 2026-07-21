@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.21 — UTC-safe synchronization timestamps
+
+- Fixed store-configuration and other pending uploads being rejected with `VALIDATION_ERROR: clientTimestampUtc must be a UTC timestamp` after SQLite materialized an operation timestamp with `DateTimeKind.Unspecified`.
+- Added one wire-boundary normalizer that preserves the ticks of SQLite UTC values, marks them as UTC, converts genuinely local timestamps, and leaves existing UTC values unchanged.
+- Ensured `System.Text.Json` emits the required ISO-8601 `Z` suffix without weakening the Worker's timestamp validation or accepting ambiguous client input.
+- Added regression coverage for the exact SQLite materialization case, including tick preservation, UTC `Kind`, web JSON property naming, the `Z` suffix, and parseable wire output.
+- Updated application, installer, cloud client, Worker package, tests, README, troubleshooting guidance, and release metadata to version 2.0.21.
+
 ## 2.0.20 — Reliable outbox upload recovery
 
 - Fixed the online-onboarding upload failure identified by diagnostic attempt `59EC1AB93502`: `ids.Contains(...)` could bind to the .NET span overload, which EF Core cannot evaluate inside its query expression tree.
