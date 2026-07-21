@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.18 — Account portal and deterministic onboarding synchronization
+
+- Published the tenant-scoped browser account portal at the Worker root URL and kept deployment diagnostics at `/status`.
+- Added exact organization total/active user counts, administrator-only user listing, and safe user deletion with current-user and final-administrator protection.
+- Kept deletion non-destructive: access is disabled, device sessions and refresh tokens are revoked, synchronized tombstones are emitted, audit history is written, and financial references remain intact.
+- Added rotating browser-session renewal, server-side logout, a nonce-restricted content security policy, and explicit guidance that portal credentials are PosApp organization credentials rather than a shared GitHub Actions password.
+- Fixed first-run and resumed sign-in synchronization falsely reporting that the complete organization download did not finish when a startup background sync held the synchronization gate for more than three seconds.
+- Changed user-initiated synchronization to wait asynchronously for the active cycle and then run a verified cycle of its own; background cycles remain non-blocking and coalesced.
+- Stopped treating Windows network-availability notifications as proof that HTTPS is unavailable. The bounded Worker request now determines connectivity, preventing false offline failures on usable connections.
+- Added Worker integration coverage for portal security markers, tenant user counts, safe deletion, session revocation, tombstones, audit records, and current-user protection.
+- Updated application, installer, cloud client, Worker package, tests, README, deployment documentation, and release metadata to version 2.0.18.
+
 ## 2.0.17
 
 - Added a secure browser account portal at the Worker root URL.

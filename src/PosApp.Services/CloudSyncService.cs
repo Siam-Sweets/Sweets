@@ -69,11 +69,24 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
         }
     }
 
+    public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
+    {
+        await _syncGate.WaitAsync(cancellationToken);
+        _syncGate.Release();
+    }
+
     public async Task<CloudSyncStatus> SyncNowAsync(
         bool userInitiated = false,
         CancellationToken cancellationToken = default)
     {
-        if (!await _syncGate.WaitAsync(userInitiated ? TimeSpan.FromSeconds(3) : TimeSpan.Zero, cancellationToken))
+        // A startup/background synchronization may already own the gate when
+        // first-run onboarding requests its required complete download. A
+        // user-initiated call must wait for that operation and then perform its
+        // own verified cycle; returning the previous status after three seconds
+        // can make a successful sign-in look like an incomplete migration.
+        if (userInitiated)
+            await _syncGate.WaitAsync(cancellationToken);
+        else if (!await _syncGate.WaitAsync(TimeSpan.Zero, cancellationToken))
             return CurrentStatus;
         try
         {
@@ -86,9 +99,9 @@ public sealed class CloudSyncService : ICloudSyncService, IDisposable
             if (account.RequiresReconciliation)
                 return await SetStateAsync("reconciliation_required", false,
                     "RESTORE_RECONCILIATION_REQUIRED", null, cancellationToken);
-            if (!NetworkInterface.GetIsNetworkAvailable())
-                return await SetStateAsync("offline", false, "NETWORK_UNAVAILABLE", null, cancellationToken);
-
+            // Windows network-availability notifications are only a scheduling
+            // hint. They can report offline while HTTPS to the Worker is already
+            // usable, so let the bounded API request determine connectivity.
             await RecoverInterruptedUploadsAsync(account, cancellationToken);
             await SetStateAsync("syncing", true, null, null, cancellationToken);
             var meta = await _api.GetAuthorizedAsync<ServerMetaEnvelope>("/api/v1/meta", cancellationToken);

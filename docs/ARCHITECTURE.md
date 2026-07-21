@@ -20,14 +20,17 @@ flowchart TB
     end
     API["Cloudflare Worker /api/v1"]
     TURSO[("Turso / libSQL")]
+    PORTAL["Browser account portal"]
     WPF1 <-->|"HTTPS JSON batches"| API
     WPF2 <-->|"HTTPS JSON batches"| API
+    PORTAL <-->|"HTTPS account API"| API
     API <-->|"Parameterized libSQL"| TURSO
 ```
 
 ## Trust boundaries
 
 - WPF is trusted to operate its local database but is not trusted to authorize cloud operations.
+- The browser portal is an untrusted same-origin client. It receives only short-lived tenant user tokens and cannot bypass endpoint permission checks.
 - The Worker derives the tenant, user, device, session, role, and permissions from a verified access token and current Turso state. Client-supplied identity or permission fields never grant access.
 - The Worker owns all Turso credentials. Desktop builds and repositories contain no unrestricted database token or signing secret.
 - Turso is not exposed as a public application protocol; all reads and writes pass through the Worker.
@@ -52,16 +55,17 @@ Every cloud business envelope has server-controlled `tenant_id`, optional `store
 - Existing entities, views, services, reports, printing, themes, localization, build, installer, updater, and local backup code remain in place.
 - `AppDbContext.SaveChangesAsync` snapshots tracked business changes and appends outbox rows in the same SQLite transaction.
 - `SyncIdentity` maps preserved local integer keys to global UUIDs without rewriting historical foreign keys.
-- `CloudSyncService` runs after login/startup, every two minutes, after outbox changes, after network recovery, on manual Sync, and during shutdown when time permits.
+- `CloudSyncService` runs after login/startup, every two minutes, after outbox changes, after network recovery, on manual Sync, and during shutdown when time permits. Background calls coalesce immediately; a user-initiated/onboarding call waits asynchronously for an active cycle and then runs its own verified cycle, so a stale intermediate status cannot finalize or reject setup.
 - `SyncRecordApplier` applies ordered server pages in a SQLite transaction with outbox capture suppressed, then refreshable views see current local data without restart.
 - One SQLite file can cache several authorized branches. Store-scoped query filters select the active working set, while formerly global SKU, barcode, category, setting, receipt, purchase-document, and open-register constraints are branch-aware. Identical catalog identifiers in two branches remain separate local rows and UUID identities. Login and branch switching reload the selected store's settings; the switch confirmation warns that the current unsaved cart is cleared so no draft, filter, receipt, printer, currency, theme, or language state crosses stores.
 - DPAPI protects the access/refresh token bundle for the current Windows user. Non-secret organization/store/device metadata remains in SQLite.
-- First run is online-only. The local database initially contains only the SQLite schema; no independent administrator, store configuration, or bootstrap catalog is created. Signing in downloads the complete authorized store from cursor zero. Creating an organization builds the selected store configuration and optional templates, then uploads the whole snapshot under the cloud-empty migration lease. Preparation and completion are separate device-local phases, so restart cannot accidentally turn a pending upload into a download. Device-local `app:` settings never enter the outbox.
+- First run is online-only. The local database initially contains only the SQLite schema; no independent administrator, store configuration, or bootstrap catalog is created. Signing in or creating an organization clears incomplete disposable bootstrap cache state and downloads the authoritative organization snapshot from cursor zero. Preparation and completion are separate device-local phases, so restart safely resumes the same full download. Device-local `app:` settings never enter the outbox.
 - Linking an already-configured SQLite database first detects records without tenant-bound UUID identities, writes a verified safety backup, and raises the reconciliation gate. Background push and pull remain paused until an administrator either acquires the cloud-empty migration lease for the local snapshot or explicitly replaces the synchronized local working copy with server data.
 
 ## Cloud components
 
 - The Worker entry point is `cloud/worker/src/index.ts`.
+- The Worker root serves the tenant-scoped account portal; `/status` and `/api/v1/diagnostics` expose public deployment readiness without user data.
 - Authentication, store access, permissions, validation, synchronization, structured errors, and database access are separated by module.
 - Turso migrations are append-only and tracked in `schema_migrations`.
 - Domain data uses indexed server-owned envelope columns plus versioned JSON payloads. Branch-scoped normalized identifier indexes and a shared SKU/barcode namespace prevent duplicate master records without blocking the same identifier in another store. This keeps Worker CPU and migration cost low while retaining explicit tenant/version/tombstone enforcement.

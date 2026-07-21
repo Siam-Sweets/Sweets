@@ -656,14 +656,28 @@ export async function listUsers(context: AuthContext, env: Env): Promise<Respons
   requirePermission(context.claims, "users.manage");
   const client = database(env);
   try {
-    const result = await client.execute({
-      sql: `SELECT id, tenant_id, username, email, full_name, role, permissions_json, is_active,
-                   created_at_utc, updated_at_utc, version
-            FROM users WHERE tenant_id = ? ORDER BY full_name LIMIT 500`,
-      args: [context.claims.tid],
-    });
+    const batch = await client.batch([
+      {
+        sql: `SELECT id, tenant_id, username, email, full_name, role, permissions_json, is_active,
+                     created_at_utc, updated_at_utc, version
+              FROM users WHERE tenant_id = ? ORDER BY full_name LIMIT 500`,
+        args: [context.claims.tid],
+      },
+      {
+        sql: `SELECT COUNT(*) AS total_users,
+                     SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active_users
+              FROM users WHERE tenant_id = ?`,
+        args: [context.claims.tid],
+      },
+    ], "read");
+    const result = batch[0];
+    const counts = batch[1];
+    if (!result || !counts)
+      throw new ApiError(500, "USER_LIST_FAILED", "The user list could not be loaded.");
     return jsonResponse({
       users: result.rows.map((row) => publicUser(row, effectivePermissions(parseRole(text(row.role)), parsePermissions(row.permissions_json)))),
+      totalUsers: integer(counts.rows[0]?.total_users),
+      activeUsers: integer(counts.rows[0]?.active_users),
       requestId: context.requestId,
     }, 200, context.requestId);
   } finally { client.close(); }

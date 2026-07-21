@@ -8,12 +8,15 @@
 - Reuse of an old refresh token revokes the token family and login session. Password changes revoke the user's other sessions and increment a password version that invalidates old access tokens.
 - Every protected request reloads the session, user, device, organization, password version, role, and permissions from Turso. Token claims cannot keep a revoked device, disabled user, expired session, or removed permission active online.
 - Explicit logout revokes the current or all user sessions server-side and clears the encrypted desktop token file.
+- The browser account portal uses the same tenant-scoped authentication endpoints and permissions as the desktop. It keeps rotating tokens only in browser session storage, renews expired access tokens, revokes its server session on sign-out, and serves a nonce-restricted content security policy. It never receives Turso or Cloudflare credentials.
 
 ## Desktop secrets
 
 Only access/refresh tokens are present on a desktop. `DpapiTokenStore` encrypts them with Windows Data Protection API `CurrentUser` scope and atomically replaces `%LOCALAPPDATA%\PosApp\Security\cloud-session.dat`. Copying that file to another Windows account does not make it usable. Organization/store/device metadata is non-secret.
 
 The desktop never receives `TURSO_AUTH_TOKEN`, `JWT_SIGNING_SECRET`, `REFRESH_TOKEN_SECRET`, `PASSWORD_PEPPER_SECRET`, or a Cloudflare API token. The public Worker origin is embedded at build time from `POSAPP_CLOUD_API_BASE_URL`; it is routing configuration, not a credential, and is expected to be discoverable in the distributed executable. `.dev.vars`, SQLite/WAL files, build outputs, and Worker dependencies are ignored by Git.
+
+There is no deployment-wide portal password. GitHub Actions contains infrastructure secrets only; using one shared password to enumerate every tenant would violate organization isolation. Portal users authenticate with their own organization account, and the backend requires `users.manage` before returning tenant counts or user rows. Deletion is a transactional soft deletion with current-user/final-administrator protection, session and refresh-token revocation, a synchronization tombstone, and an audit event.
 
 ## Authorization
 

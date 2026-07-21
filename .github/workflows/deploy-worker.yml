@@ -296,7 +296,7 @@ jobs:
           }
           NODE
 
-          # Finally wait independently for the public root page. Its detailed
+          # Next wait independently for the public status page. Its detailed
           # diagnostic cards are rendered by browser JavaScript, so validate the
           # static interface and machine-readable deployment headers rather than
           # grepping for dynamic check names in the initial HTML response.
@@ -321,9 +321,50 @@ jobs:
           done
 
           if [[ "$status_page_visible" -ne 1 ]]; then
-            echo "::error title=Worker status page deployment not visible::Metadata and diagnostics reached $expected_version, but the public root page did not."
+            echo "::error title=Worker status page deployment not visible::Metadata and diagnostics reached $expected_version, but /status did not."
             sed -n '1,30p' "$status_page_headers"
             test ! -s "$status_page_file" || sed -n '1,40p' "$status_page_file"
+            exit 1
+          fi
+
+          # The Worker root is the tenant-scoped account portal. Verify the
+          # deployed version and its static login, user-count, and deletion
+          # controls without submitting credentials from CI.
+          portal_file="$(mktemp)"
+          portal_headers="$(mktemp)"
+          portal_visible=0
+          portal_status="000"
+          for attempt in {1..10}; do
+            portal_status="$(curl --silent --show-error \
+              --connect-timeout 10 --max-time 30 \
+              --dump-header "$portal_headers" \
+              --output "$portal_file" --write-out '%{http_code}' \
+              "$base/?deployment_check=${GITHUB_RUN_ID:-manual}-$attempt" || true)"
+            portal_version="$(header_value "$portal_headers" "x-posapp-deployment-version")"
+            portal_marker="$(header_value "$portal_headers" "x-posapp-portal")"
+            if [[ "$portal_status" == "200" && "$portal_version" == "$expected_version" && "$portal_marker" == "1" ]]; then
+              portal_visible=1
+              break
+            fi
+            echo "Waiting for Worker $expected_version account portal to propagate (attempt $attempt/10, deployed ${portal_version:-unknown}, marker ${portal_marker:-missing}, HTTP ${portal_status:-000})."
+            sleep 6
+          done
+
+          if [[ "$portal_visible" -ne 1 ]]; then
+            echo "::error title=Worker account portal deployment not visible::The expected portal version did not appear at $base/."
+            sed -n '1,30p' "$portal_headers"
+            test ! -s "$portal_file" || sed -n '1,40p' "$portal_file"
+            exit 1
+          fi
+
+          if ! grep -Fq '<title>PosApp Cloud Account</title>' "$portal_file" \
+            || ! grep -Fq 'id="loginForm"' "$portal_file" \
+            || ! grep -Fq 'id="totalUsers"' "$portal_file" \
+            || ! grep -Fq '/api/v1/users' "$portal_file" \
+            || ! grep -Fq "method:'DELETE'" "$portal_file" \
+            || ! grep -Fq 'href="/status"' "$portal_file"; then
+            echo "::error title=Worker account portal failed::Worker $expected_version returned HTTP 200 but the account-management interface is incomplete."
+            sed -n '1,40p' "$portal_file"
             exit 1
           fi
 
@@ -342,3 +383,4 @@ jobs:
           echo "Environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'development' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Turso migrations were applied idempotently and verified before the Worker deployment." >> "$GITHUB_STEP_SUMMARY"
           echo "The public status page passed its password, token, schema, atomic batch, rollback, synchronization, and audit preflight." >> "$GITHUB_STEP_SUMMARY"
+          echo "The tenant-scoped account portal passed deployment and structural validation." >> "$GITHUB_STEP_SUMMARY"

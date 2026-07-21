@@ -182,6 +182,7 @@ public interface ICloudSyncService
     CloudSyncStatus CurrentStatus { get; }
     Task StartAsync(CancellationToken cancellationToken = default);
     Task StopAsync(CancellationToken cancellationToken = default);
+    Task WaitForIdleAsync(CancellationToken cancellationToken = default);
     Task<CloudSyncStatus> SyncNowAsync(bool userInitiated = false, CancellationToken cancellationToken = default);
     Task RetryFailedAsync(CancellationToken cancellationToken = default);
     Task ResolveConflictAsync(long conflictId, SyncConflictStatus resolution, CancellationToken cancellationToken = default);

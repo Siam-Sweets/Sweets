@@ -336,6 +336,12 @@ public partial class CloudAccountWindow : Window
             "Preparing this computer for the online organization..."), StatusKind.Busy);
         await RenderAsync();
 
+        // Startup may still be completing a cached-session sync from a previous
+        // onboarding attempt. Stop future background scheduling and wait for
+        // the active database cycle before resetting the disposable cache.
+        await _sync.StopAsync();
+        await _sync.WaitForIdleAsync();
+
         await _setup.CompleteOnlineSetupAsync(
             authentication,
             CreatedOrganization,
