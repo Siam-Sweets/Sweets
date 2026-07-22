@@ -44,21 +44,6 @@ public static class RuntimeUiText
             ["Suspended"] = "স্থগিত",
             ["Void"] = "বাতিল",
             ["Warning"] = "সতর্কতা",
-            ["Restore cloud data"] = "ক্লাউড ডেটা পুনরুদ্ধার",
-            ["Cloud restore complete"] = "ক্লাউড পুনরুদ্ধার সম্পন্ন",
-            ["Cloud restore failed"] = "ক্লাউড পুনরুদ্ধার ব্যর্থ",
-            ["Cloud synchronization failed"] = "ক্লাউড সিঙ্ক ব্যর্থ",
-            ["Cloud connection failed"] = "ক্লাউড সংযোগ ব্যর্থ",
-            ["Unable to upload initial snapshot"] = "প্রাথমিক স্ন্যাপশট আপলোড করা যায়নি",
-            ["Restore the latest cloud snapshots? This creates a backup, then replaces all local store data. PosApp will close after a successful restore."] = "সর্বশেষ ক্লাউড স্ন্যাপশট পুনরুদ্ধার করবেন? আগে একটি ব্যাকআপ তৈরি হবে, তারপর সব স্থানীয় স্টোর ডেটা প্রতিস্থাপন করা হবে। সফল হলে PosApp বন্ধ হবে।",
-            ["Cloud account is not connected. Local checkout remains available."] = "ক্লাউড অ্যাকাউন্ট সংযুক্ত নয়। স্থানীয় বিক্রয় চালু থাকবে।",
-            ["Cloud account connected. Offline-first synchronization is available."] = "ক্লাউড অ্যাকাউন্ট সংযুক্ত। অফলাইন-ফার্স্ট সিঙ্ক চালু আছে।",
-            ["Cloud account created and this device was registered."] = "ক্লাউড অ্যাকাউন্ট তৈরি হয়েছে এবং এই ডিভাইস নিবন্ধিত হয়েছে।",
-            ["Signed in and this device was registered."] = "সাইন ইন হয়েছে এবং এই ডিভাইস নিবন্ধিত হয়েছে।",
-            ["Cloud account is not connected."] = "ক্লাউড অ্যাকাউন্ট সংযুক্ত নয়।",
-            ["Synchronization is active, but one or more changes require review."] = "সিঙ্ক চালু আছে, তবে এক বা একাধিক পরিবর্তন পর্যালোচনা দরকার।",
-            ["Local changes are waiting to synchronize."] = "স্থানীয় পরিবর্তনগুলো সিঙ্কের অপেক্ষায় আছে।",
-            ["Cloud synchronization is up to date."] = "ক্লাউড সিঙ্ক হালনাগাদ আছে।",
             ["Checkout failed"] = "চেকআউট ব্যর্থ",
             ["Confirm Refund"] = "ফেরত নিশ্চিত করুন",
             ["Confirm Void"] = "বাতিল নিশ্চিত করুন",
@@ -198,21 +183,7 @@ public static class RuntimeUiText
             ["Used count cannot be negative."] = "ব্যবহারের সংখ্যা ঋণাত্মক হতে পারবে না।",
             ["User not found."] = "ব্যবহারকারী পাওয়া যায়নি।",
             ["Username must contain 3 to 60 letters, numbers, dots, dashes, or underscores."] = "ব্যবহারকারী নামে ৩ থেকে ৬০টি অক্ষর, সংখ্যা, ডট, ড্যাশ বা আন্ডারস্কোর থাকতে হবে।",
-            ["Windows did not start the setup installer."] = "Windows সেটআপ ইনস্টলার চালু করেনি।",
-            ["No active store is available."] = "কোনো সক্রিয় স্টোর পাওয়া যায়নি।",
-            ["The selected store no longer exists."] = "নির্বাচিত স্টোরটি আর নেই।",
-            ["That store code is already in use."] = "এই স্টোর কোডটি ইতিমধ্যে ব্যবহৃত হচ্ছে।",
-            ["Store not found."] = "স্টোর পাওয়া যায়নি।",
-            ["Switch to another store before deactivating the current store."] = "বর্তমান স্টোর নিষ্ক্রিয় করার আগে অন্য স্টোরে যান।",
-            ["At least one store must remain active."] = "অন্তত একটি স্টোর সক্রিয় রাখতে হবে।",
-            ["The selected store is inactive."] = "নির্বাচিত স্টোরটি নিষ্ক্রিয়।",
-            ["The current store must have an active administrator before another store can be created."] = "আরেকটি স্টোর তৈরির আগে বর্তমান স্টোরে একজন সক্রিয় অ্যাডমিনিস্ট্রেটর থাকতে হবে।",
-            ["A record cannot be moved between stores."] = "একটি রেকর্ড এক স্টোর থেকে অন্য স্টোরে সরানো যাবে না।",
-            ["Store code is required."] = "স্টোর কোড আবশ্যক।",
-            ["Store code cannot exceed 24 characters."] = "স্টোর কোড ২৪ অক্ষরের বেশি হতে পারবে না।",
-            ["Store name cannot exceed 100 characters."] = "স্টোরের নাম ১০০ অক্ষরের বেশি হতে পারবে না।",
-            ["Address cannot exceed 500 characters."] = "ঠিকানা ৫০০ অক্ষরের বেশি হতে পারবে না।",
-            ["Phone cannot exceed 30 characters."] = "ফোন ৩০ অক্ষরের বেশি হতে পারবে না।"
+            ["Windows did not start the setup installer."] = "Windows সেটআপ ইনস্টলার চালু করেনি।"
         };
 
     public static string Translate(string? value)
@@ -331,8 +302,6 @@ public static class RuntimeUiText
         if (match.Success) return $"ব্যবহারকারী '{match.Groups[1].Value}' মুছবেন?";
         match = Regex.Match(value, @"^Deactivate (.+)\?$");
         if (match.Success) return $"{match.Groups[1].Value} নিষ্ক্রিয় করবেন?";
-        match = Regex.Match(value, @"^Switch to (.+)\? You will return to the login screen\.$");
-        if (match.Success) return $"{match.Groups[1].Value} স্টোরে যাবেন? আপনাকে লগইন স্ক্রিনে ফেরত নেওয়া হবে।";
         match = Regex.Match(value, @"^Purchase (.+) posted and stock updated\.$");
         if (match.Success) return $"ক্রয় {match.Groups[1].Value} পোস্ট হয়েছে এবং স্টক আপডেট হয়েছে।";
         match = Regex.Match(value, @"^Backup created successfully\.\s*(.+)$", RegexOptions.Singleline);
@@ -341,14 +310,6 @@ public static class RuntimeUiText
         if (match.Success) return $"{match.Groups[1].Value}টি বিক্রয় এখানে রপ্তানি হয়েছে:\n{match.Groups[2].Value}";
         match = Regex.Match(value, @"^Enter a value of at least (.+)\.$");
         if (match.Success) return $"অন্তত {match.Groups[1].Value} মান লিখুন।";
-        match = Regex.Match(value, @"^Uploaded (\d+) store snapshot\(s\) containing ([\d,]+) rows\. Automatic incremental synchronization is active\.$");
-        if (match.Success) return $"{match.Groups[1].Value}টি স্টোর স্ন্যাপশট আপলোড হয়েছে, মোট {match.Groups[2].Value}টি সারি। স্বয়ংক্রিয় ইনক্রিমেন্টাল সিঙ্ক চালু আছে।";
-        match = Regex.Match(value, @"^Synchronized (\d+) store\(s\): ([\d,]+) pushed, ([\d,]+) pulled, ([\d,]+) conflicts\.$");
-        if (match.Success) return $"{match.Groups[1].Value}টি স্টোর সিঙ্ক হয়েছে: {match.Groups[2].Value}টি পাঠানো, {match.Groups[3].Value}টি আনা, {match.Groups[4].Value}টি দ্বন্দ্ব।";
-        match = Regex.Match(value, @"^Restored (\d+) store\(s\) and ([\d,]+) rows\. PosApp will now close; reopen it to continue\.$");
-        if (match.Success) return $"{match.Groups[1].Value}টি স্টোর ও {match.Groups[2].Value}টি সারি পুনরুদ্ধার হয়েছে। PosApp এখন বন্ধ হবে; চালিয়ে যেতে আবার খুলুন।";
-        match = Regex.Match(value, @"^Cloud contains (\d+) store\(s\) that are not on this device\. Use Restore Cloud Data to download the complete multi-store baseline\.$");
-        if (match.Success) return $"ক্লাউডে {match.Groups[1].Value}টি স্টোর আছে যা এই ডিভাইসে নেই। সম্পূর্ণ মাল্টি-স্টোর ভিত্তি ডাউনলোড করতে ক্লাউড ডেটা পুনরুদ্ধার ব্যবহার করুন।";
         match = Regex.Match(value, @"^Unable to (.+)$");
         if (match.Success) return "কাজটি সম্পন্ন করা যায়নি";
         match = Regex.Match(value, @"^Cannot (.+)$");

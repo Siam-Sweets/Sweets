@@ -5,7 +5,7 @@ namespace PosApp.Core.Entities;
 /// <summary>
 /// A logical group of products (e.g. Beverages, Snacks, Groceries).
 /// </summary>
-public class Category : StoreScopedEntity
+public class Category
 {
     public int Id { get; set; }
 

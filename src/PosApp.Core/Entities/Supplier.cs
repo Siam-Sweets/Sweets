@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace PosApp.Core.Entities;
 
 /// <summary>A local vendor used on purchase documents.</summary>
-public class Supplier : StoreScopedEntity
+public class Supplier
 {
     public int Id { get; set; }
 

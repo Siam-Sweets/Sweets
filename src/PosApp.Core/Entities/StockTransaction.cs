@@ -6,7 +6,7 @@ namespace PosApp.Core.Entities;
 /// Append-only ledger of every stock movement for a product.
 /// Positive Quantity = stock in, negative = stock out.
 /// </summary>
-public class StockTransaction : StoreScopedEntity
+public class StockTransaction
 {
     public int Id { get; set; }
 
@@ -26,8 +26,6 @@ public class StockTransaction : StoreScopedEntity
 
     public int? SaleId { get; set; }
     public int? SaleItemId { get; set; }
-    public int? StockTransferId { get; set; }
-    public int? StockTransferItemId { get; set; }
 
     [MaxLength(500)]
     public string? Note { get; set; }

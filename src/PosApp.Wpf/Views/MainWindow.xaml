@@ -70,14 +70,12 @@
                             <Button x:Name="NavSales" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="sales"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_Documents}"/></Button>
                             <Button x:Name="NavProducts" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="products"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Nav_Products}"/></Button>
                             <Button x:Name="NavInventory" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="inventory"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_Stock}"/></Button>
-                            <Button x:Name="NavTransfers" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="transfers"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Nav_Transfers}"/></Button>
                             <Button x:Name="NavPurchases" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="purchases"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Nav_Purchases}"/></Button>
                             <Button x:Name="NavRegister" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="register"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Nav_Register}"/></Button>
                             <Button x:Name="NavCustomers" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="customers"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_CustomersSuppliers}"/></Button>
                             <Button x:Name="NavReports" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="reports"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_Reporting}"/></Button>
                             <Button x:Name="NavPromotions" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="promotions"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_Promotions}"/></Button>
                             <Button x:Name="NavUsers" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="users"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Shell_UsersSecurity}"/></Button>
-                            <Button x:Name="NavStores" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="stores"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Nav_Stores}"/></Button>
                             <Button x:Name="NavSettings" Style="{StaticResource NavButton}" Click="Nav_Click" Tag="settings"><TextBlock Style="{StaticResource SidebarNavText}" Text="{DynamicResource Nav_Settings}"/></Button>
                         </StackPanel>
                     </ScrollViewer>
@@ -91,7 +89,6 @@
                             <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                                 <TextBlock x:Name="UserName" Text="Administrator" Foreground="{DynamicResource SidebarTextBrush}" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/>
                                 <TextBlock x:Name="UserRoleLabel" Text="Admin" Foreground="{DynamicResource SidebarMutedBrush}" FontSize="11"/>
-                                <TextBlock x:Name="CurrentStoreName" Text="Main Store" Foreground="{DynamicResource SidebarMutedBrush}" FontSize="10" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
                             <Button Grid.Column="2" Content="{DynamicResource Login_Exit}" Foreground="{DynamicResource SidebarTextBrush}" Background="Transparent" BorderThickness="0" Click="Logout_Click"/>
                         </Grid>

@@ -10,15 +10,10 @@ namespace PosApp.Services;
 public class SettingsService : ISettingsService
 {
     private readonly AppDbContext _db;
-    private readonly IStoreContext _storeContext;
     private static readonly SemaphoreSlim CacheGate = new(1, 1);
-    private static readonly Dictionary<int, string?> CachedJsonByStore = new();
+    private static string? _cachedJson;
 
-    public SettingsService(AppDbContext db, IStoreContext storeContext)
-    {
-        _db = db;
-        _storeContext = storeContext;
-    }
+    public SettingsService(AppDbContext db) => _db = db;
 
     public async Task<string?> GetAsync(string key)
     {
@@ -47,7 +42,7 @@ public class SettingsService : ISettingsService
         if (normalizedKey == "store:config")
         {
             await CacheGate.WaitAsync();
-            try { CachedJsonByStore[_storeContext.StoreId] = value; }
+            try { _cachedJson = value; }
             finally { CacheGate.Release(); }
         }
     }
@@ -57,12 +52,8 @@ public class SettingsService : ISettingsService
         await CacheGate.WaitAsync();
         try
         {
-            if (!CachedJsonByStore.TryGetValue(_storeContext.StoreId, out var json) || json == null)
-            {
-                json = await GetAsync("store:config") ?? JsonSerializer.Serialize(new StoreSettings());
-                CachedJsonByStore[_storeContext.StoreId] = json;
-            }
-            return DeserializeClone(json);
+            _cachedJson ??= await GetAsync("store:config") ?? JsonSerializer.Serialize(new StoreSettings());
+            return DeserializeClone(_cachedJson);
         }
         finally
         {
@@ -107,14 +98,6 @@ public class SettingsService : ISettingsService
         normalized.BackupRetentionCount = Math.Clamp(normalized.BackupRetentionCount, 1, 365);
         var json = JsonSerializer.Serialize(normalized);
         await SetAsync("store:config", json);
-    }
-
-
-    internal static void InvalidateStoreCache(int storeId)
-    {
-        CacheGate.Wait();
-        try { CachedJsonByStore.Remove(storeId); }
-        finally { CacheGate.Release(); }
     }
 
     private static string NormalizeKey(string? key)

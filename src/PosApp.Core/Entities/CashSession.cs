@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace PosApp.Core.Entities;
 
 /// <summary>A local till session bounded by an opening and end-of-day close.</summary>
-public class CashSession : StoreScopedEntity
+public class CashSession
 {
     public int Id { get; set; }
     public DateTime OpenedAt { get; set; } = DateTime.UtcNow;
@@ -23,7 +23,7 @@ public class CashSession : StoreScopedEntity
     public ICollection<Sale> Sales { get; set; } = new List<Sale>();
 }
 
-public class CashMovement : StoreScopedEntity
+public class CashMovement
 {
     public int Id { get; set; }
     public int CashSessionId { get; set; }

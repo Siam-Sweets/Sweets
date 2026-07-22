@@ -5,7 +5,7 @@ using PosApp.Core.Utilities;
 namespace PosApp.Core.Entities;
 
 /// <summary>A posted supplier purchase that increases local stock.</summary>
-public class PurchaseDocument : StoreScopedEntity
+public class PurchaseDocument
 {
     public int Id { get; set; }
 
@@ -38,7 +38,7 @@ public class PurchaseDocument : StoreScopedEntity
     public ICollection<PurchaseItem> Items { get; set; } = new List<PurchaseItem>();
 }
 
-public class PurchaseItem : StoreScopedEntity
+public class PurchaseItem
 {
     public int Id { get; set; }
     public int PurchaseDocumentId { get; set; }

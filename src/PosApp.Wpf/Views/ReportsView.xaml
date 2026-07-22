@@ -43,9 +43,6 @@
                 <DatePicker x:Name="ToDate" Width="140"/>
                 <Button Content="{DynamicResource Rpt_Apply}" Style="{StaticResource PrimaryButton}" Click="Apply_Click"
                         Margin="8,0,0,0" Padding="16,8"/>
-                <TextBlock Text="{DynamicResource Transfer_Store}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                <ComboBox x:Name="StoreFilter" Width="200" DisplayMemberPath="Name" SelectedValuePath="Id"
-                          SelectionChanged="StoreFilter_Changed"/>
             </StackPanel>
 
             <!-- KPI cards -->
@@ -145,21 +142,6 @@
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Method}" Binding="{Binding Method, Converter={StaticResource PayStr}}" Width="*"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Count}" Binding="{Binding Count}" Width="80"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Total}" Binding="{Binding Total, Converter={StaticResource Money}}" Width="120"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource Card}" Margin="0,0,0,16">
-                    <StackPanel>
-                        <TextBlock Text="{DynamicResource Report_ByStore}" Style="{StaticResource Heading3}" Margin="0,0,0,12"/>
-                        <DataGrid x:Name="StorePerformanceGrid" AutoGenerateColumns="False" IsReadOnly="True" Height="220">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="{DynamicResource Store_Code}" Binding="{Binding StoreCode}" Width="90"/>
-                                <DataGridTextColumn Header="{DynamicResource Transfer_Store}" Binding="{Binding StoreName}" Width="*"/>
-                                <DataGridTextColumn Header="{DynamicResource Rpt_Transactions}" Binding="{Binding TransactionCount}" Width="120"/>
-                                <DataGridTextColumn Header="{DynamicResource Rpt_NetSales}" Binding="{Binding NetSales, Converter={StaticResource Money}}" Width="140"/>
-                                <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding GrossProfit, Converter={StaticResource Money}}" Width="140"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </StackPanel>

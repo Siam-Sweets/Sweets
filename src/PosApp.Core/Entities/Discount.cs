@@ -6,7 +6,7 @@ namespace PosApp.Core.Entities;
 /// A discount definition. Can be percentage or fixed amount, and can be
 /// applied either per-line or to the whole cart.
 /// </summary>
-public class Discount : StoreScopedEntity
+public class Discount
 {
     public int Id { get; set; }
 

@@ -101,17 +101,6 @@ public interface ICustomerService
     Task<IReadOnlyList<Sale>> GetCustomerHistoryAsync(int customerId);
 }
 
-public interface IStockTransferService
-{
-    Task<IReadOnlyList<StockTransfer>> GetTransfersAsync(int? relatedStoreId = null, StockTransferStatus? status = null);
-    Task<StockTransfer?> GetTransferAsync(int id);
-    Task<StockTransfer> CreateDraftAsync(StockTransferDraft draft, int userId);
-    Task DispatchAsync(int transferId, int userId);
-    Task ReceiveAsync(int transferId, int userId);
-    Task CancelAsync(int transferId, int userId, string? reason = null);
-    Task<IReadOnlyList<StoreInventoryRow>> GetInventoryAcrossStoresAsync(int? storeId = null, string? query = null);
-}
-
 public interface IReportService
 {
     Task<DailySalesReport> GetDailyReportAsync(DateTime date);
@@ -121,16 +110,6 @@ public interface IReportService
     Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime from, DateTime to);
     Task<IReadOnlyList<SalesByCategoryRow>> GetSalesByCategoryAsync(DateTime from, DateTime to);
     Task<IReadOnlyList<PaymentBreakdownRow>> GetPaymentBreakdownAsync(DateTime from, DateTime to);
-
-    // Explicit cross-store overloads. A null storeId means all active stores.
-    Task<DailySalesReport> GetDailyReportAsync(DateTime date, int? storeId);
-    Task<DateRangeReport> GetRangeReportAsync(DateTime from, DateTime to, int? storeId);
-    Task<IReadOnlyList<TopProductRow>> GetTopProductsAsync(DateTime from, DateTime to, int top, int? storeId);
-    Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime from, DateTime to, int? storeId);
-    Task<IReadOnlyList<SalesByCategoryRow>> GetSalesByCategoryAsync(DateTime from, DateTime to, int? storeId);
-    Task<IReadOnlyList<PaymentBreakdownRow>> GetPaymentBreakdownAsync(DateTime from, DateTime to, int? storeId);
-    Task<IReadOnlyList<StorePerformanceRow>> GetStorePerformanceAsync(DateTime from, DateTime to);
-    Task<IReadOnlyList<StorePerformanceRow>> GetStorePerformanceAsync(DateTime from, DateTime to, int? storeId);
 }
 
 public interface ISettingsService

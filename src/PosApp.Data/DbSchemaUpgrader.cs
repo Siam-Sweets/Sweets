@@ -21,126 +21,6 @@ public static class DbSchemaUpgrader
         var commands = new[]
         {
             """
-            CREATE TABLE IF NOT EXISTS "Stores" (
-                "Id" INTEGER NOT NULL CONSTRAINT "PK_Stores" PRIMARY KEY AUTOINCREMENT,
-                "SyncId" TEXT NOT NULL,
-                "Code" TEXT NOT NULL,
-                "Name" TEXT NOT NULL,
-                "Address" TEXT NULL,
-                "Phone" TEXT NULL,
-                "IsActive" INTEGER NOT NULL,
-                "CreatedAt" TEXT NOT NULL,
-                "UpdatedAt" TEXT NULL
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS "SyncOutbox" (
-                "Id" INTEGER NOT NULL CONSTRAINT "PK_SyncOutbox" PRIMARY KEY AUTOINCREMENT,
-                "StoreId" INTEGER NOT NULL,
-                "ChangeId" TEXT NOT NULL,
-                "EntityType" TEXT NOT NULL,
-                "EntitySyncId" TEXT NOT NULL,
-                "Operation" TEXT NOT NULL,
-                "EntityVersion" INTEGER NOT NULL,
-                "BaseCloudVersion" INTEGER NOT NULL DEFAULT 0,
-                "PayloadJson" TEXT NOT NULL,
-                "CreatedAt" TEXT NOT NULL,
-                "AttemptCount" INTEGER NOT NULL DEFAULT 0,
-                "LastAttemptAt" TEXT NULL,
-                "LastError" TEXT NULL
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS "SyncStates" (
-                "Id" INTEGER NOT NULL CONSTRAINT "PK_SyncStates" PRIMARY KEY AUTOINCREMENT,
-                "StoreId" INTEGER NOT NULL,
-                "DeviceId" TEXT NOT NULL,
-                "PullCursor" INTEGER NOT NULL DEFAULT 0,
-                "LastSyncAt" TEXT NULL,
-                "LastSuccessfulSyncAt" TEXT NULL,
-                "LastSnapshotUploadedAt" TEXT NULL,
-                "LastError" TEXT NULL
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS "SyncConflicts" (
-                "Id" INTEGER NOT NULL CONSTRAINT "PK_SyncConflicts" PRIMARY KEY AUTOINCREMENT,
-                "StoreId" INTEGER NOT NULL,
-                "EntityType" TEXT NOT NULL,
-                "EntitySyncId" TEXT NOT NULL,
-                "ChangeId" TEXT NOT NULL,
-                "LocalBaseCloudVersion" INTEGER NOT NULL,
-                "RemoteCloudVersion" INTEGER NOT NULL,
-                "LocalOperation" TEXT NOT NULL DEFAULT 'upsert',
-                "RemoteOperation" TEXT NOT NULL DEFAULT 'upsert',
-                "LocalPayloadJson" TEXT NOT NULL,
-                "RemotePayloadJson" TEXT NOT NULL,
-                "Message" TEXT NOT NULL,
-                "CreatedAt" TEXT NOT NULL,
-                "ResolvedAt" TEXT NULL,
-                "Resolution" TEXT NULL,
-                "ResolvedPayloadJson" TEXT NULL
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS "SyncRuns" (
-                "Id" INTEGER NOT NULL CONSTRAINT "PK_SyncRuns" PRIMARY KEY AUTOINCREMENT,
-                "StartedAt" TEXT NOT NULL,
-                "CompletedAt" TEXT NULL,
-                "Status" TEXT NOT NULL,
-                "DeviceId" TEXT NOT NULL,
-                "StoreCount" INTEGER NOT NULL DEFAULT 0,
-                "PushedChanges" INTEGER NOT NULL DEFAULT 0,
-                "PulledChanges" INTEGER NOT NULL DEFAULT 0,
-                "ConflictCount" INTEGER NOT NULL DEFAULT 0,
-                "PendingAfter" INTEGER NOT NULL DEFAULT 0,
-                "Error" TEXT NULL
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS "StockTransfers" (
-                "Id" INTEGER NOT NULL CONSTRAINT "PK_StockTransfers" PRIMARY KEY AUTOINCREMENT,
-                "StoreId" INTEGER NOT NULL,
-                "SyncId" TEXT NOT NULL,
-                "SyncVersion" INTEGER NOT NULL DEFAULT 1,
-                "SyncUpdatedAt" TEXT NOT NULL,
-                "CloudVersion" INTEGER NOT NULL DEFAULT 0,
-                "TransferNumber" TEXT NOT NULL,
-                "DestinationStoreId" INTEGER NOT NULL,
-                "Status" INTEGER NOT NULL,
-                "Note" TEXT NULL,
-                "CreatedByUserId" INTEGER NULL,
-                "CreatedAt" TEXT NOT NULL,
-                "DispatchedByUserId" INTEGER NULL,
-                "DispatchedAt" TEXT NULL,
-                "ReceivedByUserId" INTEGER NULL,
-                "ReceivedAt" TEXT NULL,
-                "CancelledByUserId" INTEGER NULL,
-                "CancelledAt" TEXT NULL,
-                "CancellationReason" TEXT NULL
-            );
-            """,
-            """
-            CREATE TABLE IF NOT EXISTS "StockTransferItems" (
-                "Id" INTEGER NOT NULL CONSTRAINT "PK_StockTransferItems" PRIMARY KEY AUTOINCREMENT,
-                "StoreId" INTEGER NOT NULL,
-                "SyncId" TEXT NOT NULL,
-                "SyncVersion" INTEGER NOT NULL DEFAULT 1,
-                "SyncUpdatedAt" TEXT NOT NULL,
-                "CloudVersion" INTEGER NOT NULL DEFAULT 0,
-                "StockTransferId" INTEGER NOT NULL,
-                "ProductId" INTEGER NOT NULL,
-                "DestinationProductId" INTEGER NOT NULL,
-                "ProductName" TEXT NOT NULL,
-                "Sku" TEXT NULL,
-                "Unit" INTEGER NOT NULL,
-                "Quantity" decimal(18,4) NOT NULL,
-                "UnitCost" decimal(18,4) NOT NULL,
-                CONSTRAINT "FK_StockTransferItems_StockTransfers_StockTransferId" FOREIGN KEY ("StockTransferId") REFERENCES "StockTransfers" ("Id") ON DELETE CASCADE,
-                CONSTRAINT "FK_StockTransferItems_Products_ProductId" FOREIGN KEY ("ProductId") REFERENCES "Products" ("Id") ON DELETE RESTRICT
-            );
-            """,
-            """
             CREATE TABLE IF NOT EXISTS "Suppliers" (
                 "Id" INTEGER NOT NULL CONSTRAINT "PK_Suppliers" PRIMARY KEY AUTOINCREMENT,
                 "Name" TEXT NOT NULL,
@@ -229,7 +109,7 @@ public static class DbSchemaUpgrader
             );
             """,
             "CREATE INDEX IF NOT EXISTS \"IX_Suppliers_Name\" ON \"Suppliers\" (\"Name\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_PurchaseDocuments_DocumentNumber_Legacy\" ON \"PurchaseDocuments\" (\"DocumentNumber\");",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PurchaseDocuments_DocumentNumber\" ON \"PurchaseDocuments\" (\"DocumentNumber\");",
             "CREATE INDEX IF NOT EXISTS \"IX_PurchaseDocuments_DocumentDate\" ON \"PurchaseDocuments\" (\"DocumentDate\");",
             "CREATE INDEX IF NOT EXISTS \"IX_PurchaseDocuments_SupplierId\" ON \"PurchaseDocuments\" (\"SupplierId\");",
             "CREATE INDEX IF NOT EXISTS \"IX_PurchaseItems_PurchaseDocumentId\" ON \"PurchaseItems\" (\"PurchaseDocumentId\");",
@@ -240,33 +120,11 @@ public static class DbSchemaUpgrader
             "CREATE INDEX IF NOT EXISTS \"IX_CashMovements_CashSessionId\" ON \"CashMovements\" (\"CashSessionId\");",
             "CREATE INDEX IF NOT EXISTS \"IX_CashMovements_CreatedAt\" ON \"CashMovements\" (\"CreatedAt\");",
             "CREATE INDEX IF NOT EXISTS \"IX_CashMovements_UserId\" ON \"CashMovements\" (\"UserId\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_SalePayments_SaleId\" ON \"SalePayments\" (\"SaleId\");",
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_StockTransfers_StoreId_TransferNumber\" ON \"StockTransfers\" (\"StoreId\", \"TransferNumber\" COLLATE NOCASE);",
-            "CREATE INDEX IF NOT EXISTS \"IX_StockTransfers_DestinationStoreId_Status\" ON \"StockTransfers\" (\"DestinationStoreId\", \"Status\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_StockTransferItems_StockTransferId\" ON \"StockTransferItems\" (\"StockTransferId\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_StockTransferItems_ProductId\" ON \"StockTransferItems\" (\"ProductId\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_StockTransferItems_DestinationProductId\" ON \"StockTransferItems\" (\"DestinationProductId\");",
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Stores_Code\" ON \"Stores\" (\"Code\" COLLATE NOCASE);",
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Stores_SyncId\" ON \"Stores\" (\"SyncId\" COLLATE NOCASE);",
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SyncOutbox_ChangeId\" ON \"SyncOutbox\" (\"ChangeId\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_SyncOutbox_StoreId_Id\" ON \"SyncOutbox\" (\"StoreId\", \"Id\");",
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SyncStates_StoreId\" ON \"SyncStates\" (\"StoreId\");",
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SyncConflicts_ChangeId\" ON \"SyncConflicts\" (\"ChangeId\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_SyncConflicts_StoreId_ResolvedAt\" ON \"SyncConflicts\" (\"StoreId\", \"ResolvedAt\");",
-            "CREATE INDEX IF NOT EXISTS \"IX_SyncRuns_StartedAt\" ON \"SyncRuns\" (\"StartedAt\");"
+            "CREATE INDEX IF NOT EXISTS \"IX_SalePayments_SaleId\" ON \"SalePayments\" (\"SaleId\");"
         };
 
         foreach (var command in commands)
             await db.Database.ExecuteSqlRawAsync(command);
-
-        await EnsureColumnAsync(db, "SyncConflicts", "LocalOperation",
-            "\"LocalOperation\" TEXT NOT NULL DEFAULT 'upsert'");
-        await EnsureColumnAsync(db, "SyncConflicts", "RemoteOperation",
-            "\"RemoteOperation\" TEXT NOT NULL DEFAULT 'upsert'");
-        await EnsureColumnAsync(db, "SyncConflicts", "Resolution",
-            "\"Resolution\" TEXT NULL");
-        await EnsureColumnAsync(db, "SyncConflicts", "ResolvedPayloadJson",
-            "\"ResolvedPayloadJson\" TEXT NULL");
 
         // EnsureCreated only creates a brand-new database; it does not add later
         // model columns to an existing store. These upgrades keep installed data
@@ -283,10 +141,6 @@ public static class DbSchemaUpgrader
             "\"DiscountReason\" TEXT NULL");
         await EnsureColumnAsync(db, "StockTransactions", "SaleItemId",
             "\"SaleItemId\" INTEGER NULL");
-        await EnsureColumnAsync(db, "StockTransactions", "StockTransferId",
-            "\"StockTransferId\" INTEGER NULL");
-        await EnsureColumnAsync(db, "StockTransactions", "StockTransferItemId",
-            "\"StockTransferItemId\" INTEGER NULL");
         var costPriceColumnAdded = await EnsureColumnAsync(db, "SaleItems", "CostPrice",
             "\"CostPrice\" decimal(18,4) NOT NULL DEFAULT 0");
         var unitColumnAdded = await EnsureColumnAsync(db, "SaleItems", "Unit",
@@ -303,50 +157,6 @@ public static class DbSchemaUpgrader
             "\"CashSessionId\" INTEGER NULL REFERENCES \"CashSessions\"(\"Id\") ON DELETE RESTRICT");
         await EnsureColumnAsync(db, "Customers", "IsActive",
             "\"IsActive\" INTEGER NOT NULL DEFAULT 1");
-        await EnsureColumnAsync(db, "Stores", "SyncVersion",
-            "\"SyncVersion\" INTEGER NOT NULL DEFAULT 1");
-        await EnsureColumnAsync(db, "Stores", "SyncUpdatedAt",
-            "\"SyncUpdatedAt\" TEXT NOT NULL DEFAULT '1970-01-01 00:00:00'");
-        await EnsureColumnAsync(db, "Stores", "CloudVersion",
-            "\"CloudVersion\" INTEGER NOT NULL DEFAULT 0");
-        await EnsureColumnAsync(db, "SyncOutbox", "BaseCloudVersion",
-            "\"BaseCloudVersion\" INTEGER NOT NULL DEFAULT 0");
-        await EnsureColumnAsync(db, "SyncStates", "LastSnapshotUploadedAt",
-            "\"LastSnapshotUploadedAt\" TEXT NULL");
-        await db.Database.ExecuteSqlRawAsync(
-            "UPDATE \"Stores\" SET \"SyncUpdatedAt\" = CURRENT_TIMESTAMP " +
-            "WHERE \"SyncUpdatedAt\" = '1970-01-01 00:00:00';");
-
-        var storeScopedTables = new[]
-        {
-            "Products", "Categories", "Customers", "Users", "Sales", "SaleItems",
-            "SalePayments", "StockTransactions", "Taxes", "Discounts", "Settings",
-            "Suppliers", "PurchaseDocuments", "PurchaseItems", "CashSessions", "CashMovements",
-            "StockTransfers", "StockTransferItems"
-        };
-        foreach (var table in storeScopedTables)
-        {
-            await EnsureColumnAsync(db, table, "StoreId", "\"StoreId\" INTEGER NOT NULL DEFAULT 1");
-            await EnsureColumnAsync(db, table, "SyncId", "\"SyncId\" TEXT NOT NULL DEFAULT ''");
-            await EnsureColumnAsync(db, table, "SyncVersion", "\"SyncVersion\" INTEGER NOT NULL DEFAULT 1");
-            await EnsureColumnAsync(db, table, "SyncUpdatedAt", "\"SyncUpdatedAt\" TEXT NOT NULL DEFAULT '1970-01-01 00:00:00'");
-            await EnsureColumnAsync(db, table, "CloudVersion", "\"CloudVersion\" INTEGER NOT NULL DEFAULT 0");
-            await db.Database.ExecuteSqlRawAsync(
-                $"UPDATE \"{table}\" SET \"SyncId\" = lower(hex(randomblob(16))), " +
-                $"\"SyncUpdatedAt\" = CASE WHEN \"SyncUpdatedAt\" = '1970-01-01 00:00:00' THEN CURRENT_TIMESTAMP ELSE \"SyncUpdatedAt\" END " +
-                $"WHERE \"SyncId\" IS NULL OR TRIM(\"SyncId\") = '' OR \"SyncUpdatedAt\" = '1970-01-01 00:00:00';");
-        }
-
-        await db.Database.ExecuteSqlRawAsync(
-            """
-            INSERT OR IGNORE INTO "Stores"
-                ("Id", "SyncId", "Code", "Name", "Address", "Phone", "IsActive", "CreatedAt")
-            SELECT 1, lower(hex(randomblob(16))), 'MAIN',
-                   COALESCE((SELECT CASE WHEN json_valid("Value") THEN json_extract("Value", '$.StoreName') END FROM "Settings" WHERE "Key" = 'store:config' ORDER BY "Id" LIMIT 1), 'Main Store'),
-                   COALESCE((SELECT CASE WHEN json_valid("Value") THEN json_extract("Value", '$.Address') END FROM "Settings" WHERE "Key" = 'store:config' ORDER BY "Id" LIMIT 1), ''),
-                   COALESCE((SELECT CASE WHEN json_valid("Value") THEN json_extract("Value", '$.Phone') END FROM "Settings" WHERE "Key" = 'store:config' ORDER BY "Id" LIMIT 1), ''),
-                   1, CURRENT_TIMESTAMP;
-            """);
 
         // Releases that stored only IsWeighted implicitly meant kilograms. Keep
         // that behaviour when adding the explicit unit column to those databases.
@@ -416,8 +226,7 @@ public static class DbSchemaUpgrader
             SET "CashSessionId" = (
                 SELECT session."Id"
                 FROM "CashSessions" AS session
-                WHERE session."StoreId" = "Sales"."StoreId"
-                  AND session."OpenedAt" <= "Sales"."SaleDate"
+                WHERE session."OpenedAt" <= "Sales"."SaleDate"
                   AND (session."ClosedAt" IS NULL OR "Sales"."SaleDate" <= session."ClosedAt")
                 ORDER BY session."OpenedAt" DESC, session."Id" DESC
                 LIMIT 1
@@ -426,36 +235,15 @@ public static class DbSchemaUpgrader
               AND EXISTS (
                 SELECT 1
                 FROM "CashSessions" AS session
-                WHERE session."StoreId" = "Sales"."StoreId"
-                  AND session."OpenedAt" <= "Sales"."SaleDate"
+                WHERE session."OpenedAt" <= "Sales"."SaleDate"
                   AND (session."ClosedAt" IS NULL OR "Sales"."SaleDate" <= session."ClosedAt")
               );
             """);
 
-        var obsoleteGlobalIndexes = new[]
-        {
-            "IX_Products_Sku", "IX_Products_Barcode", "IX_Categories_Name",
-            "IX_Users_Username", "IX_Sales_ReceiptNumber", "IX_Discounts_Code",
-            "IX_Settings_Key", "IX_PurchaseDocuments_DocumentNumber", "IX_PurchaseDocuments_DocumentNumber_Legacy",
-            "UX_Users_Username_NOCASE", "UX_Products_Sku_NOCASE",
-            "UX_Products_Barcode_NOCASE", "UX_Discounts_Code_NOCASE"
-        };
-        foreach (var index in obsoleteGlobalIndexes)
-            await db.Database.ExecuteSqlRawAsync($"DROP INDEX IF EXISTS \"{index}\";");
-
-        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Users_Store_Username_NOCASE", "Users", "Username");
-        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Store_Sku_NOCASE", "Products", "Sku");
-        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Store_Barcode_NOCASE", "Products", "Barcode");
-        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Discounts_Store_Code_NOCASE", "Discounts", "Code");
-        await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Categories_StoreId_Name\" ON \"Categories\" (\"StoreId\", \"Name\" COLLATE NOCASE);");
-        await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Sales_StoreId_ReceiptNumber\" ON \"Sales\" (\"StoreId\", \"ReceiptNumber\");");
-        await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Settings_StoreId_Key\" ON \"Settings\" (\"StoreId\", \"Key\");");
-        await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PurchaseDocuments_StoreId_DocumentNumber\" ON \"PurchaseDocuments\" (\"StoreId\", \"DocumentNumber\");");
-        foreach (var table in storeScopedTables)
-        {
-            await db.Database.ExecuteSqlRawAsync($"CREATE INDEX IF NOT EXISTS \"IX_{table}_StoreId\" ON \"{table}\" (\"StoreId\");");
-            await db.Database.ExecuteSqlRawAsync($"CREATE UNIQUE INDEX IF NOT EXISTS \"IX_{table}_StoreId_SyncId\" ON \"{table}\" (\"StoreId\", \"SyncId\");");
-        }
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Users_Username_NOCASE", "Users", "Username");
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Sku_NOCASE", "Products", "Sku");
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Barcode_NOCASE", "Products", "Barcode");
+        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Discounts_Code_NOCASE", "Discounts", "Code");
         await CreateProductIdentifierGuardsAsync(db);
         // Partial refunds legitimately create several reversal documents for one
         // sale. Remove the old one-refund-only constraint before publishing the
@@ -466,15 +254,10 @@ public static class DbSchemaUpgrader
             "CREATE INDEX IF NOT EXISTS \"IX_Sales_RefundedSaleId\" ON \"Sales\" (\"RefundedSaleId\");");
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS \"IX_SaleItems_RefundedSaleItemId\" ON \"SaleItems\" (\"RefundedSaleItemId\");");
-        await db.Database.ExecuteSqlRawAsync("DROP INDEX IF EXISTS \"UX_CashSessions_OneOpen\";");
         await db.Database.ExecuteSqlRawAsync(
-            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_CashSessions_OneOpen\" ON \"CashSessions\" (\"StoreId\") WHERE \"ClosedAt\" IS NULL;");
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_CashSessions_OneOpen\" ON \"CashSessions\" ((1)) WHERE \"ClosedAt\" IS NULL;");
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS \"IX_Sales_CashSessionId\" ON \"Sales\" (\"CashSessionId\");");
-        await db.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS \"IX_StockTransactions_StockTransferId\" ON \"StockTransactions\" (\"StockTransferId\");");
-        await db.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS \"IX_StockTransactions_StockTransferItemId\" ON \"StockTransactions\" (\"StockTransferItemId\");");
 
         await transaction.CommitAsync();
         }
@@ -494,7 +277,7 @@ public static class DbSchemaUpgrader
             """
             WITH ranked AS (
                 SELECT "Id", ROW_NUMBER() OVER (
-                    PARTITION BY "StoreId", LOWER(TRIM("Username")) ORDER BY "Id") AS rn
+                    PARTITION BY LOWER(TRIM("Username")) ORDER BY "Id") AS rn
                 FROM "Users" WHERE TRIM("Username") <> ''
             )
             UPDATE "Users"
@@ -506,7 +289,7 @@ public static class DbSchemaUpgrader
             """
             WITH ranked AS (
                 SELECT "Id", ROW_NUMBER() OVER (
-                    PARTITION BY "StoreId", LOWER(TRIM("Sku")) ORDER BY "Id") AS rn
+                    PARTITION BY LOWER(TRIM("Sku")) ORDER BY "Id") AS rn
                 FROM "Products" WHERE "Sku" IS NOT NULL AND TRIM("Sku") <> ''
             )
             UPDATE "Products" SET "Sku" = NULL
@@ -515,7 +298,7 @@ public static class DbSchemaUpgrader
             """
             WITH ranked AS (
                 SELECT "Id", ROW_NUMBER() OVER (
-                    PARTITION BY "StoreId", LOWER(TRIM("Barcode")) ORDER BY "Id") AS rn
+                    PARTITION BY LOWER(TRIM("Barcode")) ORDER BY "Id") AS rn
                 FROM "Products" WHERE "Barcode" IS NOT NULL AND TRIM("Barcode") <> ''
             )
             UPDATE "Products" SET "Barcode" = NULL
@@ -527,14 +310,14 @@ public static class DbSchemaUpgrader
             // across both fields and clear every later ambiguous copy.
             """
             WITH identifiers AS (
-                SELECT "Id", "StoreId", 'Sku' AS field, LOWER(TRIM("Sku")) AS value, 0 AS priority
+                SELECT "Id", 'Sku' AS field, LOWER(TRIM("Sku")) AS value, 0 AS priority
                 FROM "Products" WHERE "Sku" IS NOT NULL AND TRIM("Sku") <> ''
                 UNION ALL
-                SELECT "Id", "StoreId", 'Barcode' AS field, LOWER(TRIM("Barcode")) AS value, 1 AS priority
+                SELECT "Id", 'Barcode' AS field, LOWER(TRIM("Barcode")) AS value, 1 AS priority
                 FROM "Products" WHERE "Barcode" IS NOT NULL AND TRIM("Barcode") <> ''
             ), ranked AS (
                 SELECT "Id", field, ROW_NUMBER() OVER (
-                    PARTITION BY "StoreId", value ORDER BY "Id", priority) AS rn
+                    PARTITION BY value ORDER BY "Id", priority) AS rn
                 FROM identifiers
             )
             UPDATE "Products" SET "Sku" = NULL
@@ -542,14 +325,14 @@ public static class DbSchemaUpgrader
             """,
             """
             WITH identifiers AS (
-                SELECT "Id", "StoreId", 'Sku' AS field, LOWER(TRIM("Sku")) AS value, 0 AS priority
+                SELECT "Id", 'Sku' AS field, LOWER(TRIM("Sku")) AS value, 0 AS priority
                 FROM "Products" WHERE "Sku" IS NOT NULL AND TRIM("Sku") <> ''
                 UNION ALL
-                SELECT "Id", "StoreId", 'Barcode' AS field, LOWER(TRIM("Barcode")) AS value, 1 AS priority
+                SELECT "Id", 'Barcode' AS field, LOWER(TRIM("Barcode")) AS value, 1 AS priority
                 FROM "Products" WHERE "Barcode" IS NOT NULL AND TRIM("Barcode") <> ''
             ), ranked AS (
                 SELECT "Id", field, ROW_NUMBER() OVER (
-                    PARTITION BY "StoreId", value ORDER BY "Id", priority) AS rn
+                    PARTITION BY value ORDER BY "Id", priority) AS rn
                 FROM identifiers
             )
             UPDATE "Products" SET "Barcode" = NULL
@@ -558,7 +341,7 @@ public static class DbSchemaUpgrader
             """
             WITH ranked AS (
                 SELECT "Id", ROW_NUMBER() OVER (
-                    PARTITION BY "StoreId", LOWER(TRIM("Code")) ORDER BY "Id") AS rn
+                    PARTITION BY LOWER(TRIM("Code")) ORDER BY "Id") AS rn
                 FROM "Discounts" WHERE "Code" IS NOT NULL AND TRIM("Code") <> ''
             )
             UPDATE "Discounts" SET "Code" = NULL
@@ -576,13 +359,7 @@ public static class DbSchemaUpgrader
                     THEN 'Automatically closed during database upgrade'
                     ELSE "Note" || CHAR(10) || 'Automatically closed during database upgrade' END
             WHERE "ClosedAt" IS NULL
-              AND EXISTS (
-                  SELECT 1 FROM "CashSessions" AS newer
-                  WHERE newer."StoreId" = "CashSessions"."StoreId"
-                    AND newer."ClosedAt" IS NULL
-                    AND (newer."OpenedAt" > "CashSessions"."OpenedAt"
-                         OR (newer."OpenedAt" = "CashSessions"."OpenedAt" AND newer."Id" > "CashSessions"."Id"))
-              );
+              AND "Id" <> (SELECT "Id" FROM "CashSessions" WHERE "ClosedAt" IS NULL ORDER BY "OpenedAt" DESC, "Id" DESC LIMIT 1);
             """,
             // Older versions marked both the original sale and its signed reversal
             // as Refunded. Restore the original to Completed so financial reports
@@ -627,13 +404,10 @@ public static class DbSchemaUpgrader
             // cash and payment reports overstated. Add them only when the reversal
             // currently has no payment rows.
             """
-            INSERT INTO "SalePayments"
-                ("SaleId", "Method", "Amount", "Reference", "CreatedAt",
-                 "StoreId", "SyncId", "SyncVersion", "SyncUpdatedAt")
+            INSERT INTO "SalePayments" ("SaleId", "Method", "Amount", "Reference", "CreatedAt")
             SELECT refund."Id", originalPayment."Method", -ABS(originalPayment."Amount"),
                    'Legacy refund ' || original."ReceiptNumber",
-                   COALESCE(refund."SaleDate", CURRENT_TIMESTAMP),
-                   refund."StoreId", lower(hex(randomblob(16))), 1, CURRENT_TIMESTAMP
+                   COALESCE(refund."SaleDate", CURRENT_TIMESTAMP)
             FROM "Sales" AS refund
             JOIN "Sales" AS original ON original."Id" = refund."RefundedSaleId"
             JOIN "SalePayments" AS originalPayment ON originalPayment."SaleId" = original."Id"
@@ -651,17 +425,33 @@ public static class DbSchemaUpgrader
 
     private static async Task CreateProductIdentifierGuardsAsync(AppDbContext db)
     {
-        // SKU and barcode share one identifier namespace inside each store.
+        // The per-column unique indexes above cannot stop product A's SKU from
+        // matching product B's barcode. These local SQLite triggers close that
+        // gap for every writer, including future import tools and manual SQL.
         var commands = new[]
         {
-            "DROP TRIGGER IF EXISTS \"TR_Products_IdentifierNamespace_Insert\";",
-            "DROP TRIGGER IF EXISTS \"TR_Products_IdentifierNamespace_Update\";",
             """
-            CREATE TRIGGER "TR_Products_IdentifierNamespace_Insert"
+            CREATE TRIGGER IF NOT EXISTS "TR_Products_IdentifierNamespace_Insert"
             BEFORE INSERT ON "Products"
             WHEN EXISTS (
                 SELECT 1 FROM "Products" AS existing
-                WHERE existing."StoreId" = NEW."StoreId" AND
+                WHERE (NEW."Sku" IS NOT NULL AND TRIM(NEW."Sku") <> '' AND
+                       (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Sku")) OR
+                        LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Sku"))))
+                   OR (NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> '' AND
+                       (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Barcode")) OR
+                        LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode"))))
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product');
+            END;
+            """,
+            """
+            CREATE TRIGGER IF NOT EXISTS "TR_Products_IdentifierNamespace_Update"
+            BEFORE UPDATE OF "Sku", "Barcode" ON "Products"
+            WHEN EXISTS (
+                SELECT 1 FROM "Products" AS existing
+                WHERE existing."Id" <> NEW."Id" AND
                       ((NEW."Sku" IS NOT NULL AND TRIM(NEW."Sku") <> '' AND
                         (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Sku")) OR
                          LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Sku"))))
@@ -670,25 +460,7 @@ public static class DbSchemaUpgrader
                          LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode")))))
             )
             BEGIN
-                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product in this store');
-            END;
-            """,
-            """
-            CREATE TRIGGER "TR_Products_IdentifierNamespace_Update"
-            BEFORE UPDATE OF "Sku", "Barcode", "StoreId" ON "Products"
-            WHEN EXISTS (
-                SELECT 1 FROM "Products" AS existing
-                WHERE existing."Id" <> NEW."Id"
-                  AND existing."StoreId" = NEW."StoreId"
-                  AND ((NEW."Sku" IS NOT NULL AND TRIM(NEW."Sku") <> '' AND
-                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Sku")) OR
-                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Sku"))))
-                       OR (NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> '' AND
-                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Barcode")) OR
-                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode")))))
-            )
-            BEGIN
-                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product in this store');
+                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product');
             END;
             """
         };
@@ -708,17 +480,16 @@ public static class DbSchemaUpgrader
             await using var duplicate = connection.CreateCommand();
             duplicate.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
             duplicate.CommandText =
-                $"SELECT COUNT(*) FROM (SELECT \"StoreId\", \"{columnName}\" COLLATE NOCASE FROM \"{tableName}\" " +
+                $"SELECT COUNT(*) FROM (SELECT \"{columnName}\" COLLATE NOCASE FROM \"{tableName}\" " +
                 $"WHERE \"{columnName}\" IS NOT NULL AND TRIM(\"{columnName}\") <> '' " +
-                $"GROUP BY \"StoreId\", \"{columnName}\" COLLATE NOCASE HAVING COUNT(*) > 1);";
+                $"GROUP BY \"{columnName}\" COLLATE NOCASE HAVING COUNT(*) > 1);";
             var duplicateGroups = Convert.ToInt32(await duplicate.ExecuteScalarAsync());
             if (duplicateGroups > 0) return;
 
             await using var create = connection.CreateCommand();
             create.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
             create.CommandText =
-                $"CREATE UNIQUE INDEX IF NOT EXISTS \"{indexName}\" ON \"{tableName}\" " +
-                $"(\"StoreId\", \"{columnName}\" COLLATE NOCASE) " +
+                $"CREATE UNIQUE INDEX IF NOT EXISTS \"{indexName}\" ON \"{tableName}\" (\"{columnName}\" COLLATE NOCASE) " +
                 $"WHERE \"{columnName}\" IS NOT NULL AND TRIM(\"{columnName}\") <> '';";
             await create.ExecuteNonQueryAsync();
         }

@@ -113,15 +113,6 @@ public sealed class SetupService : ISetupService
                 administrator.UpdatedAt = DateTime.UtcNow;
             }
 
-            var currentStore = await _db.Stores.FirstOrDefaultAsync(store => store.Id == _db.CurrentStoreId);
-            if (currentStore != null)
-            {
-                currentStore.Name = storeName;
-                currentStore.Address = request.StoreSettings.Address;
-                currentStore.Phone = request.StoreSettings.Phone;
-                currentStore.UpdatedAt = DateTime.UtcNow;
-            }
-
             await _db.SaveChangesAsync();
             if (request.IncludeSampleProducts)
                 await DbSeeder.SeedSampleProductsAsync(_db);

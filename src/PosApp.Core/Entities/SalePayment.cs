@@ -5,7 +5,7 @@ namespace PosApp.Core.Entities;
 /// <summary>
 /// A single tender against a sale. A sale may have multiple payments (split tender).
 /// </summary>
-public class SalePayment : StoreScopedEntity
+public class SalePayment
 {
     public int Id { get; set; }
 

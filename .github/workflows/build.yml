@@ -36,10 +36,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Validate cloud Worker syntax
-        shell: pwsh
-        run: npm run check --prefix cloud/worker
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:

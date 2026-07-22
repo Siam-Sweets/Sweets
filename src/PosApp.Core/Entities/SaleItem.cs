@@ -7,7 +7,7 @@ namespace PosApp.Core.Entities;
 /// so that subsequent edits to the product catalog do not retroactively
 /// change historical sales.
 /// </summary>
-public class SaleItem : StoreScopedEntity
+public class SaleItem
 {
     public int Id { get; set; }
 

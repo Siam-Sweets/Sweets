@@ -5,7 +5,7 @@ namespace PosApp.Core.Entities;
 /// <summary>
 /// A point-of-sale user (cashier, manager, admin). PIN-based login.
 /// </summary>
-public class User : StoreScopedEntity
+public class User
 {
     public int Id { get; set; }
 

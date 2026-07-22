@@ -6,7 +6,7 @@ namespace PosApp.Core.Entities;
 /// Key-value store for application settings (store info, printer config, etc.).
 /// Persisted in SQLite so the user doesn't need a separate config file.
 /// </summary>
-public class Setting : StoreScopedEntity
+public class Setting
 {
     public int Id { get; set; }
 
