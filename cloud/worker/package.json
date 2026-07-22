@@ -1,7 +1,7 @@
 {
   "name": "posapp-cloud-worker",
   "private": true,
-  "version": "1.9.0",
+  "version": "1.9.1",
   "type": "module",
   "scripts": {
     "check": "node --check src/index.js && node tests/smoke.mjs",

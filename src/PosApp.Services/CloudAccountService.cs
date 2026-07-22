@@ -414,7 +414,7 @@ public sealed class CloudAccountService : ICloudAccountService
     }
 
     private static string CurrentVersion()
-        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.9.0";
+        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.9.1";
 
     private sealed class StoreSnapshot
     {

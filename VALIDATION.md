@@ -1,22 +1,20 @@
-# PosApp v1.9.0 Validation Notes
+# PosApp v1.9.1 Validation Notes
 
 Validated in the available Linux environment on 2026-07-22:
 
+- Confirmed `PosApp.Services` now references `Microsoft.Extensions.DependencyInjection.Abstractions` 8.0.2.
+- Confirmed `PosApp.Wpf` now references `Microsoft.Extensions.DependencyInjection` 8.0.2.
+- Verified no remaining 8.0.1 Dependency Injection package references exist in project files.
+- Verified application, assembly, file, informational, installer, Worker, README, and changelog versions at 1.9.1.
 - Parsed all WPF XAML and localization dictionaries successfully.
-- Verified English/Bengali resource parity: 605 keys in each dictionary, with no missing transfer resources.
-- Checked referenced XAML event handlers and structural delimiters across 88 C# files.
-- Verified application, assembly, file, informational, installer, Worker, README, and changelog versions at 1.9.0.
-- Verified the transfer service, dependency injection, navigation, role gating, store filters, report overloads, and status-aware transfer actions are wired.
-- Simulated the additive v1.8.0-to-v1.9.0 SQLite upgrade, preserving an existing stock-ledger row while adding transfer tables, indexes, and stock-transaction links.
-- Simulated Draft → Dispatch → Receive inventory movement and confirmed balanced linked ledger quantities, source/destination stock totals, foreign-key integrity, and per-store transfer-number uniqueness.
+- Verified English/Bengali resource parity and referenced XAML event handlers.
 - Ran `npm run check --prefix cloud/worker` successfully.
-- Worker smoke coverage passed for health, sign-up, snapshots, sequential edits, idempotent replay, revision conflicts, cursor pull, device listing, `StockTransfer`, and `StockTransferItem` changes.
-- Verified snapshot schema version 4, transfer restore ordering, atomic remote-change transactions, and out-of-order destination store/category/product materialization by sync ID.
-- Confirmed serializers exclude `ImagePath`; transfer-created destination products explicitly use `ImagePath = null`, and no image-upload/storage endpoint was added.
+- Confirmed v1.9.1 contains no local SQLite or Turso schema changes.
+- Confirmed serializers still exclude `ImagePath` and no image-upload/storage endpoint exists.
 
 Not validated here:
 
-- Windows WPF compilation, installer compilation, or runtime UI execution, because a Windows .NET 8 build environment was unavailable.
+- `dotnet restore`, Windows WPF compilation, installer compilation, or runtime UI execution, because the available container does not include the .NET SDK or Windows build tools.
 - Live Cloudflare Worker/Turso deployment, because no user cloud credentials were provided.
 
-The GitHub Actions Windows workflow remains the authoritative build check.
+The GitHub Actions Windows workflow remains the authoritative restore and build check.

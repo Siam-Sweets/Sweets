@@ -36,9 +36,9 @@ globalThis.fetch = async (_url, options) => {
       return executeResult(
         ["id", "name", "platform", "app_version", "created_at", "last_seen_at", "revoked_at", "store_cursor_count"],
         [
-          [textCell("device-one"), textCell("Front POS"), textCell("Windows"), textCell("1.9.0"),
+          [textCell("device-one"), textCell("Front POS"), textCell("Windows"), textCell("1.9.1"),
             textCell("2026-07-22T00:00:00.000Z"), textCell("2026-07-22T01:00:00.000Z"), nullCell(), integerCell(1)],
-          [textCell("device-two"), textCell("Back POS"), textCell("Windows"), textCell("1.9.0"),
+          [textCell("device-two"), textCell("Back POS"), textCell("Windows"), textCell("1.9.1"),
             textCell("2026-07-22T00:10:00.000Z"), textCell("2026-07-22T01:05:00.000Z"), nullCell(), integerCell(1)],
         ],
       );
@@ -115,7 +115,7 @@ globalThis.fetch = async (_url, options) => {
 try {
   const health = await worker.fetch(new Request("https://worker.test/v1/health"), env);
   assert.equal(health.status, 200);
-  assert.equal((await health.json()).version, "1.9.0");
+  assert.equal((await health.json()).version, "1.9.1");
 
   const signup = await worker.fetch(new Request("https://worker.test/v1/auth/signup", {
     method: "POST",
@@ -128,7 +128,7 @@ try {
       deviceKey: "device-key-1234567890",
       deviceName: "Test POS",
       platform: "Windows",
-      appVersion: "1.9.0",
+      appVersion: "1.9.1",
     }),
   }), env);
   assert.equal(signup.status, 200);
@@ -148,7 +148,7 @@ try {
     body: JSON.stringify({
       store: { syncId: "store-sync-id", code: "MAIN", name: "Main Store", isActive: true },
       schemaVersion: 4,
-      appVersion: "1.9.0",
+      appVersion: "1.9.1",
       syncCursor: 0,
       rowCount: 1,
       payload: { schemaVersion: 4, store: { SyncId: "store-sync-id" }, entities: {} },

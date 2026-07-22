@@ -1,4 +1,4 @@
-# PosApp Cloud Worker v1.9.0
+# PosApp Cloud Worker v1.9.1
 
 Self-hosted account, device, snapshot, and incremental-sync API for PosApp. Turso credentials and JWT signing material remain in Worker secrets; Windows devices receive only PosApp access/refresh tokens.
 
@@ -22,8 +22,8 @@ npx wrangler secret put REGISTRATION_KEY
 
 ### Upgrade
 
-- From v1.6.0: apply `migrations/v1.7.0.sql` once, then deploy the v1.9.0 Worker.
-- From v1.7.0 or v1.8.0: deploy the v1.9.0 Worker directly. No Turso schema migration is required.
+- From v1.6.0: apply `migrations/v1.7.0.sql` once, then deploy the v1.9.1 Worker.
+- From v1.7.0 or v1.8.0: deploy the v1.9.1 Worker directly. No Turso schema migration is required.
 
 ## Sync behavior
 

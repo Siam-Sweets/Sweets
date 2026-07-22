@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.1 — NuGet dependency restore fix
+
+- Resolved `NU1605` during `dotnet restore` by aligning `Microsoft.Extensions.DependencyInjection` and `Microsoft.Extensions.DependencyInjection.Abstractions` to 8.0.2.
+- Kept Entity Framework Core SQLite at 8.0.11 and made no database-schema or cloud-protocol changes.
+- Bumped application, assembly, file, informational, installer, Worker, README, and changelog versions.
+
 ## 1.9.0 — Multi-store operations and stock transfers
 
 - Added an administrator **All Stores** scope to dashboard and report KPIs, daily trends, products, categories, payments, and printable summaries.
