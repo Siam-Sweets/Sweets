@@ -165,6 +165,51 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_EmailSection}" Style="{StaticResource Heading2}"/><TextBlock Text="{DynamicResource Set_OfflineEmail}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
             </TabItem>
 
+            <TabItem Header="{DynamicResource Set_Cloud}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="22">
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Cloud_Title}" Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Cloud_Help}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,16"/>
+                                <TextBlock Text="{DynamicResource Cloud_Endpoint}" Style="{StaticResource Muted}"/>
+                                <TextBox x:Name="CloudEndpointBox" Padding="10,8" Margin="0,5,0,4"/>
+                                <TextBlock Text="{DynamicResource Cloud_EndpointHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <StackPanel Margin="0,0,10,12"><TextBlock Text="{DynamicResource Cloud_Email}" Style="{StaticResource Muted}"/><TextBox x:Name="CloudEmailBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="{DynamicResource Cloud_Password}" Style="{StaticResource Muted}"/><PasswordBox x:Name="CloudPasswordBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="1" Margin="0,0,10,12"><TextBlock Text="{DynamicResource Cloud_DisplayName}" Style="{StaticResource Muted}"/><TextBox x:Name="CloudDisplayNameBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="10,0,0,12"><TextBlock Text="{DynamicResource Cloud_DeviceName}" Style="{StaticResource Muted}"/><TextBox x:Name="CloudDeviceNameBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2"><TextBlock Text="{DynamicResource Cloud_RegistrationKey}" Style="{StaticResource Muted}"/><PasswordBox x:Name="CloudRegistrationKeyBox" Padding="10,8" Margin="0,5,0,0"/></StackPanel>
+                                </Grid>
+                                <WrapPanel Margin="0,16,0,0">
+                                    <Button Content="{DynamicResource Cloud_Test}" Style="{StaticResource OutlineButton}" Click="CloudTest_Click" Padding="15,9" Margin="0,0,8,8"/>
+                                    <Button Content="{DynamicResource Cloud_SignUp}" Style="{StaticResource PrimaryButton}" Click="CloudSignUp_Click" Padding="15,9" Margin="0,0,8,8"/>
+                                    <Button Content="{DynamicResource Cloud_SignIn}" Style="{StaticResource SuccessButton}" Click="CloudSignIn_Click" Padding="15,9" Margin="0,0,8,8"/>
+                                    <Button Content="{DynamicResource Cloud_Disconnect}" Style="{StaticResource OutlineButton}" Click="CloudDisconnect_Click" Padding="15,9" Margin="0,0,8,8"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Cloud_Status}" Style="{StaticResource Heading3}"/>
+                                <TextBlock x:Name="CloudStatusText" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,14"/>
+                                <TextBlock Text="{DynamicResource Cloud_SyncHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                                <WrapPanel>
+                                    <Button x:Name="CloudSyncNowButton" Content="{DynamicResource Cloud_SyncNow}" Style="{StaticResource PrimaryButton}" Click="CloudSyncNow_Click" Padding="18,10" Margin="0,0,8,8"/>
+                                    <Button x:Name="CloudSyncCenterButton" Content="{DynamicResource SyncCenter_Open}" Style="{StaticResource OutlineButton}" Click="CloudSyncCenter_Click" Padding="18,10" Margin="0,0,8,8"/>
+                                    <Button x:Name="CloudUploadSnapshotButton" Content="{DynamicResource Cloud_UploadSnapshot}" Style="{StaticResource OutlineButton}" Click="CloudUploadSnapshot_Click" Padding="18,10" Margin="0,0,8,8"/>
+                                    <Button x:Name="CloudRestoreButton" Content="{DynamicResource Cloud_Restore}" Style="{StaticResource OutlineButton}" Click="CloudRestore_Click" Padding="18,10" Margin="0,0,8,8"/>
+                                </WrapPanel>
+                                <TextBlock Text="{DynamicResource Cloud_RestoreHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="{DynamicResource Set_Print}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="22">

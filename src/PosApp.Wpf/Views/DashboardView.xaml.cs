@@ -12,20 +12,24 @@ public partial class DashboardView : UserControl, IRefreshable
 {
     private readonly IReportService _reports;
     private readonly IHardwareService _hardware;
+    private readonly IStoreService _stores;
     private bool _loading;
     private DateRangeReport? _range;
     private DailySalesReport? _today;
     private IReadOnlyList<TopProductRow> _topProducts = Array.Empty<TopProductRow>();
     private IReadOnlyList<SalesByHourRow> _hourly = Array.Empty<SalesByHourRow>();
     private IReadOnlyList<PaymentBreakdownRow> _payments = Array.Empty<PaymentBreakdownRow>();
+    private IReadOnlyList<StorePerformanceRow> _storePerformance = Array.Empty<StorePerformanceRow>();
+    private bool _storeFilterReady;
     private DateTime _selectedFrom;
     private DateTime _selectedTo;
 
-    public DashboardView(IReportService reports, IHardwareService hardware)
+    public DashboardView(IReportService reports, IHardwareService hardware, IStoreService stores)
     {
         InitializeComponent();
         _reports = reports;
         _hardware = hardware;
+        _stores = stores;
 
         var today = DateTime.Today;
         _selectedFrom = new DateTime(today.Year, today.Month, 1);
@@ -64,21 +68,25 @@ public partial class DashboardView : UserControl, IRefreshable
         IsEnabled = false;
         try
         {
+            await EnsureStoreFilterAsync();
             var from = _selectedFrom.Date;
             var to = _selectedTo.Date;
+            var storeId = SelectedStoreId();
             // ReportService owns one EF Core DbContext. Keep these reads
             // sequential because a DbContext cannot execute concurrent queries.
-            var range = await _reports.GetRangeReportAsync(from, to);
-            var today = await _reports.GetDailyReportAsync(DateTime.Today);
-            var top = await _reports.GetTopProductsAsync(from, to, 10);
-            var hourly = await _reports.GetSalesByHourAsync(from, to);
-            var payments = await _reports.GetPaymentBreakdownAsync(from, to);
+            var range = await _reports.GetRangeReportAsync(from, to, storeId);
+            var today = await _reports.GetDailyReportAsync(DateTime.Today, storeId);
+            var top = await _reports.GetTopProductsAsync(from, to, 10, storeId);
+            var hourly = await _reports.GetSalesByHourAsync(from, to, storeId);
+            var payments = await _reports.GetPaymentBreakdownAsync(from, to, storeId);
+            var performance = await _reports.GetStorePerformanceAsync(from, to, storeId);
 
             _range = range;
             _today = today;
             _topProducts = top.ToList();
             _hourly = hourly.ToList();
             _payments = payments.ToList();
+            _storePerformance = performance.ToList();
 
             PeriodText.Text = $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
             SalesText.Text = FormattingUtilities.Money(range.NetSales, App.StoreSettings);
@@ -91,6 +99,7 @@ public partial class DashboardView : UserControl, IRefreshable
             HourlyGrid.ItemsSource = _hourly
                 .Select(row => new HourlyDashboardRow(row.Hour, row.TransactionCount, row.Revenue))
                 .ToList();
+            StorePerformanceGrid.ItemsSource = _storePerformance;
         }
         catch (Exception ex)
         {
@@ -101,6 +110,31 @@ public partial class DashboardView : UserControl, IRefreshable
             IsEnabled = true;
             _loading = false;
         }
+    }
+
+    private async Task EnsureStoreFilterAsync()
+    {
+        if (_storeFilterReady) return;
+        var stores = await _stores.GetStoresAsync(false);
+        var options = new List<StoreFilterOption>();
+        if (App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin)
+            options.Add(new StoreFilterOption(0, FindResource("Transfer_AllStores")?.ToString() ?? "All stores"));
+        options.AddRange(stores.Select(x => new StoreFilterOption(x.Id, x.Name)));
+        StoreFilter.ItemsSource = options;
+        StoreFilter.SelectedValue = App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin ? 0 : App.CurrentStore?.Id ?? 1;
+        StoreFilter.IsEnabled = App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin;
+        _storeFilterReady = true;
+    }
+
+    private int? SelectedStoreId()
+    {
+        var value = StoreFilter.SelectedValue is int id ? id : App.CurrentStore?.Id ?? 1;
+        return value == 0 ? null : value;
+    }
+
+    private async void StoreFilter_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_storeFilterReady) await LoadAsync();
     }
 
     private async void Print_Click(object sender, RoutedEventArgs e)
@@ -127,6 +161,13 @@ public partial class DashboardView : UserControl, IRefreshable
         foreach (var row in range.Daily.OrderBy(item => item.Date))
             PageReportPrinter.AppendEntry(builder, row.Date.ToString("dd MMM yyyy"),
                 $"Txns {row.TransactionCount} | Net {PageReportPrinter.Money(row.NetSales)}",
+                $"Gross profit {PageReportPrinter.Money(row.GrossProfit)}");
+
+        PageReportPrinter.AppendSection(builder, "Store performance");
+        if (_storePerformance.Count == 0) PageReportPrinter.AppendWrapped(builder, "No store sales in the selected period.");
+        foreach (var row in _storePerformance)
+            PageReportPrinter.AppendEntry(builder, $"{row.StoreCode} - {row.StoreName}",
+                $"Transactions {row.TransactionCount} | Net {PageReportPrinter.Money(row.NetSales)}",
                 $"Gross profit {PageReportPrinter.Money(row.GrossProfit)}");
 
         PageReportPrinter.AppendSection(builder, "Payment breakdown");

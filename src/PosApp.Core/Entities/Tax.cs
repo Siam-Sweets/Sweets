@@ -7,7 +7,7 @@ namespace PosApp.Core.Entities;
 /// A product carries its own TaxRate snapshot, but taxes defined here
 /// can be applied globally or per product at config time.
 /// </summary>
-public class Tax
+public class Tax : StoreScopedEntity
 {
     public int Id { get; set; }
 

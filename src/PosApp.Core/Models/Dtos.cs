@@ -178,6 +178,16 @@ public sealed class SafeUpdateLaunchResult
     public SafeUpdateRecord Record { get; init; } = new();
 }
 
+/// <summary>Information collected by the local first-run setup wizard.</summary>
+public class InitialSetupRequest
+{
+    public StoreSettings StoreSettings { get; set; } = new();
+    public string AdminFullName { get; set; } = "Administrator";
+    public string AdminUsername { get; set; } = "admin";
+    public string AdminPin { get; set; } = string.Empty;
+    public bool IncludeSampleProducts { get; set; } = true;
+}
+
 public class PurchaseDraft
 {
     public int? SupplierId { get; set; }
@@ -307,4 +317,42 @@ public class PaymentBreakdownRow
     public PaymentMethod Method { get; set; }
     public int Count { get; set; }
     public decimal Total { get; set; }
+}
+
+
+public sealed class StockTransferDraft
+{
+    public int DestinationStoreId { get; set; }
+    public string? Note { get; set; }
+    public List<StockTransferDraftItem> Items { get; set; } = new();
+}
+
+public sealed class StockTransferDraftItem
+{
+    public int ProductId { get; set; }
+    public decimal Quantity { get; set; }
+}
+
+public sealed class StorePerformanceRow
+{
+    public int StoreId { get; set; }
+    public string StoreCode { get; set; } = string.Empty;
+    public string StoreName { get; set; } = string.Empty;
+    public int TransactionCount { get; set; }
+    public decimal NetSales { get; set; }
+    public decimal GrossProfit { get; set; }
+}
+
+public sealed class StoreInventoryRow
+{
+    public int StoreId { get; set; }
+    public string StoreCode { get; set; } = string.Empty;
+    public string StoreName { get; set; } = string.Empty;
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public string? Sku { get; set; }
+    public UnitOfMeasure Unit { get; set; }
+    public decimal? StockQuantity { get; set; }
+    public decimal? LowStockThreshold { get; set; }
+    public bool IsLowStock => StockQuantity.HasValue && LowStockThreshold.HasValue && StockQuantity <= LowStockThreshold;
 }

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
@@ -8,15 +7,12 @@ using PosApp.Data;
 namespace PosApp.Services;
 
 /// <summary>
-/// Controls the online-only first-run boundary. A PosApp installation becomes
-/// operational only after it is linked to an online organization and either the
-/// complete local snapshot has been uploaded or the complete store snapshot has
-/// been downloaded successfully.
+/// Persists the one-time, entirely local setup state and replaces the seeded
+/// administrator credentials with values chosen by the store owner.
 /// </summary>
 public sealed class SetupService : ISetupService
 {
     public const string SetupCompleteKey = "app:setup-complete";
-    private const string OnlineSetupPreparedKey = "app:online-setup-prepared";
 
     private readonly AppDbContext _db;
     private readonly ISettingsService _settings;
@@ -30,297 +26,117 @@ public sealed class SetupService : ISetupService
     public async Task<bool> IsSetupCompleteAsync()
     {
         var value = await _settings.GetAsync(SetupCompleteKey);
-        if (!string.Equals(value, "true", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        // Older releases could mark a completely local setup as finished. From
-        // 2.0.17 onward that marker is valid only when this database is linked to
-        // a real organization and store.
-        return await _db.CloudAccountStates.AsNoTracking().AnyAsync(state =>
-            state.TenantId != string.Empty && state.CurrentStoreId != string.Empty);
+        return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<bool> CompleteOnlineSetupAsync(
-        CloudAuthenticationResult authentication,
-        bool createdOrganization,
-        StoreSettings? initialStoreSettings = null,
-        bool includeSampleProducts = false)
+    public async Task<InitialSetupRequest> GetSetupDefaultsAsync()
     {
-        ArgumentNullException.ThrowIfNull(authentication);
-        var currentUser = authentication.LocalUser
-                          ?? throw new InvalidOperationException(
-                              "Online sign-in did not create a protected local user profile.");
-        if (string.IsNullOrWhiteSpace(authentication.OrganizationId))
-            throw new InvalidOperationException("The online account did not provide an organization.");
-        if (string.IsNullOrWhiteSpace(authentication.Store.Id) ||
-            string.IsNullOrWhiteSpace(authentication.Store.Name))
-            throw new InvalidOperationException("The online account did not provide an assigned store.");
+        var administrator = await _db.Users.AsNoTracking()
+            .Where(user => user.Role == UserRole.Admin)
+            .OrderBy(user => user.Id)
+            .FirstOrDefaultAsync();
 
-        // Online-only onboarding never uploads an old local bootstrap database.
-        // Until setup is finalized, every business row is disposable cache state.
-        // Clearing it also recovers installations left behind by an interrupted
-        // 2.0.17 migration attempt and guarantees that sign-in starts from the
-        // authoritative organization snapshot in Turso.
-        var previousBypassStoreFilter = _db.BypassStoreFilter;
-        var previousSuppressSyncCapture = _db.SuppressSyncCapture;
-        _db.BypassStoreFilter = true;
-        _db.SuppressSyncCapture = true;
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-        try
+        return new InitialSetupRequest
         {
-            await RemoveUnlinkedBootstrapStateAsync(currentUser.Id);
-
-            var prepared = await _db.Settings.IgnoreQueryFilters()
-                .SingleOrDefaultAsync(value => value.Key == OnlineSetupPreparedKey);
-            var previousPreparation = ReadPreparation(prepared?.Value);
-            var resumeSampleCatalog = !createdOrganization &&
-                                      previousPreparation != null &&
-                                      string.Equals(previousPreparation.OrganizationId,
-                                          authentication.OrganizationId,
-                                          StringComparison.OrdinalIgnoreCase) &&
-                                      previousPreparation.IncludeSampleProducts;
-            var preparationJson = JsonSerializer.Serialize(new OnlineSetupPreparation(
-                authentication.OrganizationId,
-                RequiresInitialMigration: false,
-                IncludeSampleProducts: createdOrganization
-                    ? includeSampleProducts
-                    : resumeSampleCatalog));
-            if (prepared == null)
-                _db.Settings.Add(new Setting { Key = OnlineSetupPreparedKey, Value = preparationJson });
-            else
-            {
-                prepared.Value = preparationJson;
-                prepared.UpdatedAt = DateTime.UtcNow;
-            }
-
-            var staleOperations = await _db.SyncOutboxOperations.ToListAsync();
-            var staleConflicts = await _db.SyncConflicts.ToListAsync();
-            var staleCursors = await _db.SyncCursorStates.ToListAsync();
-            var staleIdentities = await _db.SyncIdentities
-                .Where(identity => identity.EntityType != "users" || identity.LocalId != currentUser.Id)
-                .ToListAsync();
-            _db.SyncOutboxOperations.RemoveRange(staleOperations);
-            _db.SyncConflicts.RemoveRange(staleConflicts);
-            _db.SyncCursorStates.RemoveRange(staleCursors);
-            _db.SyncIdentities.RemoveRange(staleIdentities);
-
-            var state = await _db.CloudAccountStates.SingleAsync();
-            state.ActiveMigrationId = null;
-            state.ActiveMigrationStoreId = null;
-            state.ActiveMigrationBackupPath = null;
-            state.IsMigrationSnapshotQueued = false;
-            state.RequiresReconciliation = false;
-            state.LastServerCursor = 0;
-            state.UpdatedAtUtc = DateTime.UtcNow;
-
-            await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
-            return false;
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
-        finally
-        {
-            _db.SuppressSyncCapture = previousSuppressSyncCapture;
-            _db.BypassStoreFilter = previousBypassStoreFilter;
-        }
-    }
-
-    public async Task<bool> AddPreparedSampleCatalogAsync()
-    {
-        var prepared = await _db.Settings.IgnoreQueryFilters()
-                           .AsNoTracking()
-                           .SingleOrDefaultAsync(value => value.Key == OnlineSetupPreparedKey)
-                       ?? throw new InvalidOperationException(
-                           "Online setup has not been prepared on this computer.");
-        var preparation = ReadPreparation(prepared.Value)
-                          ?? throw new InvalidOperationException(
-                              "The online setup preparation is invalid.");
-        if (!preparation.IncludeSampleProducts)
-            return false;
-
-        var state = await _db.CloudAccountStates.AsNoTracking().SingleAsync();
-        if (!string.Equals(state.TenantId, preparation.OrganizationId,
-                StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "The prepared sample catalog does not belong to the active organization.");
-
-        var capture = SyncCaptureContext.Current;
-        if (!capture.Enabled || string.IsNullOrWhiteSpace(capture.UserId) ||
-            !string.Equals(capture.TenantId, preparation.OrganizationId,
-                StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(capture.StoreId, state.CurrentStoreId,
-                StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "The synchronized session is not ready to add the sample catalog.");
-
-        _db.ChangeTracker.Clear();
-        return await DbSeeder.SeedSampleCatalogAsync(_db);
-    }
-
-    public async Task FinalizeOnlineSetupAsync()
-    {
-        var previousBypassStoreFilter = _db.BypassStoreFilter;
-        var previousSuppressSyncCapture = _db.SuppressSyncCapture;
-        _db.BypassStoreFilter = true;
-        _db.SuppressSyncCapture = true;
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-        try
-        {
-            var prepared = await _db.Settings.IgnoreQueryFilters()
-                               .SingleOrDefaultAsync(value => value.Key == OnlineSetupPreparedKey)
-                           ?? throw new InvalidOperationException(
-                               "Online setup has not been prepared on this computer.");
-            var completed = await _db.Settings.IgnoreQueryFilters()
-                .SingleOrDefaultAsync(value => value.Key == SetupCompleteKey);
-            if (completed == null)
-            {
-                _db.Settings.Add(new Setting
-                {
-                    Key = SetupCompleteKey,
-                    Value = "true"
-                });
-            }
-            else
-            {
-                completed.Value = "true";
-                completed.UpdatedAt = DateTime.UtcNow;
-            }
-
-            _db.Settings.Remove(prepared);
-            await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            throw;
-        }
-        finally
-        {
-            _db.SuppressSyncCapture = previousSuppressSyncCapture;
-            _db.BypassStoreFilter = previousBypassStoreFilter;
-        }
-    }
-
-    private async Task<bool> HasExistingLocalStoreDataAsync(int authenticatedUserId)
-    {
-        if (await _db.Products.IgnoreQueryFilters().AnyAsync() ||
-            await _db.Sales.IgnoreQueryFilters().AnyAsync() ||
-            await _db.PurchaseDocuments.IgnoreQueryFilters().AnyAsync() ||
-            await _db.Customers.IgnoreQueryFilters().AnyAsync() ||
-            await _db.Suppliers.IgnoreQueryFilters().AnyAsync() ||
-            await _db.Expenses.IgnoreQueryFilters().AnyAsync() ||
-            await _db.CashSessions.IgnoreQueryFilters().AnyAsync() ||
-            await _db.CashMovements.IgnoreQueryFilters().AnyAsync() ||
-            await _db.StockTransactions.IgnoreQueryFilters().AnyAsync() ||
-            await _db.Categories.IgnoreQueryFilters().AnyAsync() ||
-            await _db.Taxes.IgnoreQueryFilters().AnyAsync() ||
-            await _db.Discounts.IgnoreQueryFilters().AnyAsync())
-            return true;
-
-        if (await _db.Users.IgnoreQueryFilters().AnyAsync(user => user.Id != authenticatedUserId))
-            return true;
-
-        return await _db.Settings.IgnoreQueryFilters().AnyAsync(setting =>
-            !setting.Key.StartsWith("app:"));
-    }
-
-    private async Task RemoveUnlinkedBootstrapStateAsync(int authenticatedUserId)
-    {
-        // Delete in dependency order. These rows are an unfinished local cache,
-        // not authoritative business data: online-only onboarding always
-        // rebuilds them from the selected organization.
-        var deleteStatements = new[]
-        {
-            "DELETE FROM \"CashMovements\"",
-            "DELETE FROM \"SalePayments\"",
-            "DELETE FROM \"SaleItems\"",
-            "DELETE FROM \"PurchaseItems\"",
-            "DELETE FROM \"StockTransactions\"",
-            "DELETE FROM \"Expenses\"",
-            "DELETE FROM \"Sales\"",
-            "DELETE FROM \"PurchaseDocuments\"",
-            "DELETE FROM \"CashSessions\"",
-            "DELETE FROM \"Products\"",
-            "DELETE FROM \"Categories\"",
-            "DELETE FROM \"Taxes\"",
-            "DELETE FROM \"Discounts\"",
-            "DELETE FROM \"Customers\"",
-            "DELETE FROM \"Suppliers\""
+            StoreSettings = await _settings.GetStoreSettingsAsync(),
+            AdminFullName = administrator?.FullName ?? "Administrator",
+            AdminUsername = administrator?.Username ?? "admin"
         };
-        foreach (var statement in deleteStatements)
-            await _db.Database.ExecuteSqlRawAsync(statement);
-
-        await _db.Database.ExecuteSqlRawAsync(
-            "DELETE FROM \"Settings\" WHERE \"Key\" NOT LIKE 'app:%'");
-
-        var unusedUsers = await _db.Users.IgnoreQueryFilters()
-            .Where(user => user.Id != authenticatedUserId)
-            .ToListAsync();
-        _db.Users.RemoveRange(unusedUsers);
     }
 
-
-    private async Task UpsertUnlinkedStoreSettingsAsync(StoreSettings settings)
+    public async Task CompleteSetupAsync(InitialSetupRequest request)
     {
-        var existing = await _db.Settings.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(value => value.Key == "store:config" &&
-                !_db.SyncIdentities.Any(identity =>
-                    identity.EntityType == "settings" && identity.LocalId == value.Id));
-        var serialized = JsonSerializer.Serialize(settings);
-        if (existing == null)
-        {
-            _db.Settings.Add(new Setting { Key = "store:config", Value = serialized });
-        }
-        else
-        {
-            existing.Value = serialized;
-            existing.UpdatedAt = DateTime.UtcNow;
-        }
-        await _db.SaveChangesAsync();
-    }
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.StoreSettings);
 
-    private async Task<StoreSettings> ReadUnlinkedStoreSettingsAsync()
-    {
-        var setting = await _db.Settings.IgnoreQueryFilters()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(value => value.Key == "store:config" &&
-                !_db.SyncIdentities.Any(identity =>
-                    identity.EntityType == "settings" && identity.LocalId == value.Id));
-        if (string.IsNullOrWhiteSpace(setting?.Value))
-            return new StoreSettings();
+        var storeName = request.StoreSettings.StoreName?.Trim() ?? string.Empty;
+        var fullName = request.AdminFullName?.Trim() ?? string.Empty;
+        var username = request.AdminUsername?.Trim() ?? string.Empty;
+        var pin = request.AdminPin?.Trim() ?? string.Empty;
 
+        if (storeName.Length is < 2 or > 100)
+            throw new InvalidOperationException("Store name must contain 2 to 100 characters.");
+        if (fullName.Length is < 2 or > 100)
+            throw new InvalidOperationException("Administrator name must contain 2 to 100 characters.");
+        if (username.Length is < 3 or > 60 ||
+            username.Any(character => !char.IsLetterOrDigit(character) &&
+                                      character != '_' && character != '-' && character != '.'))
+            throw new InvalidOperationException("Username must contain 3 to 60 letters, numbers, dots, dashes, or underscores.");
+        if (pin.Length is < 4 or > 12 || pin.Any(character => !char.IsDigit(character)))
+            throw new InvalidOperationException("Administrator PIN must contain 4 to 12 digits.");
+        if (string.IsNullOrWhiteSpace(request.StoreSettings.CurrencySymbol) ||
+            request.StoreSettings.CurrencySymbol.Trim().Length > 8)
+            throw new InvalidOperationException("Currency symbol is required and cannot exceed 8 characters.");
+
+        request.StoreSettings.StoreName = storeName;
+        request.StoreSettings.Phone = request.StoreSettings.Phone?.Trim() ?? string.Empty;
+        request.StoreSettings.Address = request.StoreSettings.Address?.Trim() ?? string.Empty;
+        request.StoreSettings.CurrencySymbol = request.StoreSettings.CurrencySymbol?.Trim() ?? string.Empty;
+        request.StoreSettings.FooterNote = request.StoreSettings.FooterNote?.Trim() ?? string.Empty;
+
+        await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
-            return JsonSerializer.Deserialize<StoreSettings>(setting.Value) ?? new StoreSettings();
-        }
-        catch (JsonException)
-        {
-            return new StoreSettings();
-        }
-    }
+            var administrator = await _db.Users
+                .Where(user => user.Role == UserRole.Admin)
+                .OrderBy(user => user.Id)
+                .FirstOrDefaultAsync();
 
-    private static OnlineSetupPreparation? ReadPreparation(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return null;
-        try
-        {
-            return JsonSerializer.Deserialize<OnlineSetupPreparation>(value);
-        }
-        catch (JsonException)
-        {
-            // An early 2.0 build stored only the organization ID. Preserve the
-            // safe resume path without treating malformed remote data as trusted.
-            return new OnlineSetupPreparation(value, RequiresInitialMigration: false);
-        }
-    }
+            var normalizedUsername = username.ToLower();
+            var administratorId = administrator?.Id ?? 0;
+            var usernameInUse = await _db.Users.AnyAsync(user =>
+                user.Id != administratorId && user.Username.ToLower() == normalizedUsername);
+            if (usernameInUse)
+                throw new InvalidOperationException("That username is already used by another account.");
 
-    private sealed record OnlineSetupPreparation(
-        string OrganizationId,
-        bool RequiresInitialMigration,
-        bool IncludeSampleProducts = false);
+            var (hash, salt) = DbSeeder.HashPin(pin);
+            if (administrator == null)
+            {
+                administrator = new User
+                {
+                    Username = username,
+                    FullName = fullName,
+                    PasswordHash = hash,
+                    PasswordSalt = salt,
+                    Role = UserRole.Admin,
+                    IsActive = true
+                };
+                _db.Users.Add(administrator);
+            }
+            else
+            {
+                administrator.Username = username;
+                administrator.FullName = fullName;
+                administrator.PasswordHash = hash;
+                administrator.PasswordSalt = salt;
+                administrator.IsActive = true;
+                administrator.UpdatedAt = DateTime.UtcNow;
+            }
+
+            var currentStore = await _db.Stores.FirstOrDefaultAsync(store => store.Id == _db.CurrentStoreId);
+            if (currentStore != null)
+            {
+                currentStore.Name = storeName;
+                currentStore.Address = request.StoreSettings.Address;
+                currentStore.Phone = request.StoreSettings.Phone;
+                currentStore.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _db.SaveChangesAsync();
+            if (request.IncludeSampleProducts)
+                await DbSeeder.SeedSampleProductsAsync(_db);
+
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+
+        // The completion flag is deliberately written last. If saving either
+        // configuration step fails, the wizard safely opens again next start.
+        await _settings.SetStoreSettingsAsync(request.StoreSettings);
+        await _settings.SetAsync(SetupCompleteKey, "true");
+    }
 }

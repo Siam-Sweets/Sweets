@@ -7,7 +7,7 @@ namespace PosApp.Core.Entities;
 /// A completed or suspended sales transaction. Suspend/recall supported
 /// via the <see cref="Status"/> field.
 /// </summary>
-public class Sale
+public class Sale : StoreScopedEntity
 {
     public int Id { get; set; }
 

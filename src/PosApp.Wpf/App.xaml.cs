@@ -22,17 +22,24 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
     public static User? CurrentUser { get; set; }
+    public static Store? CurrentStore { get; private set; }
     public static StoreSettings StoreSettings { get; private set; } = new();
     public static event EventHandler? SettingsChanged;
+    public static event EventHandler? StoreChanged;
 
     public static void PublishSettings(StoreSettings settings)
     {
         StoreSettings = settings;
         SettingsChanged?.Invoke(null, EventArgs.Empty);
     }
+
+    public static void PublishStore(Store store)
+    {
+        CurrentStore = store;
+        StoreChanged?.Invoke(null, EventArgs.Empty);
+    }
     private bool _startupCompleted;
     private bool _dispatcherErrorDialogOpen;
-    private bool _databaseRestoreShutdownRequested;
     private static IServiceScope? _activeSessionScope;
 
     public App()
@@ -145,9 +152,6 @@ public partial class App : Application
 
         try
         {
-            var runningProfile = new LocalOrganizationProfileStore().GetProfiles()
-                .Single(profile => profile.Id == DbPathResolver.CurrentProfileId());
-            Log($"Organization profile: {runningProfile.DisplayName} ({runningProfile.Id})");
             var preRestoreBackup = DbPathResolver.ApplyPendingRestore();
             if (preRestoreBackup != null)
                 Log($"Pending restore applied. Previous database preserved at: {preRestoreBackup}");
@@ -174,30 +178,12 @@ public partial class App : Application
                 Log("Database ready (created or already exists).");
                 await DbSchemaUpgrader.ApplyAsync(db);
                 Log("Database schema upgrades applied.");
+                var storeService = scope.ServiceProvider.GetRequiredService<IStoreService>();
+                await storeService.InitializeAsync();
+                PublishStore(await storeService.GetCurrentStoreAsync());
+                Log($"Active store selected: {CurrentStore.Name} ({CurrentStore.Code}).");
                 await DbSeeder.SeedAsync(db);
-                Log("Database seeded.");
-            }
-
-            if (preRestoreBackup != null)
-            {
-                await Services.GetRequiredService<ICloudMigrationService>()
-                    .MarkRestoreRequiresReconciliationAsync(preRestoreBackup);
-                Log("Cloud synchronization paused until the restored database is reconciled.");
-            }
-
-            // Load the persisted account/store scope before reading settings.
-            // Otherwise a multi-store SQLite cache can expose the first branch's
-            // store:config on the login screen after a restart.
-            var cloudSessionInitialized = false;
-            try
-            {
-                await Services.GetRequiredService<ICloudAccountService>().InitializeCachedSessionAsync();
-                cloudSessionInitialized = true;
-            }
-            catch (Exception cloudStartupError)
-            {
-                // Cloud availability never blocks the local register.
-                Log($"Cloud session initialization deferred: {cloudStartupError.GetType().Name}");
+                Log("Database seeded for the active store.");
             }
 
             // Load settings
@@ -210,33 +196,28 @@ public partial class App : Application
             // Apply language from settings
             ApplyLanguage(StoreSettings.Language);
 
-            if (cloudSessionInitialized)
-                _ = Services.GetRequiredService<ICloudSyncService>().SyncNowAsync();
-
-            // PosApp no longer creates an independent offline store. A new or
-            // legacy local-only installation must sign in to an existing online
-            // organization or create one, then finish a complete upload/download
-            // before the cashier login is available.
+            // A seeded local database is not the same as a configured store.
+            // Until the one-time flag is written, show setup before login.
             var setupService = Services.GetRequiredService<ISetupService>();
             if (!await setupService.IsSetupCompleteAsync())
             {
-                Log("Online-only first-run onboarding is required.");
+                Log("First-run setup is required.");
                 ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                var accountWindow = Services.GetRequiredService<CloudAccountWindow>();
-                MainWindow = accountWindow;
-                var setupCompleted = accountWindow.ShowDialog() == true &&
-                                     await setupService.IsSetupCompleteAsync();
+                var setup = Services.GetRequiredService<SetupView>();
+                MainWindow = setup;
+                var setupCompleted = setup.ShowDialog() == true;
                 if (!setupCompleted)
                 {
-                    Log("Online onboarding was closed before full synchronization completed.");
+                    Log("Setup was closed before completion.");
                     Shutdown();
                     return;
                 }
 
                 PublishSettings(await settingsService.GetStoreSettingsAsync());
+                PublishStore(await Services.GetRequiredService<IStoreService>().GetCurrentStoreAsync());
                 ApplyTheme(StoreSettings.Theme);
                 ApplyLanguage(StoreSettings.Language);
-                Log($"Online onboarding completed. Store: {StoreSettings.StoreName}");
+                Log($"First-run setup completed. Store: {StoreSettings.StoreName}");
             }
 
             if (StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnStartup)
@@ -261,6 +242,7 @@ public partial class App : Application
             MainWindow = login;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             login.Show();
+            Services.GetRequiredService<ICloudSyncCoordinator>().Start();
             _startupCompleted = true;
             try
             {
@@ -281,16 +263,6 @@ public partial class App : Application
                 Log($"Could not finalize safe update status: {updateStatusError}");
             }
             Log("Login window shown. Startup complete.");
-        }
-        catch (DatabaseRestoreInUseException ex)
-        {
-            Log($"PENDING RESTORE DEFERRED: {ex}");
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
-                ex.Message,
-                "Restore waiting",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            Shutdown(2);
         }
         catch (Exception ex)
         {
@@ -327,16 +299,21 @@ public partial class App : Application
 
     private static void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton<IStoreContext, StoreContext>();
+
         // DbContext
         services.AddDbContext<AppDbContext>(opt =>
             opt.UseSqlite(DbPathResolver.ConnectionString()),
             ServiceLifetime.Transient);
-        services.AddSingleton<IDbContextFactory<AppDbContext>>(
-            new PosAppDbContextFactory(DbPathResolver.ConnectionString()));
 
         // Services
+        services.AddTransient<IStoreService, StoreService>();
+        services.AddTransient<ICloudAccountService, CloudAccountService>();
+        services.AddTransient<ICloudSyncService, CloudSyncService>();
+        services.AddSingleton<ICloudSyncCoordinator, CloudSyncCoordinator>();
         services.AddTransient<IAuthService, AuthService>();
         services.AddTransient<IInventoryService, InventoryService>();
+        services.AddTransient<IStockTransferService, StockTransferService>();
         services.AddTransient<ISaleService, SaleService>();
         services.AddTransient<ICustomerService, CustomerService>();
         services.AddTransient<IReportService, ReportService>();
@@ -348,14 +325,6 @@ public partial class App : Application
         services.AddTransient<ICatalogTransferService, CatalogTransferService>();
         services.AddSingleton<IBackupService, BackupService>();
         services.AddSingleton<IUpdateService, SafeUpdateService>();
-        services.AddSingleton<LocalOrganizationProfileStore>();
-        services.AddSingleton<ISecureTokenStore, DpapiTokenStore>();
-        services.AddSingleton<CloudSessionManager>();
-        services.AddSingleton<CloudApiClient>();
-        services.AddSingleton<SyncRecordApplier>();
-        services.AddSingleton<ICloudSyncService, CloudSyncService>();
-        services.AddSingleton<ICloudAccountService, CloudAccountService>();
-        services.AddSingleton<ICloudMigrationService, CloudMigrationService>();
 
         // Hardware drivers fail safely when a configured device is unavailable.
         services.AddSingleton<IReceiptPrinter>(sp =>
@@ -368,21 +337,22 @@ public partial class App : Application
 
         // Views
         services.AddTransient<LoginView>();
+        services.AddTransient<SetupView>();
         services.AddTransient<MainWindow>();
         services.AddTransient<PosView>();
         services.AddTransient<DashboardView>();
         services.AddTransient<PromotionsView>();
         services.AddTransient<ProductsView>();
         services.AddTransient<InventoryView>();
+        services.AddTransient<TransfersView>();
         services.AddTransient<CustomersView>();
         services.AddTransient<SalesView>();
         services.AddTransient<ReportsView>();
         services.AddTransient<UsersView>();
         services.AddTransient<SettingsView>();
+        services.AddTransient<StoresView>();
         services.AddTransient<PurchasesView>();
         services.AddTransient<RegisterView>();
-        services.AddTransient<CloudAccountWindow>();
-        services.AddTransient<CloudAccountView>();
     }
 
     /// <summary>
@@ -421,56 +391,9 @@ public partial class App : Application
             failedSession.Dispose();
     }
 
-    /// <summary>
-    /// Marks an exit that exists only to apply a staged database restore. A final
-    /// sync or exit backup would reopen SQLite after the restore workflow has
-    /// deliberately drained it, delaying the replacement process on Windows.
-    /// </summary>
-    internal static void RequestDatabaseRestoreShutdown()
-    {
-        if (Current is App app)
-        {
-            app._databaseRestoreShutdownRequested = true;
-            Log("Database restore shutdown requested; final sync and exit backup will be skipped.");
-        }
-    }
-
     protected override void OnExit(ExitEventArgs e)
     {
-        var sync = Services?.GetService<ICloudSyncService>();
-        if (_startupCompleted && !_databaseRestoreShutdownRequested)
-        {
-            try
-            {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                sync?.SyncNowAsync(false, timeout.Token)
-                    .GetAwaiter().GetResult();
-            }
-            catch (Exception syncError)
-            {
-                Log($"Final cloud sync deferred: {syncError.GetType().Name}");
-            }
-        }
-
-        // Stop the periodic loop and wait for any in-flight database operation
-        // before disposing view scopes. This is essential for a restore restart,
-        // and also prevents native SQLite handles lingering during a normal exit.
-        if (sync != null)
-        {
-            try
-            {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                sync.StopAsync(timeout.Token).GetAwaiter().GetResult();
-                sync.WaitForIdleAsync(timeout.Token).GetAwaiter().GetResult();
-            }
-            catch (Exception stopError)
-            {
-                Log($"Cloud sync shutdown was bounded: {stopError.GetType().Name}");
-            }
-        }
-
-        if (_startupCompleted && !_databaseRestoreShutdownRequested &&
-            StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnExit)
+        if (_startupCompleted && StoreSettings.AutomaticBackupEnabled && StoreSettings.BackupOnExit)
         {
             try
             {
@@ -498,10 +421,6 @@ public partial class App : Application
         }
         finally
         {
-            // Disposed EF contexts return Microsoft.Data.Sqlite connections to its
-            // native pool. Explicitly clear those handles before the process exits
-            // so a newly started PosApp can replace the database and WAL promptly.
-            DbPathResolver.ClearSqliteConnectionPools();
             base.OnExit(e);
         }
     }

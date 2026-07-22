@@ -5,36 +5,48 @@ using PosApp.Core.Models;
 namespace PosApp.Data;
 
 /// <summary>
-/// Initializes the local SQLite cache and, after online account creation, can
-/// build the default store snapshot that is uploaded to the selected organization.
-/// No local-only administrator or business catalog is created before online onboarding.
+/// Seeds first-run default data: an admin user, default categories,
+/// default tax and discount, and store settings. Sample products are added
+/// separately only when the store owner enables them during setup.
 /// </summary>
 public static class DbSeeder
 {
-    /// <summary>
-    /// Creates only the device-local SQLite schema. Business templates are not
-    /// inserted until an authenticated online organization has been selected,
-    /// so a new installation can never become an independent offline store.
-    /// </summary>
-    public static Task SeedAsync(AppDbContext db)
+    public static async Task SeedAsync(AppDbContext db)
     {
-        ArgumentNullException.ThrowIfNull(db);
-        return db.Database.EnsureCreatedAsync();
-    }
-
-    /// <summary>
-    /// Creates the standard catalog and store configuration for a newly created
-    /// online organization. The caller runs this with sync capture suppressed,
-    /// then uploads the complete snapshot through the protected initial-migration
-    /// flow. Existing organizations never receive these templates locally.
-    /// </summary>
-    public static async Task SeedOnlineOrganizationDefaultsAsync(
-        AppDbContext db,
-        StoreSettings? storeSettings = null)
-    {
-        ArgumentNullException.ThrowIfNull(db);
+        // Use EnsureCreatedAsync for the local single-DB scenario.
+        // It creates all tables from the current model in one shot
+        // without needing EF Core migration files (which we don't ship).
+        // On subsequent runs it's a no-op if the DB schema is already current.
         await db.Database.EnsureCreatedAsync();
 
+        if (!await db.Users.AnyAsync())
+        {
+            var (hash, salt) = HashPin("1234");
+            db.Users.Add(new User
+            {
+                Username = "admin",
+                FullName = "Administrator",
+                PasswordHash = hash,
+                PasswordSalt = salt,
+                Role = UserRole.Admin,
+                IsActive = true
+            });
+
+            var (cashierHash, cashierSalt) = HashPin("1111");
+            db.Users.Add(new User
+            {
+                Username = "cashier",
+                FullName = "Default Cashier",
+                PasswordHash = cashierHash,
+                PasswordSalt = cashierSalt,
+                Role = UserRole.Cashier,
+                IsActive = true
+            });
+        }
+
+        // A restored or manually repaired database can contain only some of the
+        // built-in categories. Ensure each category independently so setup-time
+        // sample-product creation can always resolve every required category.
         var categoryDefinitions = new[]
         {
             (Name: "Beverages", Color: "#2D7FF9", SortOrder: 1),
@@ -45,10 +57,10 @@ public static class DbSeeder
             (Name: "Produce", Color: "#22C55E", SortOrder: 6)
         };
         var categories = await db.Categories.ToListAsync();
+        var categoriesAdded = false;
         foreach (var definition in categoryDefinitions)
         {
-            if (categories.Any(category => string.Equals(
-                    category.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
+            if (categories.Any(c => string.Equals(c.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
                 continue;
 
             var category = new Category
@@ -59,13 +71,18 @@ public static class DbSeeder
             };
             db.Categories.Add(category);
             categories.Add(category);
+            categoriesAdded = true;
         }
+
+        if (categoriesAdded)
+            await db.SaveChangesAsync();
 
         if (!await db.Taxes.AnyAsync())
         {
             db.Taxes.AddRange(
                 new Tax { Name = "VAT", Rate = 15m, IsIncluded = false, IsDefault = true },
-                new Tax { Name = "Service Charge", Rate = 5m, IsIncluded = false });
+                new Tax { Name = "Service Charge", Rate = 5m, IsIncluded = false }
+            );
         }
 
         if (!await db.Discounts.AnyAsync())
@@ -73,102 +90,22 @@ public static class DbSeeder
             db.Discounts.AddRange(
                 new Discount { Name = "5% Off", Type = DiscountType.Percentage, Value = 5m, Code = "SAVE5", IsActive = true },
                 new Discount { Name = "Senior Citizen", Type = DiscountType.Percentage, Value = 10m, IsActive = true },
-                new Discount { Name = "50 Off", Type = DiscountType.FixedAmount, Value = 50m, Code = "BD50", IsActive = true });
+                new Discount { Name = "50 Off", Type = DiscountType.FixedAmount, Value = 50m, Code = "BD50", IsActive = true }
+            );
         }
 
-        var configuration = storeSettings ?? new StoreSettings();
-        var existingConfiguration = await db.Settings
-            .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(setting => setting.Key == "store:config" &&
-                !db.SyncIdentities.Any(identity =>
-                    identity.EntityType == "settings" && identity.LocalId == setting.Id));
-        var serialized = System.Text.Json.JsonSerializer.Serialize(configuration);
-        if (existingConfiguration == null)
+        if (!await db.Settings.AnyAsync(s => s.Key == "store:config"))
         {
-            db.Settings.Add(new Setting { Key = "store:config", Value = serialized });
-        }
-        else
-        {
-            existingConfiguration.Value = serialized;
-            existingConfiguration.UpdatedAt = DateTime.UtcNow;
+            var defaults = new StoreSettings();
+            db.Settings.Add(new Setting { Key = "store:config", Value = System.Text.Json.JsonSerializer.Serialize(defaults) });
         }
 
         await db.SaveChangesAsync();
     }
 
     /// <summary>
-    /// Adds the standard categories and sample products through ordinary
-    /// SaveChanges calls so every row is captured by the local sync outbox.
-    /// The operation is idempotent and is intended only for a newly created
-    /// organization whose setup preparation explicitly requested samples.
-    /// </summary>
-    public static async Task<bool> SeedSampleCatalogAsync(AppDbContext db)
-    {
-        ArgumentNullException.ThrowIfNull(db);
-
-        // Never mix the sample catalog into an organization that already has
-        // products. A resumed setup will pull any samples that reached the
-        // server before retrying this method.
-        if (await db.Products.AnyAsync())
-            return false;
-
-        await using var transaction = await db.Database.BeginTransactionAsync();
-        try
-        {
-            var categoryDefinitions = new[]
-            {
-                (Name: "Beverages", Color: "#2D7FF9", SortOrder: 1),
-                (Name: "Snacks", Color: "#F59E0B", SortOrder: 2),
-                (Name: "Groceries", Color: "#10B981", SortOrder: 3),
-                (Name: "Household", Color: "#8B5CF6", SortOrder: 4),
-                (Name: "Personal Care", Color: "#EC4899", SortOrder: 5),
-                (Name: "Produce", Color: "#22C55E", SortOrder: 6)
-            };
-            var categories = await db.Categories.ToListAsync();
-            var categoriesAdded = false;
-            foreach (var definition in categoryDefinitions)
-            {
-                if (categories.Any(category => string.Equals(
-                        category.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
-                    continue;
-
-                var category = new Category
-                {
-                    Name = definition.Name,
-                    Color = definition.Color,
-                    SortOrder = definition.SortOrder,
-                    IsActive = true
-                };
-                db.Categories.Add(category);
-                categories.Add(category);
-                categoriesAdded = true;
-            }
-
-            // Persist categories first so product payloads can reference their
-            // stable globally unique sync identities. The caller transaction
-            // delays the outbox notification until the complete dependency set
-            // is durable, preventing a background upload from racing the seed.
-            if (categoriesAdded)
-                await db.SaveChangesAsync();
-
-            var productsAdded = await SeedSampleProductsAsync(db);
-            await transaction.CommitAsync();
-            if (categoriesAdded || productsAdded)
-                SyncCaptureContext.NotifyOutboxChanged();
-            db.ChangeTracker.Clear();
-            return categoriesAdded || productsAdded;
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            db.ChangeTracker.Clear();
-            throw;
-        }
-    }
-
-    /// <summary>
     /// Adds the built-in sample catalog once. This is called only after the
-    /// online organization creation option has been explicitly enabled by the store owner.
+    /// first-run setup toggle has been explicitly enabled by the store owner.
     /// </summary>
     public static async Task<bool> SeedSampleProductsAsync(AppDbContext db)
     {
@@ -223,7 +160,7 @@ public static class DbSeeder
                     Quantity = product.StockQuantity.Value,
                     BalanceAfter = product.StockQuantity.Value,
                     UnitCost = product.CostPrice,
-                    Note = "Initial stock for online organization"
+                    Note = "Initial stock on first run"
                 });
             }
         }

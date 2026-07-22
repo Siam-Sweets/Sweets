@@ -1,6 +1,11 @@
-using System.Net.NetworkInformation;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
@@ -8,833 +13,1277 @@ using PosApp.Data;
 
 namespace PosApp.Services;
 
-public sealed class CloudSyncService : ICloudSyncService, IDisposable
+/// <summary>
+/// Drains the local outbox, downloads cloud changes by cursor, retains revision
+/// conflicts, and restores complete snapshots for a newly registered device.
+/// Local SQLite remains authoritative for checkout while the network is absent.
+/// </summary>
+public sealed partial class CloudSyncService : ICloudSyncService
 {
-    private readonly IDbContextFactory<AppDbContext> _dbFactory;
-    private readonly CloudApiClient _api;
-    private readonly CloudSessionManager _session;
-    private readonly SyncRecordApplier _applier;
-    private readonly SemaphoreSlim _syncGate = new(1, 1);
-    private readonly object _lifecycleGate = new();
-    private CancellationTokenSource? _periodicCancellation;
-    private Task? _periodicTask;
-    private CloudSyncStatus _status = new();
+    private const int PushBatchSize = 100;
+    private const int PullBatchSize = 1000;
+    private const int MaximumPushBatchesPerRun = 20;
+    private static readonly SemaphoreSlim SyncGate = new(1, 1);
+    private static int _isRunning;
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(3) };
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> TableNames =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [nameof(Store)] = "Stores",
+            [nameof(Category)] = "Categories",
+            [nameof(Customer)] = "Customers",
+            [nameof(Discount)] = "Discounts",
+            [nameof(Product)] = "Products",
+            [nameof(PurchaseDocument)] = "PurchaseDocuments",
+            [nameof(PurchaseItem)] = "PurchaseItems",
+            [nameof(Sale)] = "Sales",
+            [nameof(SaleItem)] = "SaleItems",
+            [nameof(SalePayment)] = "SalePayments",
+            [nameof(StockTransaction)] = "StockTransactions",
+            [nameof(StockTransfer)] = "StockTransfers",
+            [nameof(StockTransferItem)] = "StockTransferItems",
+            [nameof(Supplier)] = "Suppliers",
+            [nameof(Tax)] = "Taxes",
+            [nameof(User)] = "Users",
+            [nameof(CashSession)] = "CashSessions",
+            [nameof(CashMovement)] = "CashMovements",
+            [nameof(Setting)] = "Settings"
+        };
+
+    private static readonly IReadOnlyDictionary<string, Type> EntityTypes =
+        new Dictionary<string, Type>(StringComparer.Ordinal)
+        {
+            [nameof(Category)] = typeof(Category),
+            [nameof(Customer)] = typeof(Customer),
+            [nameof(Discount)] = typeof(Discount),
+            [nameof(Product)] = typeof(Product),
+            [nameof(PurchaseDocument)] = typeof(PurchaseDocument),
+            [nameof(PurchaseItem)] = typeof(PurchaseItem),
+            [nameof(Sale)] = typeof(Sale),
+            [nameof(SaleItem)] = typeof(SaleItem),
+            [nameof(SalePayment)] = typeof(SalePayment),
+            [nameof(StockTransaction)] = typeof(StockTransaction),
+            [nameof(StockTransfer)] = typeof(StockTransfer),
+            [nameof(StockTransferItem)] = typeof(StockTransferItem),
+            [nameof(Supplier)] = typeof(Supplier),
+            [nameof(Tax)] = typeof(Tax),
+            [nameof(User)] = typeof(User),
+            [nameof(CashSession)] = typeof(CashSession),
+            [nameof(CashMovement)] = typeof(CashMovement),
+            [nameof(Setting)] = typeof(Setting)
+        };
+
+    private static readonly string[] RestoreOrder =
+    {
+        nameof(User), nameof(Category), nameof(Customer), nameof(Supplier),
+        nameof(Tax), nameof(Discount), nameof(Setting), nameof(Product),
+        nameof(CashSession), nameof(PurchaseDocument), nameof(Sale), nameof(StockTransfer),
+        nameof(PurchaseItem), nameof(SaleItem), nameof(SalePayment), nameof(StockTransferItem),
+        nameof(CashMovement), nameof(StockTransaction)
+    };
+
+    private static readonly HashSet<string> ForeignKeyProperties = new(StringComparer.Ordinal)
+    {
+        nameof(Product.CategoryId),
+        nameof(PurchaseDocument.SupplierId), nameof(PurchaseDocument.UserId),
+        nameof(PurchaseItem.PurchaseDocumentId), nameof(PurchaseItem.ProductId),
+        nameof(Sale.CustomerId), nameof(Sale.UserId), nameof(Sale.CashSessionId), nameof(Sale.RefundedSaleId),
+        nameof(SaleItem.SaleId), nameof(SaleItem.ProductId), nameof(SaleItem.RefundedSaleItemId),
+        nameof(SalePayment.SaleId),
+        nameof(StockTransaction.ProductId), nameof(StockTransaction.SaleId),
+        nameof(StockTransaction.SaleItemId), nameof(StockTransaction.StockTransferId),
+        nameof(StockTransaction.StockTransferItemId), nameof(StockTransaction.UserId),
+        nameof(StockTransfer.DestinationStoreId), nameof(StockTransfer.CreatedByUserId),
+        nameof(StockTransfer.DispatchedByUserId), nameof(StockTransfer.ReceivedByUserId),
+        nameof(StockTransfer.CancelledByUserId), nameof(StockTransferItem.StockTransferId),
+        nameof(StockTransferItem.ProductId), nameof(StockTransferItem.DestinationProductId),
+        nameof(CashSession.OpenedByUserId), nameof(CashSession.ClosedByUserId),
+        nameof(CashMovement.CashSessionId), nameof(CashMovement.UserId)
+    };
+
+    private readonly AppDbContext _db;
+    private readonly IStoreContext _storeContext;
+    private readonly ICloudAccountService _account;
+    private readonly IBackupService _backup;
+    private readonly CloudCredentialStore _credentials = new();
 
     public CloudSyncService(
-        IDbContextFactory<AppDbContext> dbFactory,
-        CloudApiClient api,
-        CloudSessionManager session,
-        SyncRecordApplier applier)
+        AppDbContext db,
+        IStoreContext storeContext,
+        ICloudAccountService account,
+        IBackupService backup)
     {
-        _dbFactory = dbFactory;
-        _api = api;
-        _session = session;
-        _applier = applier;
+        _db = db;
+        _storeContext = storeContext;
+        _account = account;
+        _backup = backup;
     }
 
-    public event EventHandler<CloudSyncStatus>? StatusChanged;
-    public CloudSyncStatus CurrentStatus => _status;
-
-    public async Task StartAsync(CancellationToken cancellationToken = default)
+    public async Task<CloudSyncStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
-        if (_session.Account == null) await _session.InitializeAsync(cancellationToken);
-        lock (_lifecycleGate)
+        var credential = await _credentials.LoadAsync(cancellationToken);
+        var pending = await _db.SyncOutbox.CountAsync(cancellationToken);
+        var conflicts = await _db.SyncConflicts.CountAsync(x => x.ResolvedAt == null, cancellationToken);
+        var lastSuccess = await _db.SyncStates
+            .Where(x => x.LastSuccessfulSyncAt != null)
+            .MaxAsync(x => (DateTime?)x.LastSuccessfulSyncAt, cancellationToken);
+        return new CloudSyncStatus
         {
-            if (_periodicTask != null) return;
-            _periodicCancellation = new CancellationTokenSource();
-            // A periodic loop started during sign-in must not retain that
-            // sign-in's AsyncLocal diagnostic ID after the UI attempt ends.
-            using (CloudDiagnosticLogger.SuppressScope())
-                _periodicTask = RunPeriodicAsync(_periodicCancellation.Token);
-            NetworkChange.NetworkAvailabilityChanged += NetworkAvailabilityChanged;
-            SyncCaptureContext.OutboxChanged += OutboxChanged;
-        }
-        await RefreshStatusAsync(cancellationToken);
+            IsConnected = credential != null,
+            IsRunning = Volatile.Read(ref _isRunning) != 0,
+            PendingChanges = pending,
+            ConflictCount = conflicts,
+            LastSuccessfulSyncAt = lastSuccess.HasValue
+                ? new DateTimeOffset(DateTime.SpecifyKind(lastSuccess.Value, DateTimeKind.Utc))
+                : null,
+            Message = credential == null
+                ? "Cloud account is not connected."
+                : conflicts > 0
+                    ? "Synchronization is active, but one or more changes require review."
+                    : pending > 0
+                        ? "Local changes are waiting to synchronize."
+                        : "Cloud synchronization is up to date."
+        };
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken = default)
+    public async Task<CloudSyncSummary> SyncNowAsync(CancellationToken cancellationToken = default)
     {
-        Task? task;
-        lock (_lifecycleGate)
-        {
-            NetworkChange.NetworkAvailabilityChanged -= NetworkAvailabilityChanged;
-            SyncCaptureContext.OutboxChanged -= OutboxChanged;
-            _periodicCancellation?.Cancel();
-            task = _periodicTask;
-            _periodicTask = null;
-            _periodicCancellation = null;
-        }
-        if (task != null)
-        {
-            try { await task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken); }
-            catch (OperationCanceledException) { }
-            catch (TimeoutException) { }
-        }
-    }
-
-    public async Task WaitForIdleAsync(CancellationToken cancellationToken = default)
-    {
-        await _syncGate.WaitAsync(cancellationToken);
-        _syncGate.Release();
-    }
-
-    public async Task<CloudSyncStatus> SyncNowAsync(
-        bool userInitiated = false,
-        CancellationToken cancellationToken = default)
-    {
-        // A startup/background synchronization may already own the gate when
-        // first-run onboarding requests its required complete download. A
-        // user-initiated call must wait for that operation and then perform its
-        // own verified cycle; returning the previous status after three seconds
-        // can make a successful sign-in look like an incomplete migration.
-        if (userInitiated)
-            await _syncGate.WaitAsync(cancellationToken);
-        else if (!await _syncGate.WaitAsync(TimeSpan.Zero, cancellationToken))
-            return CurrentStatus;
-        var currentStage = "gate_acquired";
+        await SyncGate.WaitAsync(cancellationToken);
+        Interlocked.Exchange(ref _isRunning, 1);
+        SyncRun? syncRun = null;
+        var pushed = 0;
+        var pulled = 0;
+        var storeCount = 0;
         try
         {
-            if (CloudDiagnosticLogger.HasActiveAttempt)
-                await CloudDiagnosticLogger.WriteAsync("sync.gate_acquired", details:
-                    new Dictionary<string, object?> { ["userInitiated"] = userInitiated });
-
-            var account = _session.Account;
-            currentStage = "session_validation";
-            if (!_session.IsSignedIn || account == null)
+            var credential = await RequireCredentialAsync(cancellationToken);
+            syncRun = await StartSyncRunAsync(credential.DeviceId, cancellationToken);
+            var cloudStores = await GetCloudStoresAsync(credential, cancellationToken);
+            if (credential.InitialSnapshotUploadedAt == null)
             {
-                var signedOut = await SetStateAsync("signed_out", false, "AUTH_REQUIRED", null,
-                    cancellationToken);
-                await WriteStatusDiagnosticsAsync("sync.session_unavailable", signedOut, "blocked",
-                    cancellationToken);
-                return signedOut;
-            }
-            currentStage = "cursor_load";
-            await LoadStoredCursorAsync(account, cancellationToken);
-            if (account.IsDeviceRevoked)
-            {
-                var revoked = await SetStateAsync("revoked", false, "DEVICE_REVOKED", null,
-                    cancellationToken);
-                await WriteStatusDiagnosticsAsync("sync.device_revoked", revoked, "blocked",
-                    cancellationToken);
-                return revoked;
-            }
-            if (account.RequiresReconciliation)
-            {
-                var reconciliation = await SetStateAsync("reconciliation_required", false,
-                    "RESTORE_RECONCILIATION_REQUIRED", null, cancellationToken);
-                await WriteStatusDiagnosticsAsync("sync.reconciliation_required", reconciliation, "blocked",
-                    cancellationToken);
-                return reconciliation;
-            }
-            // Windows network-availability notifications are only a scheduling
-            // hint. They can report offline while HTTPS to the Worker is already
-            // usable, so let the bounded API request determine connectivity.
-            currentStage = "interrupted_upload_recovery";
-            await RecoverInterruptedUploadsAsync(account, cancellationToken);
-            currentStage = "sync_state_update";
-            var syncing = await SetStateAsync("syncing", true, null, null, cancellationToken);
-            if (CloudDiagnosticLogger.HasActiveAttempt)
-                await WriteStatusDiagnosticsAsync("sync.started", syncing, "started", cancellationToken);
-            currentStage = "server_compatibility_check";
-            var meta = await _api.GetAuthorizedAsync<ServerMetaEnvelope>("/api/v1/meta", cancellationToken);
-            if (meta.ApiVersion != CloudProtocol.ApiVersion ||
-                meta.MinimumClientSchemaVersion > CloudProtocol.ClientSchemaVersion ||
-                meta.SchemaVersion < CloudProtocol.ClientSchemaVersion)
-                throw new CloudApiException("CLIENT_VERSION_INCOMPATIBLE",
-                    "This PosApp version must be updated before it can synchronize.",
-                    System.Net.HttpStatusCode.Conflict);
-
-            if (CloudDiagnosticLogger.HasActiveAttempt)
-                await CloudDiagnosticLogger.WriteAsync("sync.server_compatibility_validated", "success",
-                    new Dictionary<string, object?>
-                    {
-                        ["serverApiVersion"] = meta.ApiVersion,
-                        ["serverSchemaVersion"] = meta.SchemaVersion,
-                        ["minimumClientSchemaVersion"] = meta.MinimumClientSchemaVersion
-                    });
-
-            if (!account.RequiresReconciliation)
-            {
-                currentStage = "push_pending_operations";
-                await PushPendingAsync(account, cancellationToken);
-            }
-
-            currentStage = "pull_server_changes";
-            var downloadedChanges = await PullChangesAsync(account, cancellationToken);
-            account.LastSuccessfulSyncAtUtc = DateTime.UtcNow;
-            account.UpdatedAtUtc = DateTime.UtcNow;
-            currentStage = "persist_sync_completion";
-            await using (var db = await _dbFactory.CreateDbContextAsync(cancellationToken))
-            {
-                db.SuppressSyncCapture = true;
-                db.CloudAccountStates.Update(account);
-                await db.SaveChangesAsync(cancellationToken);
-            }
-            _session.UpdateAccount(account);
-            var completed = await SetStateAsync(
-                account.RequiresReconciliation ? "reconciliation_required" : "up_to_date",
-                false, account.RequiresReconciliation ? "RESTORE_RECONCILIATION_REQUIRED" : null,
-                null, cancellationToken, downloadedChanges: downloadedChanges);
-            await WriteStatusDiagnosticsAsync("sync.completed", completed,
-                completed.PendingUploadCount == 0 && completed.ConflictCount == 0 ? "success" : "attention",
-                cancellationToken);
-            return completed;
-        }
-        catch (CloudApiException exception)
-        {
-            await CloudDiagnosticLogger.WriteAsync("sync.api_exception_captured", "error",
-                new Dictionary<string, object?>
+                if (cloudStores.Count > 0)
                 {
-                    ["failedStage"] = currentStage,
-                    ["errorCode"] = exception.Code,
-                    ["requestId"] = exception.RequestId,
-                    ["httpStatus"] = (int)exception.StatusCode
-                }, exception);
-            await HandleSecurityStateAsync(exception, cancellationToken);
-            var failure = await SetStateAsync(MapState(exception.Code), false, exception.Code, exception.Message,
-                cancellationToken, exception.RequestId);
-            await WriteStatusDiagnosticsAsync("sync.api_failed", failure, "error", cancellationToken, exception);
-            return failure;
+                    throw new InvalidOperationException(
+                        "Cloud stores already exist for this account. Restore cloud data on this device before enabling synchronization.");
+                }
+
+                await _account.UploadInitialSnapshotsAsync(cancellationToken);
+                credential = await RequireCredentialAsync(cancellationToken);
+            }
+
+            var stores = await _db.Stores.AsNoTracking().OrderBy(x => x.Id).ToListAsync(cancellationToken);
+            storeCount = stores.Count;
+            var localStoreIds = stores.Select(x => x.SyncId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missingCloudStores = cloudStores.Where(x => !localStoreIds.Contains(x.SyncId)).ToList();
+            if (missingCloudStores.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Cloud contains {missingCloudStores.Count} store(s) that are not on this device. " +
+                    "Use Restore Cloud Data to download the complete multi-store baseline.");
+            }
+
+            var needsSnapshotBaseline = false;
+            foreach (var store in stores)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var state = await GetOrCreateStateAsync(store.Id, credential.DeviceId, cancellationToken);
+                needsSnapshotBaseline |= state.LastSnapshotUploadedAt == null;
+                state.LastSyncAt = DateTime.UtcNow;
+                state.LastError = null;
+                await _db.SaveChangesAsync(cancellationToken);
+
+                try
+                {
+                    pushed += await PushStoreAsync(store, credential, cancellationToken);
+                    pulled += await PullStoreAsync(store, state, credential, cancellationToken);
+                    state.LastSuccessfulSyncAt = DateTime.UtcNow;
+                    state.LastError = null;
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    // A failed remote apply may clear tracked entities after a
+                    // transaction rollback. Re-query the state before recording
+                    // the error so diagnostics are never lost.
+                    var failedState = await GetOrCreateStateAsync(store.Id, credential.DeviceId, cancellationToken);
+                    failedState.LastError = Limit(ex.GetBaseException().Message, 1000);
+                    failedState.LastSyncAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync(cancellationToken);
+                    throw;
+                }
+            }
+
+            // A newly created store needs a full restore baseline in addition
+            // to its incremental log. Uploading all stores is rare and keeps the
+            // restore set consistent across devices.
+            if (needsSnapshotBaseline)
+                await _account.UploadInitialSnapshotsAsync(cancellationToken);
+
+            var conflictCount = await _db.SyncConflicts.CountAsync(x => x.ResolvedAt == null, cancellationToken);
+            var pendingAfter = await _db.SyncOutbox.CountAsync(cancellationToken);
+            await CompleteSyncRunAsync(syncRun, storeCount, pushed, pulled, conflictCount, pendingAfter, cancellationToken);
+            return new CloudSyncSummary
+            {
+                StoreCount = stores.Count,
+                PushedChanges = pushed,
+                PulledChanges = pulled,
+                ConflictCount = conflictCount,
+                CompletedAt = DateTimeOffset.UtcNow
+            };
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (Exception ex)
         {
-            if (CloudDiagnosticLogger.HasActiveAttempt)
-                await CloudDiagnosticLogger.WriteAsync("sync.cancelled", "cancelled");
+            await FailSyncRunAsync(syncRun, storeCount, pushed, pulled, ex, cancellationToken);
             throw;
-        }
-        catch (Exception exception)
-        {
-            await CloudDiagnosticLogger.WriteAsync("sync.unexpected_exception_captured", "error",
-                new Dictionary<string, object?> { ["failedStage"] = currentStage }, exception);
-            var failure = await SetStateAsync("error", false, "SYNC_FAILED",
-                "Synchronization could not be completed. Local work is safe and will be retried.", cancellationToken);
-            await WriteStatusDiagnosticsAsync("sync.unexpected_failure", failure, "error",
-                cancellationToken, exception);
-            return failure;
         }
         finally
         {
-            _syncGate.Release();
+            Interlocked.Exchange(ref _isRunning, 0);
+            SyncGate.Release();
         }
     }
 
-    public async Task RetryFailedAsync(CancellationToken cancellationToken = default)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var failed = await db.SyncOutboxOperations.Where(value =>
-            value.Status == SyncOutboxStatus.Failed || value.Status == SyncOutboxStatus.Pending).ToListAsync(cancellationToken);
-        foreach (var operation in failed)
-        {
-            operation.Status = SyncOutboxStatus.Pending;
-            operation.NextAttemptAtUtc = null;
-            operation.LastErrorCode = null;
-            operation.LastErrorMessage = null;
-        }
-        db.SuppressSyncCapture = true;
-        await db.SaveChangesAsync(cancellationToken);
-        await SyncNowAsync(true, cancellationToken);
-    }
-
-    public async Task ResolveConflictAsync(
-        long conflictId,
-        SyncConflictStatus resolution,
+    public async Task<CloudRestoreSummary> RestoreLatestSnapshotsAsync(
+        bool replaceLocalData,
         CancellationToken cancellationToken = default)
     {
-        if (resolution is not (SyncConflictStatus.KeepLocal or SyncConflictStatus.UseServer))
-            throw new ArgumentException("Choose either the local or server version.", nameof(resolution));
+        if (!replaceLocalData)
+            throw new InvalidOperationException("Cloud restore must replace the local database contents to preserve relational integrity.");
 
-        SyncChangeDto? serverChange = null;
-        string? conflictRecordId = null;
-        await using (var db = await _dbFactory.CreateDbContextAsync(cancellationToken))
+        await SyncGate.WaitAsync(cancellationToken);
+        Interlocked.Exchange(ref _isRunning, 1);
+        try
         {
-            db.SuppressSyncCapture = true;
-            var conflict = await db.SyncConflicts.SingleAsync(value => value.Id == conflictId, cancellationToken);
-            conflictRecordId = conflict.ConflictId;
-            var pending = await db.SyncOutboxOperations.FirstOrDefaultAsync(value =>
-                value.OperationId == conflict.OperationId, cancellationToken);
-            if (resolution == SyncConflictStatus.KeepLocal)
-            {
-                if (pending == null) throw new InvalidOperationException("The local change is no longer available.");
-                pending.OperationId = Guid.NewGuid().ToString("D");
-                pending.IdempotencyKey = Guid.NewGuid().ToString("N");
-                pending.BaseVersion = conflict.ServerVersion;
-                pending.Status = SyncOutboxStatus.Pending;
-                pending.AttemptCount = 0;
-                pending.NextAttemptAtUtc = null;
-            }
-            else
-            {
-                if (pending != null) pending.Status = SyncOutboxStatus.Synchronized;
-                var account = await db.CloudAccountStates.AsNoTracking().SingleAsync(cancellationToken);
-                serverChange = new SyncChangeDto
-                {
-                    EntityType = conflict.EntityType,
-                    RecordId = conflict.RecordId,
-                    StoreId = conflict.ServerStoreId ?? account.CurrentStoreId,
-                    Version = conflict.ServerVersion,
-                    UpdatedAtUtc = conflict.ServerUpdatedAtUtc ?? DateTime.UtcNow,
-                    DeletedAtUtc = conflict.ServerDeletedAtUtc,
-                    LastModifiedDeviceId = conflict.ServerLastModifiedDeviceId ?? "conflict-resolution",
-                    Payload = JsonDocument.Parse(conflict.ServerPayloadJson).RootElement.Clone()
-                };
-            }
-            conflict.Status = resolution;
-            conflict.ResolvedAtUtc = DateTime.UtcNow;
-            conflict.ResolvedByUserId = _session.User?.Id;
-            await db.SaveChangesAsync(cancellationToken);
-        }
+            var credential = await RequireCredentialAsync(cancellationToken);
+            credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
+            var cloudStores = await GetCloudStoresAsync(credential, cancellationToken);
+            if (cloudStores.Count == 0) throw new InvalidOperationException("No cloud store snapshots are available.");
 
-        if (serverChange != null && _session.Account != null)
-            await _applier.ApplyAsync(new[] { serverChange }, _session.Account.TenantId,
-                _session.Account.DeviceId, cancellationToken);
-        if (_session.Account != null)
-            await _api.PostAuthorizedAsync<OkEnvelope>("/api/v1/audit/events", new
+            var snapshots = new List<SnapshotDownload>();
+            foreach (var store in cloudStores)
             {
-                action = "sync.conflict_resolved",
-                affectedType = "sync_conflict",
-                affectedId = conflictRecordId,
-                storeId = _session.Account.CurrentStoreId
-            }, cancellationToken);
-        await SyncNowAsync(true, cancellationToken);
+                snapshots.Add(await GetAsync<SnapshotDownload>(
+                    credential,
+                    $"/v1/sync/snapshot/download?storeSyncId={Uri.EscapeDataString(store.SyncId)}",
+                    cancellationToken));
+            }
+
+            await _backup.CreateBackupAsync(retentionCount: 20);
+            var restoredRows = await ReplaceLocalDataAsync(snapshots, cancellationToken);
+            credential.InitialSnapshotUploadedAt = DateTimeOffset.UtcNow;
+            await _credentials.SaveAsync(credential, cancellationToken);
+            return new CloudRestoreSummary
+            {
+                StoreCount = snapshots.Count,
+                RestoredRows = restoredRows,
+                RestoredAt = DateTimeOffset.UtcNow
+            };
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _isRunning, 0);
+            SyncGate.Release();
+        }
     }
 
-    private async Task PushPendingAsync(CloudAccountState account, CancellationToken cancellationToken)
+    private async Task<int> PushStoreAsync(
+        Store store,
+        CloudCredential credential,
+        CancellationToken cancellationToken)
     {
-        for (var batchNumber = 0; batchNumber < 20; batchNumber++)
+        var acceptedTotal = 0;
+        for (var batchNumber = 0; batchNumber < MaximumPushBatchesPerRun; batchNumber++)
         {
-            List<SyncOutboxOperation> pending;
-            await using (var db = await _dbFactory.CreateDbContextAsync(cancellationToken))
-            {
-                var now = DateTime.UtcNow;
-                pending = await db.SyncOutboxOperations.Where(value =>
-                        value.CreatedByUserId == account.CurrentCloudUserId &&
-                        (value.StoreId == null || value.StoreId == account.CurrentStoreId) &&
-                        value.Status == SyncOutboxStatus.Pending &&
-                        (value.NextAttemptAtUtc == null || value.NextAttemptAtUtc <= now))
-                    .OrderBy(value => value.Id)
-                    .Take(CloudProtocol.MaxPushBatch * 2)
-                    .ToListAsync(cancellationToken);
-                var completingSavedSales = pending.Where(IsCompletingSavedSale)
-                    .Select(value => value.RecordId)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                pending = pending.OrderBy(value => PushDependencyOrder(value, completingSavedSales))
-                    .ThenBy(value => value.Id)
-                    .Take(CloudProtocol.MaxPushBatch)
-                    .ToList();
-                if (pending.Count == 0) return;
+            // Only the oldest queued change for each record may be sent in one
+            // request. Sending two edits with the same base cloud revision would
+            // correctly make the second edit conflict with the first.
+            var eligible = _db.SyncOutbox.Where(x =>
+                x.StoreId == store.Id &&
+                (x.LastError == null || !x.LastError.StartsWith("Conflict:")));
+            var firstChangeIds = eligible
+                .GroupBy(x => new { x.EntityType, x.EntitySyncId })
+                .Select(group => group.Min(x => x.Id));
+            var batch = await eligible
+                .Where(x => firstChangeIds.Contains(x.Id))
+                .OrderBy(x => x.EntityType == nameof(Store) ? 0 : 1)
+                .ThenBy(x => x.Id)
+                .Take(PushBatchSize)
+                .ToListAsync(cancellationToken);
+            if (batch.Count == 0) break;
 
-                if (CloudDiagnosticLogger.HasActiveAttempt)
-                    await CloudDiagnosticLogger.WriteAsync("sync.push_batch_started", "started",
-                        new Dictionary<string, object?>
-                        {
-                            ["batchNumber"] = batchNumber + 1,
-                            ["operationCount"] = pending.Count,
-                            ["entitySummary"] = GroupSummary(pending.Select(value => value.EntityType)),
-                            ["maximumPreviousAttempts"] = pending.Max(value => value.AttemptCount)
-                        });
-                foreach (var operation in pending)
-                {
-                    operation.Status = SyncOutboxStatus.Uploading;
-                    operation.LastAttemptAtUtc = now;
-                    operation.AttemptCount++;
-                }
-                db.SuppressSyncCapture = true;
-                await db.SaveChangesAsync(cancellationToken);
-            }
-
-            SyncPushResponse response;
+            credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
+            PushResponse response;
             try
             {
-                var request = new SyncPushRequest
+                response = await PostAsync<PushResponse>(credential, "/v1/sync/push", new
                 {
-                    DeviceId = account.DeviceId,
-                    StoreId = account.CurrentStoreId,
-                    Operations = pending.Select(value => new SyncOperationDto
+                    storeSyncId = store.SyncId,
+                    changes = batch.Select(x => new
                     {
-                        OperationId = value.OperationId,
-                        IdempotencyKey = value.IdempotencyKey,
-                        EntityType = value.EntityType,
-                        RecordId = value.RecordId,
-                        StoreId = value.StoreId,
-                        Operation = value.Operation == SyncOperationKind.Delete ? "delete" : "upsert",
-                        BaseVersion = value.BaseVersion,
-                        Payload = JsonDocument.Parse(value.PayloadJson).RootElement.Clone(),
-                        ClientTimestampUtc = SyncWireTimestamp.NormalizeUtc(value.CreatedAtUtc)
+                        changeId = x.ChangeId,
+                        entityType = x.EntityType,
+                        entitySyncId = x.EntitySyncId,
+                        operation = x.Operation,
+                        entityVersion = x.EntityVersion,
+                        baseCloudVersion = x.BaseCloudVersion,
+                        payload = JsonSerializer.Deserialize<JsonElement>(x.PayloadJson, JsonOptions)
                     }).ToArray()
-                };
-                response = await _api.PostAuthorizedAsync<SyncPushResponse>("/api/v1/sync/push", request,
-                    cancellationToken);
-                await PersistCursorAsync(account, pulled: false, pushed: true,
-                    cancellationToken: cancellationToken);
-
-                if (CloudDiagnosticLogger.HasActiveAttempt)
-                    await CloudDiagnosticLogger.WriteAsync("sync.push_batch_received", "success",
-                        new Dictionary<string, object?>
-                        {
-                            ["batchNumber"] = batchNumber + 1,
-                            ["resultCount"] = response.Results.Count,
-                            ["accepted"] = response.Results.Count(value => value.Accepted),
-                            ["duplicates"] = response.Results.Count(value => value.Duplicate),
-                            ["rejected"] = response.Results.Count(value => !value.Accepted && !value.Duplicate),
-                            ["errorCodeSummary"] = GroupSummary(response.Results
-                                .Where(value => !string.IsNullOrWhiteSpace(value.ErrorCode))
-                                .Select(value => value.ErrorCode!)),
-                            ["serverCursor"] = response.ServerCursor,
-                            ["requestId"] = response.RequestId
-                        });
+                }, cancellationToken);
             }
-            catch (Exception pushException)
+            catch (Exception ex)
             {
-                if (CloudDiagnosticLogger.HasActiveAttempt)
-                    await CloudDiagnosticLogger.WriteAsync("sync.push_batch_failed", "error",
-                        new Dictionary<string, object?>
-                        {
-                            ["batchNumber"] = batchNumber + 1,
-                            ["operationCount"] = pending.Count,
-                            ["entitySummary"] = GroupSummary(pending.Select(value => value.EntityType)),
-                            ["errorCode"] = (pushException as CloudApiException)?.Code,
-                            ["requestId"] = (pushException as CloudApiException)?.RequestId
-                        }, pushException);
-                try
+                foreach (var item in batch)
                 {
-                    await ResetUploadingAsync(pending, cancellationToken);
+                    item.AttemptCount++;
+                    item.LastAttemptAt = DateTime.UtcNow;
+                    item.LastError = Limit(ex.GetBaseException().Message, 1000);
                 }
-                catch (Exception recoveryException)
-                {
-                    // Cleanup must never replace the actual Worker/API failure.
-                    // RecoverInterruptedUploadsAsync will safely reset these rows
-                    // before the next synchronization attempt if this fallback
-                    // itself cannot access SQLite.
-                    await CloudDiagnosticLogger.WriteAsync("sync.upload_reset_failed", "error",
-                        new Dictionary<string, object?>
-                        {
-                            ["batchNumber"] = batchNumber + 1,
-                            ["operationCount"] = pending.Count,
-                            ["originalExceptionType"] = pushException.GetType().FullName
-                        }, recoveryException);
-                }
+                await _db.SaveChangesAsync(cancellationToken);
                 throw;
             }
 
-            await using var updateDb = await _dbFactory.CreateDbContextAsync(cancellationToken);
-            updateDb.SuppressSyncCapture = true;
-            foreach (var result in response.Results)
+            var acceptedThisBatch = 0;
+            foreach (var item in batch)
             {
-                var operation = await updateDb.SyncOutboxOperations.SingleOrDefaultAsync(value =>
-                    value.OperationId == result.OperationId, cancellationToken);
-                if (operation == null) continue;
-                var identity = await updateDb.SyncIdentities.SingleOrDefaultAsync(value =>
-                    value.RecordId == operation.RecordId, cancellationToken);
-                if (result.Accepted || result.Duplicate)
+                var result = response.Results.FirstOrDefault(x => x.ChangeId == item.ChangeId)
+                             ?? throw new InvalidOperationException("The cloud API omitted a push result.");
+                item.AttemptCount++;
+                item.LastAttemptAt = DateTime.UtcNow;
+                if (string.Equals(result.Status, "accepted", StringComparison.OrdinalIgnoreCase))
                 {
-                    operation.Status = SyncOutboxStatus.Synchronized;
-                    operation.LastErrorCode = null;
-                    operation.LastErrorMessage = null;
-                    if (identity != null) identity.ServerVersion = result.ServerVersion;
-                }
-                else if (result.ErrorCode == "VERSION_CONFLICT")
-                {
-                    operation.Status = SyncOutboxStatus.Conflict;
-                    updateDb.SyncConflicts.Add(new SyncConflict
-                    {
-                        EntityType = operation.EntityType,
-                        RecordId = operation.RecordId,
-                        OperationId = operation.OperationId,
-                        LocalBaseVersion = operation.BaseVersion,
-                        ServerVersion = result.ServerVersion,
-                        LocalPayloadJson = operation.PayloadJson,
-                        ServerPayloadJson = result.ServerPayload == null
-                            ? "{}"
-                            : JsonSerializer.Serialize(result.ServerPayload),
-                        ServerStoreId = result.ServerStoreId,
-                        ServerUpdatedAtUtc = result.ServerUpdatedAtUtc,
-                        ServerDeletedAtUtc = result.ServerDeletedAtUtc,
-                        ServerLastModifiedDeviceId = result.ServerLastModifiedDeviceId
-                    });
+                    await UpdateEntityCloudVersionAsync(
+                        item.StoreId, item.EntityType, item.EntitySyncId, result.CloudVersion, item.Id, cancellationToken);
+                    _db.SyncOutbox.Remove(item);
+                    acceptedThisBatch++;
+                    acceptedTotal++;
                 }
                 else
                 {
-                    operation.Status = IsPermanentOperationError(result.ErrorCode)
-                        ? SyncOutboxStatus.Failed
-                        : SyncOutboxStatus.Pending;
-                    operation.LastErrorCode = result.ErrorCode;
-                    operation.LastErrorMessage = result.Message;
-                    operation.NextAttemptAtUtc = DateTime.UtcNow + SyncBackoffPolicy.ForAttempt(operation.AttemptCount);
+                    item.LastError = "Conflict: " + Limit(result.Message, 960);
+                    await AddConflictAsync(new SyncConflict
+                    {
+                        StoreId = item.StoreId,
+                        EntityType = item.EntityType,
+                        EntitySyncId = item.EntitySyncId,
+                        ChangeId = item.ChangeId,
+                        LocalBaseCloudVersion = item.BaseCloudVersion,
+                        RemoteCloudVersion = result.CloudVersion,
+                        LocalOperation = item.Operation,
+                        RemoteOperation = NormalizeRemoteOperation(result.Operation),
+                        LocalPayloadJson = item.PayloadJson,
+                        RemotePayloadJson = result.Payload.ValueKind == JsonValueKind.Undefined
+                            ? "{}"
+                            : result.Payload.GetRawText(),
+                        Message = result.Message.Length == 0
+                            ? "The cloud record changed on another device."
+                            : result.Message
+                    }, cancellationToken);
                 }
             }
-            await updateDb.SaveChangesAsync(cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            if (acceptedThisBatch == 0) break;
         }
+        return acceptedTotal;
     }
 
-    private async Task<int> PullChangesAsync(CloudAccountState account, CancellationToken cancellationToken)
+    private async Task<int> PullStoreAsync(
+        Store store,
+        SyncState state,
+        CloudCredential credential,
+        CancellationToken cancellationToken)
     {
-        var downloaded = 0;
-        for (var page = 0; page < 200; page++)
+        var pulled = 0;
+        while (true)
         {
-            var response = await _api.GetAuthorizedAsync<SyncPullResponse>(
-                $"/api/v1/sync/pull?cursor={account.LastServerCursor}&storeId={Uri.EscapeDataString(account.CurrentStoreId)}&limit={CloudProtocol.MaxPullBatch}",
+            credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
+            var response = await GetAsync<PullResponse>(
+                credential,
+                $"/v1/sync/pull?storeSyncId={Uri.EscapeDataString(store.SyncId)}" +
+                $"&after={state.PullCursor}&limit={PullBatchSize}",
                 cancellationToken);
-            var applied = await _applier.ApplyAsync(response.Changes, account.TenantId,
-                account.DeviceId, cancellationToken);
-            downloaded += applied;
+            if (response.Changes.Count == 0) break;
 
-            if (CloudDiagnosticLogger.HasActiveAttempt)
-                await CloudDiagnosticLogger.WriteAsync("sync.pull_page_applied", "success",
-                    new Dictionary<string, object?>
-                    {
-                        ["pageNumber"] = page + 1,
-                        ["receivedChanges"] = response.Changes.Count,
-                        ["appliedChanges"] = applied,
-                        ["entitySummary"] = GroupSummary(response.Changes.Select(value => value.EntityType)),
-                        ["nextCursor"] = response.NextCursor,
-                        ["hasMore"] = response.HasMore,
-                        ["requestId"] = response.RequestId
-                    });
-            account.LastServerCursor = response.NextCursor;
-            await PersistCursorAsync(account, pulled: true, pushed: false,
-                cancellationToken: cancellationToken);
-            if (!response.HasMore) return downloaded;
+            var ordered = response.Changes
+                .OrderBy(ChangePriority)
+                .ThenBy(x => x.Cursor)
+                .ToList();
+            foreach (var change in ordered)
+            {
+                await ApplyRemoteChangeAsync(store, credential, change, cancellationToken);
+                pulled++;
+            }
+
+            state.PullCursor = Math.Max(state.PullCursor, response.NextCursor);
+            state.DeviceId = credential.DeviceId;
+            await _db.SaveChangesAsync(cancellationToken);
+            if (!response.HasMore) break;
         }
-        throw new CloudApiException("PARTIAL_BATCH_FAILURE",
-            "More synchronized changes remain on the server. Run synchronization again to continue safely.",
-            System.Net.HttpStatusCode.ServiceUnavailable);
+        return pulled;
     }
 
-    private async Task WriteStatusDiagnosticsAsync(
-        string stage,
-        CloudSyncStatus status,
-        string outcome,
-        CancellationToken cancellationToken,
-        Exception? exception = null)
-    {
-        if (!CloudDiagnosticLogger.HasActiveAttempt && exception == null) return;
-
-        IReadOnlyDictionary<string, object?>? details = null;
-        if (status.PendingUploadCount > 0 || status.ConflictCount > 0 || exception != null)
-        {
-            try { details = await BuildQueueDiagnosticSummaryAsync(cancellationToken); }
-            catch { /* A failed diagnostic query must not change sync behavior. */ }
-        }
-
-        await CloudDiagnosticLogger.WriteStatusAsync(stage, status, outcome, details, exception);
-    }
-
-    private async Task<IReadOnlyDictionary<string, object?>> BuildQueueDiagnosticSummaryAsync(
+    private async Task ApplyRemoteChangeAsync(
+        Store store,
+        CloudCredential credential,
+        PullChange change,
         CancellationToken cancellationToken)
     {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var outbox = await db.SyncOutboxOperations.AsNoTracking()
-            .Where(value => value.Status == SyncOutboxStatus.Pending ||
-                            value.Status == SyncOutboxStatus.Uploading ||
-                            value.Status == SyncOutboxStatus.Failed ||
-                            value.Status == SyncOutboxStatus.Conflict)
-            .Select(value => new
-            {
-                value.EntityType,
-                value.Status,
-                value.LastErrorCode,
-                value.AttemptCount
-            })
-            .ToListAsync(cancellationToken);
-        var conflicts = await db.SyncConflicts.AsNoTracking()
-            .Where(value => value.Status == SyncConflictStatus.Unresolved)
-            .Select(value => value.EntityType)
-            .ToListAsync(cancellationToken);
-
-        return new Dictionary<string, object?>
+        var pending = await _db.SyncOutbox
+            .Where(x => x.StoreId == store.Id && x.EntityType == change.EntityType &&
+                        x.EntitySyncId == change.EntitySyncId)
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (pending != null)
         {
-            ["outboxStatusSummary"] = GroupSummary(outbox.Select(value => value.Status.ToString())),
-            ["outboxEntitySummary"] = GroupSummary(outbox.Select(value => value.EntityType)),
-            ["outboxErrorCodeSummary"] = GroupSummary(outbox
-                .Where(value => !string.IsNullOrWhiteSpace(value.LastErrorCode))
-                .Select(value => value.LastErrorCode!)),
-            ["maximumAttemptCount"] = outbox.Count == 0 ? 0 : outbox.Max(value => value.AttemptCount),
-            ["conflictEntitySummary"] = GroupSummary(conflicts)
+            if (string.Equals(change.OriginDeviceId, credential.DeviceId, StringComparison.Ordinal))
+            {
+                await UpdateEntityCloudVersionAsync(
+                    store.Id, change.EntityType, change.EntitySyncId,
+                    change.CloudVersion, pending.ChangeId == change.ChangeId ? pending.Id : 0,
+                    cancellationToken);
+                if (pending.ChangeId == change.ChangeId) _db.SyncOutbox.Remove(pending);
+                await _db.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            await AddConflictAsync(new SyncConflict
+            {
+                StoreId = store.Id,
+                EntityType = change.EntityType,
+                EntitySyncId = change.EntitySyncId,
+                ChangeId = change.ChangeId,
+                LocalBaseCloudVersion = pending.BaseCloudVersion,
+                RemoteCloudVersion = change.CloudVersion,
+                LocalOperation = pending.Operation,
+                RemoteOperation = NormalizeRemoteOperation(change.Operation),
+                LocalPayloadJson = pending.PayloadJson,
+                RemotePayloadJson = change.Payload.GetRawText(),
+                Message = "A remote change arrived while this device has an unsynchronized local edit."
+            }, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            using (_storeContext.SuppressCloudCapture())
+            {
+                if (string.Equals(change.Operation, "delete", StringComparison.OrdinalIgnoreCase))
+                    await DeleteRemoteEntityAsync(store.Id, change, cancellationToken);
+                else
+                    await UpsertRemoteEntityAsync(store.Id, change, cancellationToken);
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _db.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    private async Task UpsertRemoteEntityAsync(
+        int storeId,
+        PullChange change,
+        CancellationToken cancellationToken)
+    {
+        switch (change.EntityType)
+        {
+            case nameof(Store):
+                await UpsertStoreAsync(change, cancellationToken);
+                break;
+            case nameof(Category): await UpsertAsync<Category>(storeId, change, cancellationToken); break;
+            case nameof(Customer): await UpsertAsync<Customer>(storeId, change, cancellationToken); break;
+            case nameof(Discount): await UpsertAsync<Discount>(storeId, change, cancellationToken); break;
+            case nameof(Product): await UpsertAsync<Product>(storeId, change, cancellationToken); break;
+            case nameof(PurchaseDocument): await UpsertAsync<PurchaseDocument>(storeId, change, cancellationToken); break;
+            case nameof(PurchaseItem): await UpsertAsync<PurchaseItem>(storeId, change, cancellationToken); break;
+            case nameof(Sale): await UpsertAsync<Sale>(storeId, change, cancellationToken); break;
+            case nameof(SaleItem): await UpsertAsync<SaleItem>(storeId, change, cancellationToken); break;
+            case nameof(SalePayment): await UpsertAsync<SalePayment>(storeId, change, cancellationToken); break;
+            case nameof(StockTransaction): await UpsertAsync<StockTransaction>(storeId, change, cancellationToken); break;
+            case nameof(StockTransfer): await UpsertAsync<StockTransfer>(storeId, change, cancellationToken); break;
+            case nameof(StockTransferItem): await UpsertAsync<StockTransferItem>(storeId, change, cancellationToken); break;
+            case nameof(Supplier): await UpsertAsync<Supplier>(storeId, change, cancellationToken); break;
+            case nameof(Tax): await UpsertAsync<Tax>(storeId, change, cancellationToken); break;
+            case nameof(User): await UpsertAsync<User>(storeId, change, cancellationToken); break;
+            case nameof(CashSession): await UpsertAsync<CashSession>(storeId, change, cancellationToken); break;
+            case nameof(CashMovement): await UpsertAsync<CashMovement>(storeId, change, cancellationToken); break;
+            case nameof(Setting): await UpsertAsync<Setting>(storeId, change, cancellationToken); break;
+            default: throw new InvalidOperationException($"Unsupported cloud entity type: {change.EntityType}.");
+        }
+    }
+
+    private async Task UpsertStoreAsync(PullChange change, CancellationToken cancellationToken)
+    {
+        var entity = await _db.Stores.FirstOrDefaultAsync(x => x.SyncId == change.EntitySyncId, cancellationToken);
+        if (entity == null)
+        {
+            entity = new Store { SyncId = change.EntitySyncId };
+            _db.Stores.Add(entity);
+        }
+        ApplyScalarProperties(entity, change.Payload);
+        entity.CloudVersion = change.CloudVersion;
+    }
+
+    private async Task UpsertAsync<TEntity>(
+        int storeId,
+        PullChange change,
+        CancellationToken cancellationToken)
+        where TEntity : StoreScopedEntity, new()
+    {
+        var entity = await _db.Set<TEntity>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.StoreId == storeId && x.SyncId == change.EntitySyncId, cancellationToken);
+        if (entity == null)
+        {
+            entity = new TEntity { StoreId = storeId, SyncId = change.EntitySyncId };
+            _db.Set<TEntity>().Add(entity);
+        }
+
+        ApplyScalarProperties(entity, change.Payload);
+        await ResolveReferencesAsync(entity, change.Payload, storeId, cancellationToken);
+        entity.CloudVersion = change.CloudVersion;
+    }
+
+    private async Task DeleteRemoteEntityAsync(
+        int storeId,
+        PullChange change,
+        CancellationToken cancellationToken)
+    {
+        if (change.EntityType == nameof(Store))
+        {
+            var store = await _db.Stores.FirstOrDefaultAsync(x => x.SyncId == change.EntitySyncId, cancellationToken);
+            if (store != null)
+            {
+                store.IsActive = false;
+                store.CloudVersion = change.CloudVersion;
+                store.SyncUpdatedAt = DateTime.UtcNow;
+            }
+            return;
+        }
+
+        if (!EntityTypes.TryGetValue(change.EntityType, out var type))
+            throw new InvalidOperationException($"Unsupported cloud entity type: {change.EntityType}.");
+        var entity = await FindEntityAsync(type, storeId, change.EntitySyncId, cancellationToken);
+        if (entity != null) _db.Remove(entity);
+    }
+
+    private async Task ResolveReferencesAsync(
+        StoreScopedEntity entity,
+        JsonElement payload,
+        int storeId,
+        CancellationToken cancellationToken)
+    {
+        switch (entity)
+        {
+            case Product x:
+                x.CategoryId = await RequireIdAsync<Category>(payload, "CategorySyncId", storeId, cancellationToken);
+                break;
+            case PurchaseDocument x:
+                x.SupplierId = await OptionalIdAsync<Supplier>(payload, "SupplierSyncId", storeId, cancellationToken);
+                x.UserId = await RequireIdAsync<User>(payload, "UserSyncId", storeId, cancellationToken);
+                break;
+            case PurchaseItem x:
+                x.PurchaseDocumentId = await RequireIdAsync<PurchaseDocument>(payload, "PurchaseDocumentSyncId", storeId, cancellationToken);
+                x.ProductId = await RequireIdAsync<Product>(payload, "ProductSyncId", storeId, cancellationToken);
+                break;
+            case Sale x:
+                x.CustomerId = await OptionalIdAsync<Customer>(payload, "CustomerSyncId", storeId, cancellationToken);
+                x.UserId = await RequireIdAsync<User>(payload, "UserSyncId", storeId, cancellationToken);
+                x.CashSessionId = await OptionalIdAsync<CashSession>(payload, "CashSessionSyncId", storeId, cancellationToken);
+                x.RefundedSaleId = await OptionalIdAsync<Sale>(payload, "RefundedSaleSyncId", storeId, cancellationToken);
+                break;
+            case SaleItem x:
+                x.SaleId = await RequireIdAsync<Sale>(payload, "SaleSyncId", storeId, cancellationToken);
+                x.ProductId = await RequireIdAsync<Product>(payload, "ProductSyncId", storeId, cancellationToken);
+                x.RefundedSaleItemId = await OptionalIdAsync<SaleItem>(payload, "RefundedSaleItemSyncId", storeId, cancellationToken);
+                break;
+            case SalePayment x:
+                x.SaleId = await RequireIdAsync<Sale>(payload, "SaleSyncId", storeId, cancellationToken);
+                break;
+            case StockTransfer x:
+                x.DestinationStoreId = await RequireStoreIdAsync(payload, "DestinationStoreSyncId", cancellationToken);
+                x.CreatedByUserId = await OptionalIdAsync<User>(payload, "CreatedByUserSyncId", storeId, cancellationToken);
+                x.DispatchedByUserId = await OptionalIdAsync<User>(payload, "DispatchedByUserSyncId", storeId, cancellationToken);
+                x.ReceivedByUserId = await OptionalIdAsync<User>(payload, "ReceivedByUserSyncId", x.DestinationStoreId, cancellationToken);
+                x.CancelledByUserId = await OptionalIdAsync<User>(payload, "CancelledByUserSyncId", storeId, cancellationToken);
+                break;
+            case StockTransferItem x:
+            {
+                x.StockTransferId = await RequireIdAsync<StockTransfer>(payload, "StockTransferSyncId", storeId, cancellationToken);
+                x.ProductId = await RequireIdAsync<Product>(payload, "ProductSyncId", storeId, cancellationToken);
+                var transfer = await _db.StockTransfers.IgnoreQueryFilters().AsNoTracking()
+                    .FirstAsync(t => t.Id == x.StockTransferId, cancellationToken);
+                x.DestinationProductId = await RequireOrCreateDestinationProductAsync(
+                    payload, transfer.DestinationStoreId, x.ProductId, cancellationToken);
+                break;
+            }
+            case StockTransaction x:
+                x.ProductId = await RequireIdAsync<Product>(payload, "ProductSyncId", storeId, cancellationToken);
+                x.SaleId = await OptionalIdAsync<Sale>(payload, "SaleSyncId", storeId, cancellationToken);
+                x.SaleItemId = await OptionalIdAsync<SaleItem>(payload, "SaleItemSyncId", storeId, cancellationToken);
+                x.StockTransferId = await OptionalGlobalIdAsync<StockTransfer>(payload, "StockTransferSyncId", cancellationToken);
+                x.StockTransferItemId = await OptionalGlobalIdAsync<StockTransferItem>(payload, "StockTransferItemSyncId", cancellationToken);
+                x.UserId = await OptionalIdAsync<User>(payload, "UserSyncId", storeId, cancellationToken);
+                break;
+            case CashSession x:
+                x.OpenedByUserId = await RequireIdAsync<User>(payload, "OpenedByUserSyncId", storeId, cancellationToken);
+                x.ClosedByUserId = await OptionalIdAsync<User>(payload, "ClosedByUserSyncId", storeId, cancellationToken);
+                break;
+            case CashMovement x:
+                x.CashSessionId = await RequireIdAsync<CashSession>(payload, "CashSessionSyncId", storeId, cancellationToken);
+                x.UserId = await RequireIdAsync<User>(payload, "UserSyncId", storeId, cancellationToken);
+                break;
+        }
+    }
+
+    private async Task<int> RequireStoreIdAsync(JsonElement payload, string property, CancellationToken cancellationToken)
+    {
+        var syncId = GetString(payload, property);
+        if (string.IsNullOrWhiteSpace(syncId))
+            throw new InvalidOperationException($"Cloud change is missing {property}.");
+        var existing = await _db.Stores.FirstOrDefaultAsync(x => x.SyncId == syncId, cancellationToken);
+        if (existing != null) return existing.Id;
+
+        var requestedCode = Limit(GetString(payload, "DestinationStoreCode")?.Trim(), 24);
+        var requestedName = Limit(GetString(payload, "DestinationStoreName")?.Trim(), 100);
+        var code = string.IsNullOrWhiteSpace(requestedCode) ? $"SYNC-{syncId[..Math.Min(8, syncId.Length)]}" : requestedCode.ToUpperInvariant();
+        if (await _db.Stores.AnyAsync(x => x.Code == code, cancellationToken))
+            code = $"SYNC-{syncId[..Math.Min(8, syncId.Length)]}".ToUpperInvariant();
+        var store = new Store
+        {
+            SyncId = syncId,
+            Code = code,
+            Name = string.IsNullOrWhiteSpace(requestedName) ? $"Synced Store {code}" : requestedName,
+            Address = Limit(GetString(payload, "DestinationStoreAddress"), 500),
+            Phone = Limit(GetString(payload, "DestinationStorePhone"), 30),
+            IsActive = GetBoolean(payload, "DestinationStoreIsActive") ?? true
         };
+        _db.Stores.Add(store);
+        await _db.SaveChangesAsync(cancellationToken);
+        return store.Id;
     }
 
-    private static string GroupSummary(IEnumerable<string> values)
-        => string.Join(",", values
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .GroupBy(value => value.Trim(), StringComparer.OrdinalIgnoreCase)
-            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(group => $"{group.Key}:{group.Count()}"));
-
-    private async Task ResetUploadingAsync(
-        IReadOnlyList<SyncOutboxOperation> operations,
+    private async Task<int> RequireOrCreateDestinationProductAsync(
+        JsonElement payload,
+        int destinationStoreId,
+        int sourceProductId,
         CancellationToken cancellationToken)
     {
-        await SyncOutboxUploadRecovery.ResetAsync(
-            _dbFactory,
-            operations.Select(value => value.OperationId),
-            cancellationToken);
-    }
+        var productSyncId = GetString(payload, "DestinationProductSyncId");
+        if (string.IsNullOrWhiteSpace(productSyncId))
+            throw new InvalidOperationException("Cloud transfer item is missing DestinationProductSyncId.");
+        var existingId = await _db.Products.IgnoreQueryFilters()
+            .Where(x => x.StoreId == destinationStoreId && x.SyncId == productSyncId)
+            .Select(x => x.Id).FirstOrDefaultAsync(cancellationToken);
+        if (existingId > 0) return existingId;
 
-    private async Task RecoverInterruptedUploadsAsync(
-        CloudAccountState account,
-        CancellationToken cancellationToken)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var interrupted = await db.SyncOutboxOperations.Where(value =>
-            value.CreatedByUserId == account.CurrentCloudUserId &&
-            value.Status == SyncOutboxStatus.Uploading).ToListAsync(cancellationToken);
-        if (interrupted.Count == 0) return;
-        foreach (var operation in interrupted)
+        var source = await _db.Products.IgnoreQueryFilters().AsNoTracking().Include(x => x.Category)
+            .FirstOrDefaultAsync(x => x.Id == sourceProductId, cancellationToken)
+            ?? throw new InvalidOperationException("Cloud transfer item depends on a missing source product.");
+        var categorySyncId = GetString(payload, "DestinationCategorySyncId");
+        Category? category = null;
+        if (!string.IsNullOrWhiteSpace(categorySyncId))
         {
-            operation.Status = SyncOutboxStatus.Pending;
-            operation.NextAttemptAtUtc = null;
+            category = await _db.Categories.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(x => x.StoreId == destinationStoreId && x.SyncId == categorySyncId, cancellationToken);
         }
-        db.SuppressSyncCapture = true;
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task LoadStoredCursorAsync(
-        CloudAccountState account,
-        CancellationToken cancellationToken)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var cursor = await db.SyncCursorStates.AsNoTracking().SingleOrDefaultAsync(value =>
-            value.TenantId == account.TenantId && value.StoreId == account.CurrentStoreId &&
-            value.DeviceId == account.DeviceId, cancellationToken);
-        if (cursor != null) account.LastServerCursor = cursor.Cursor;
-    }
-
-    private async Task PersistCursorAsync(
-        CloudAccountState account,
-        bool pulled,
-        bool pushed,
-        CancellationToken cancellationToken)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var cursor = await db.SyncCursorStates.SingleOrDefaultAsync(value =>
-            value.TenantId == account.TenantId && value.StoreId == account.CurrentStoreId &&
-            value.DeviceId == account.DeviceId, cancellationToken);
-        if (cursor == null)
+        var sourceCategoryName = source.Category?.Name ?? "Transferred Products";
+        category ??= await _db.Categories.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.StoreId == destinationStoreId && x.Name == sourceCategoryName, cancellationToken);
+        if (category == null)
         {
-            cursor = new SyncCursorState
+            category = new Category
             {
-                TenantId = account.TenantId,
-                StoreId = account.CurrentStoreId,
-                DeviceId = account.DeviceId
+                StoreId = destinationStoreId,
+                SyncId = string.IsNullOrWhiteSpace(categorySyncId) ? Guid.NewGuid().ToString("N") : categorySyncId,
+                Name = sourceCategoryName,
+                Description = source.Category?.Description,
+                Color = source.Category?.Color ?? "#64748B",
+                SortOrder = source.Category?.SortOrder ?? 999,
+                IsActive = true
             };
-            db.SyncCursorStates.Add(cursor);
+            _db.Categories.Add(category);
+            await _db.SaveChangesAsync(cancellationToken);
         }
-        cursor.Cursor = Math.Max(cursor.Cursor, account.LastServerCursor);
-        if (pulled) cursor.LastPullAtUtc = DateTime.UtcNow;
-        if (pushed) cursor.LastPushAtUtc = DateTime.UtcNow;
-        db.SuppressSyncCapture = true;
-        await db.SaveChangesAsync(cancellationToken);
+
+        var product = new Product
+        {
+            StoreId = destinationStoreId,
+            SyncId = productSyncId,
+            Name = source.Name,
+            Description = source.Description,
+            Sku = source.Sku,
+            Barcode = source.Barcode,
+            CategoryId = category.Id,
+            Price = source.Price,
+            CostPrice = source.CostPrice,
+            TaxRate = source.TaxRate,
+            Unit = source.EffectiveUnit,
+            StockQuantity = 0m,
+            LowStockThreshold = source.LowStockThreshold,
+            ImagePath = null,
+            IsWeighted = source.IsWeighted,
+            IsActive = source.IsActive,
+            AllowDiscount = source.AllowDiscount
+        };
+        _db.Products.Add(product);
+        await _db.SaveChangesAsync(cancellationToken);
+        return product.Id;
     }
 
-    private async Task HandleSecurityStateAsync(CloudApiException exception, CancellationToken cancellationToken)
+    private async Task<int?> OptionalGlobalIdAsync<TEntity>(JsonElement payload, string property, CancellationToken cancellationToken)
+        where TEntity : StoreScopedEntity
     {
-        if (exception.Code is not ("DEVICE_REVOKED" or "USER_DISABLED" or "SESSION_REVOKED" or
-            "ORGANIZATION_DISABLED" or "STORE_DISABLED" or "REFRESH_TOKEN_REVOKED" or
-            "REFRESH_TOKEN_EXPIRED" or "REFRESH_TOKEN_REUSE")) return;
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var state = await db.CloudAccountStates.SingleOrDefaultAsync(cancellationToken);
+        var syncId = GetString(payload, property);
+        if (string.IsNullOrWhiteSpace(syncId)) return null;
+        var local = _db.Set<TEntity>().Local.FirstOrDefault(x => x.SyncId == syncId);
+        if (local != null) return ReadEntityId(local);
+        var id = await _db.Set<TEntity>().IgnoreQueryFilters().Where(x => x.SyncId == syncId)
+            .Select(x => EF.Property<int>(x, "Id")).FirstOrDefaultAsync(cancellationToken);
+        return id <= 0 ? null : id;
+    }
+
+    private async Task<int> RequireIdAsync<TEntity>(
+        JsonElement payload,
+        string property,
+        int storeId,
+        CancellationToken cancellationToken)
+        where TEntity : StoreScopedEntity
+    {
+        var id = await OptionalIdAsync<TEntity>(payload, property, storeId, cancellationToken);
+        return id ?? throw new InvalidOperationException(
+            $"Cloud change depends on a missing {typeof(TEntity).Name} record ({property}).");
+    }
+
+    private async Task<int?> OptionalIdAsync<TEntity>(
+        JsonElement payload,
+        string property,
+        int storeId,
+        CancellationToken cancellationToken)
+        where TEntity : StoreScopedEntity
+    {
+        var syncId = GetString(payload, property);
+        if (string.IsNullOrWhiteSpace(syncId)) return null;
+        var local = _db.Set<TEntity>().Local.FirstOrDefault(x => x.StoreId == storeId && x.SyncId == syncId);
+        if (local != null) return ReadEntityId(local);
+        var id = await _db.Set<TEntity>()
+            .IgnoreQueryFilters()
+            .Where(x => x.StoreId == storeId && x.SyncId == syncId)
+            .Select(x => EF.Property<int>(x, "Id"))
+            .FirstOrDefaultAsync(cancellationToken);
+        return id <= 0 ? null : id;
+    }
+
+    private static void ApplyScalarProperties(object entity, JsonElement payload)
+    {
+        foreach (var property in entity.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (!property.CanWrite || property.GetIndexParameters().Length != 0) continue;
+            if (property.GetCustomAttribute<NotMappedAttribute>() != null) continue;
+            if (property.Name is "Id" or "StoreId" or "SyncId" or "CloudVersion" or "ImagePath") continue;
+            if (ForeignKeyProperties.Contains(property.Name)) continue;
+            if (!TryGetProperty(payload, property.Name, out var value)) continue;
+            if (value.ValueKind == JsonValueKind.Null)
+            {
+                if (!property.PropertyType.IsValueType || Nullable.GetUnderlyingType(property.PropertyType) != null)
+                    property.SetValue(entity, null);
+                continue;
+            }
+
+            try
+            {
+                property.SetValue(entity, JsonSerializer.Deserialize(value.GetRawText(), property.PropertyType, JsonOptions));
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Cloud value for {entity.GetType().Name}.{property.Name} is invalid.", ex);
+            }
+        }
+    }
+
+    private async Task<object?> FindEntityAsync(
+        Type type,
+        int storeId,
+        string syncId,
+        CancellationToken cancellationToken)
+    {
+        var method = typeof(CloudSyncService).GetMethod(
+            nameof(FindEntityGenericAsync), BindingFlags.Instance | BindingFlags.NonPublic)!
+            .MakeGenericMethod(type);
+        var task = (Task<object?>)method.Invoke(this, new object[] { storeId, syncId, cancellationToken })!;
+        return await task;
+    }
+
+    private async Task<object?> FindEntityGenericAsync<TEntity>(
+        int storeId,
+        string syncId,
+        CancellationToken cancellationToken)
+        where TEntity : StoreScopedEntity
+        => await _db.Set<TEntity>()
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.StoreId == storeId && x.SyncId == syncId, cancellationToken);
+
+    private async Task UpdateEntityCloudVersionAsync(
+        int storeId,
+        string entityType,
+        string entitySyncId,
+        long cloudVersion,
+        long acceptedOutboxId,
+        CancellationToken cancellationToken)
+    {
+        if (!TableNames.TryGetValue(entityType, out var table))
+            throw new InvalidOperationException($"Unsupported cloud entity type: {entityType}.");
+        var sql = entityType == nameof(Store)
+            ? $"UPDATE \"{table}\" SET \"CloudVersion\" = {{0}} WHERE \"SyncId\" = {{1}};"
+            : $"UPDATE \"{table}\" SET \"CloudVersion\" = {{0}} WHERE \"StoreId\" = {{1}} AND \"SyncId\" = {{2}};";
+        if (entityType == nameof(Store))
+            await _db.Database.ExecuteSqlRawAsync(sql, new object[] { cloudVersion, entitySyncId }, cancellationToken);
+        else
+            await _db.Database.ExecuteSqlRawAsync(sql, new object[] { cloudVersion, storeId, entitySyncId }, cancellationToken);
+
+        // Keep tracked entities consistent with the direct SQL update. EF identity
+        // resolution would otherwise return an older cloud revision later in the
+        // same synchronization run.
+        foreach (var entry in _db.ChangeTracker.Entries())
+        {
+            var matches = entry.Entity switch
+            {
+                Store trackedStore => entityType == nameof(Store) &&
+                                      string.Equals(trackedStore.SyncId, entitySyncId, StringComparison.Ordinal),
+                StoreScopedEntity trackedEntity =>
+                    string.Equals(entry.Entity.GetType().Name, entityType, StringComparison.Ordinal) &&
+                    trackedEntity.StoreId == storeId &&
+                    string.Equals(trackedEntity.SyncId, entitySyncId, StringComparison.Ordinal),
+                _ => false
+            };
+            if (!matches) continue;
+
+            var cloudProperty = entry.Property(nameof(Store.CloudVersion));
+            var current = Convert.ToInt64(cloudProperty.CurrentValue ?? 0L);
+            var accepted = Math.Max(current, cloudVersion);
+            cloudProperty.CurrentValue = accepted;
+            cloudProperty.OriginalValue = accepted;
+            cloudProperty.IsModified = false;
+        }
+
+        var later = _db.SyncOutbox.Where(x =>
+            x.StoreId == storeId && x.EntityType == entityType && x.EntitySyncId == entitySyncId &&
+            x.Id != acceptedOutboxId && x.BaseCloudVersion < cloudVersion);
+        await later.ExecuteUpdateAsync(
+            updates => updates.SetProperty(x => x.BaseCloudVersion, cloudVersion), cancellationToken);
+        foreach (var tracked in _db.ChangeTracker.Entries<SyncOutboxItem>()
+                     .Select(x => x.Entity)
+                     .Where(x => x.StoreId == storeId && x.EntityType == entityType &&
+                                 x.EntitySyncId == entitySyncId && x.Id != acceptedOutboxId &&
+                                 x.BaseCloudVersion < cloudVersion))
+        {
+            tracked.BaseCloudVersion = cloudVersion;
+        }
+    }
+
+    private async Task AddConflictAsync(SyncConflict conflict, CancellationToken cancellationToken)
+    {
+        var existing = await _db.SyncConflicts.FirstOrDefaultAsync(
+            x => x.ChangeId == conflict.ChangeId, cancellationToken);
+        if (existing == null)
+        {
+            _db.SyncConflicts.Add(conflict);
+            return;
+        }
+        existing.RemoteCloudVersion = conflict.RemoteCloudVersion;
+        existing.LocalOperation = conflict.LocalOperation;
+        existing.RemoteOperation = conflict.RemoteOperation;
+        existing.RemotePayloadJson = conflict.RemotePayloadJson;
+        existing.LocalPayloadJson = conflict.LocalPayloadJson;
+        existing.Message = conflict.Message;
+        existing.ResolvedAt = null;
+        existing.Resolution = null;
+        existing.ResolvedPayloadJson = null;
+    }
+
+    private async Task<SyncState> GetOrCreateStateAsync(
+        int storeId,
+        string deviceId,
+        CancellationToken cancellationToken)
+    {
+        var state = await _db.SyncStates.FirstOrDefaultAsync(x => x.StoreId == storeId, cancellationToken);
         if (state != null)
         {
-            state.IsDeviceRevoked = exception.Code == "DEVICE_REVOKED";
-            state.IsEnabled = false;
-            state.UpdatedAtUtc = DateTime.UtcNow;
-            db.SuppressSyncCapture = true;
-            await db.SaveChangesAsync(cancellationToken);
-            _session.UpdateAccount(state);
+            state.DeviceId = deviceId;
+            return state;
         }
+        state = new SyncState { StoreId = storeId, DeviceId = deviceId };
+        _db.SyncStates.Add(state);
+        return state;
     }
 
-    private async Task<CloudSyncStatus> SetStateAsync(
-        string state,
-        bool syncing,
-        string? errorCode,
-        string? errorMessage,
-        CancellationToken cancellationToken,
-        string? requestId = null,
-        int downloadedChanges = 0)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var account = await db.CloudAccountStates.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
-        var pending = await db.SyncOutboxOperations.CountAsync(value =>
-            value.Status == SyncOutboxStatus.Pending ||
-            value.Status == SyncOutboxStatus.Uploading ||
-            value.Status == SyncOutboxStatus.Failed,
-            cancellationToken);
-        var conflicts = await db.SyncConflicts.CountAsync(value => value.Status == SyncConflictStatus.Unresolved,
-            cancellationToken);
-        _status = new CloudSyncStatus
-        {
-            IsSignedIn = _session.IsSignedIn,
-            IsOnline = NetworkInterface.GetIsNetworkAvailable(),
-            IsSyncing = syncing,
-            IsDeviceRevoked = account?.IsDeviceRevoked == true,
-            RequiresReconciliation = account?.RequiresReconciliation == true,
-            State = state,
-            LastErrorCode = errorCode,
-            LastErrorMessage = errorMessage,
-            LastRequestId = requestId,
-            LastSuccessfulSyncAtUtc = account?.LastSuccessfulSyncAtUtc,
-            PendingUploadCount = pending,
-            ConflictCount = conflicts,
-            DownloadedChangeCount = downloadedChanges,
-            Cursor = account?.LastServerCursor ?? 0
-        };
-        StatusChanged?.Invoke(this, _status);
-        return _status;
-    }
-
-    private Task<CloudSyncStatus> RefreshStatusAsync(CancellationToken cancellationToken)
-        => SetStateAsync(_session.IsSignedIn ? "ready" : "signed_out", false, null, null, cancellationToken);
-
-    private async Task RunPeriodicAsync(CancellationToken cancellationToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
-        try
-        {
-            while (await timer.WaitForNextTickAsync(cancellationToken))
-                await SyncNowAsync(false, cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-    }
-
-    private void NetworkAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs eventArgs)
-    {
-        if (eventArgs.IsAvailable) _ = SyncNowAsync(false, CancellationToken.None);
-        else _ = SetStateAsync("offline", false, "NETWORK_UNAVAILABLE", null, CancellationToken.None);
-    }
-
-    private void OutboxChanged(object? sender, EventArgs eventArgs)
-    {
-        if (NetworkInterface.GetIsNetworkAvailable()) _ = SyncNowAsync(false, CancellationToken.None);
-    }
-
-    private static string MapState(string code) => code switch
-    {
-        "NETWORK_UNAVAILABLE" or "NETWORK_TIMEOUT" => "offline",
-        "DEVICE_REVOKED" => "revoked",
-        "AUTH_REQUIRED" or "SESSION_REVOKED" or "REFRESH_TOKEN_EXPIRED" or "REFRESH_TOKEN_REVOKED" or
-            "REFRESH_TOKEN_REUSE" or "USER_DISABLED" or "ORGANIZATION_DISABLED" or "STORE_DISABLED" => "session_expired",
-        "CLIENT_VERSION_INCOMPATIBLE" or "SERVER_VERSION_INCOMPATIBLE" => "upgrade_required",
-        _ => "error"
-    };
-
-    private static bool IsPermanentOperationError(string? code) => code is
-        "VALIDATION_ERROR" or "PERMISSION_DENIED" or "DUPLICATE_BUSINESS_RECORD" or
-        "PAYMENT_TOTAL_EXCEEDED" or "INVENTORY_SOURCE_MISMATCH" or "IMMUTABLE_TRANSACTION" or
-        "REFUND_QUANTITY_EXCEEDED" or "CATALOG_VERSION_UNAVAILABLE" or "SERVER_SCHEMA_MISMATCH" or
-        "STORE_ACCESS_DENIED" or "CROSS_TENANT_ACCESS_DENIED" or "RECORD_NOT_FOUND";
-
-    private static int PushDependencyOrder(
-        SyncOutboxOperation operation,
-        IReadOnlySet<string> completingSavedSales)
-    {
-        // A synchronized saved sale already exists in Turso. Its old/new draft
-        // lines may be spread across several bounded batches, so apply them while
-        // the server header is still Suspended and finalize the header afterward.
-        if (operation.EntityType == "sale_items" &&
-            TryPayloadRecordId(operation.PayloadJson, "saleRecordId") is { } saleId &&
-            completingSavedSales.Contains(saleId))
-            return 45;
-        return SyncEntityRegistry.TryGet(operation.EntityType, out var descriptor)
-            ? descriptor.DependencyOrder
-            : int.MaxValue;
-    }
-
-    private static bool IsCompletingSavedSale(SyncOutboxOperation operation)
-    {
-        if (operation.EntityType != "sales" || operation.Operation != SyncOperationKind.Upsert ||
-            operation.BaseVersion <= 0) return false;
-        try
-        {
-            using var document = JsonDocument.Parse(operation.PayloadJson);
-            return document.RootElement.TryGetProperty("status", out var status) &&
-                   status.TryGetInt32(out var value) && value == 0;
-        }
-        catch (JsonException) { return false; }
-    }
-
-    private static string? TryPayloadRecordId(string payloadJson, string propertyName)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(payloadJson);
-            return document.RootElement.TryGetProperty(propertyName, out var value) &&
-                   value.ValueKind == JsonValueKind.String
-                ? value.GetString()
-                : null;
-        }
-        catch (JsonException) { return null; }
-    }
-
-    public void Dispose()
-    {
-        _periodicCancellation?.Cancel();
-        _periodicCancellation?.Dispose();
-        _syncGate.Dispose();
-    }
-
-    private sealed class ServerMetaEnvelope
-    {
-        public int ApiVersion { get; set; }
-        public int SchemaVersion { get; set; }
-        public int MinimumClientSchemaVersion { get; set; }
-    }
-
-    private sealed class OkEnvelope { public bool Ok { get; set; } }
-}
-
-internal static class SyncOutboxUploadRecovery
-{
-    internal static async Task ResetAsync(
-        IDbContextFactory<AppDbContext> dbFactory,
-        IEnumerable<string> operationIds,
+    private async Task<long> ReplaceLocalDataAsync(
+        IReadOnlyList<SnapshotDownload> snapshots,
         CancellationToken cancellationToken)
     {
-        var ids = operationIds
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (ids.Length == 0) return;
-
-        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
-        // Use Enumerable.Contains explicitly. With LangVersion=latest on some
-        // .NET 8 Windows runners, ids.Contains(...) binds to
-        // MemoryExtensions.Contains(ReadOnlySpan<T>, T). EF Core cannot place
-        // that ref-struct overload in an expression tree and throws before SQL
-        // is executed (ReadOnlySpan<T> violates the interpreter constraint).
-        var rows = await db.SyncOutboxOperations
-            .Where(value => Enumerable.Contains(ids, value.OperationId))
-            .ToListAsync(cancellationToken);
-        foreach (var row in rows)
+        _db.ChangeTracker.Clear();
+        await _db.Database.OpenConnectionAsync(cancellationToken);
+        try
         {
-            row.Status = SyncOutboxStatus.Pending;
-            row.NextAttemptAtUtc = DateTime.UtcNow + SyncBackoffPolicy.ForAttempt(row.AttemptCount);
+            await _db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=OFF;", cancellationToken);
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                using (_storeContext.SuppressCloudCapture())
+                {
+                    foreach (var table in new[]
+                             {
+                                 "CashMovements", "SalePayments", "StockTransactions", "StockTransferItems", "SaleItems", "PurchaseItems",
+                                 "StockTransfers", "Sales", "PurchaseDocuments", "CashSessions", "Products", "Categories", "Customers",
+                                 "Suppliers", "Taxes", "Discounts", "Settings", "Users", "SyncOutbox",
+                                 "SyncConflicts", "SyncStates", "SyncRuns", "Stores"
+                             })
+                    {
+                        await _db.Database.ExecuteSqlRawAsync($"DELETE FROM \"{table}\";", cancellationToken);
+                    }
+
+                    var storeIds = new Dictionary<string, int>(StringComparer.Ordinal);
+                    long restoredRows = 0;
+                    foreach (var snapshot in snapshots)
+                    {
+                        var storeElement = RequireProperty(snapshot.Payload, "store");
+                        var store = JsonSerializer.Deserialize<Store>(storeElement.GetRawText(), JsonOptions)
+                                    ?? throw new InvalidOperationException("A cloud snapshot contains invalid store metadata.");
+                        if (string.IsNullOrWhiteSpace(store.SyncId))
+                            throw new InvalidOperationException("A cloud snapshot is missing its store sync ID.");
+                        _db.Stores.Add(store);
+                        await _db.SaveChangesAsync(cancellationToken);
+                        storeIds[store.SyncId] = store.Id;
+                        restoredRows++;
+                    }
+
+                    foreach (var entityName in RestoreOrder)
+                    {
+                        var type = EntityTypes[entityName];
+                        foreach (var snapshot in snapshots)
+                        {
+                            var storeElement = RequireProperty(snapshot.Payload, "store");
+                            var storeSyncId = GetString(storeElement, nameof(Store.SyncId))
+                                              ?? throw new InvalidOperationException("A snapshot store sync ID is missing.");
+                            var entities = RequireProperty(snapshot.Payload, "entities");
+                            if (!TryGetProperty(entities, entityName, out var rows) || rows.ValueKind != JsonValueKind.Array)
+                                continue;
+                            foreach (var row in rows.EnumerateArray())
+                            {
+                                var entity = JsonSerializer.Deserialize(row.GetRawText(), type, JsonOptions) as StoreScopedEntity
+                                             ?? throw new InvalidOperationException($"A cloud {entityName} row is invalid.");
+                                entity.StoreId = storeIds[storeSyncId];
+                                if (entity is Setting setting &&
+                                    (setting.Key.StartsWith("cloud:", StringComparison.OrdinalIgnoreCase) ||
+                                     setting.Key.StartsWith("device:", StringComparison.OrdinalIgnoreCase)))
+                                    continue;
+                                _db.Add(entity);
+                                restoredRows++;
+                            }
+                        }
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+
+                    foreach (var snapshot in snapshots)
+                    {
+                        var storeElement = RequireProperty(snapshot.Payload, "store");
+                        var storeSyncId = GetString(storeElement, nameof(Store.SyncId))!;
+                        _db.SyncStates.Add(new SyncState
+                        {
+                            StoreId = storeIds[storeSyncId],
+                            PullCursor = snapshot.SyncCursor,
+                            LastSyncAt = DateTime.UtcNow,
+                            LastSuccessfulSyncAt = DateTime.UtcNow,
+                            LastSnapshotUploadedAt = DateTime.UtcNow
+                        });
+                    }
+                    await _db.SaveChangesAsync(cancellationToken);
+
+                    var connection = _db.Database.GetDbConnection();
+                    await using var command = connection.CreateCommand();
+                    command.Transaction = transaction.GetDbTransaction();
+                    command.CommandText = "PRAGMA foreign_key_check;";
+                    await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                    if (await reader.ReadAsync(cancellationToken))
+                        throw new InvalidOperationException(
+                            "Cloud restore failed relational validation. The pre-restore backup remains available.");
+
+                    await transaction.CommitAsync(cancellationToken);
+                    return restoredRows;
+                }
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+            finally
+            {
+                await _db.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys=ON;", cancellationToken);
+            }
         }
-        db.SuppressSyncCapture = true;
-        await db.SaveChangesAsync(cancellationToken);
-    }
-}
-
-internal static class SyncWireTimestamp
-{
-    internal static DateTime NormalizeUtc(DateTime timestamp)
-        => timestamp.Kind switch
+        finally
         {
-            DateTimeKind.Utc => timestamp,
-            DateTimeKind.Local => timestamp.ToUniversalTime(),
-            // Microsoft.Data.Sqlite materializes a stored UTC DateTime with an
-            // unspecified Kind. Its ticks already represent UTC, so converting
-            // it as local time would shift the actual business timestamp.
-            _ => DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
-        };
-}
+            await _db.Database.CloseConnectionAsync();
+        }
+    }
 
-public static class SyncBackoffPolicy
-{
-    public static TimeSpan ForAttempt(int attempt)
+    private async Task<IReadOnlyList<CloudStore>> GetCloudStoresAsync(
+        CloudCredential credential,
+        CancellationToken cancellationToken)
     {
-        var seconds = Math.Min(300, Math.Pow(2, Math.Clamp(attempt, 1, 8)));
-        var jitter = Random.Shared.NextDouble() * Math.Min(10, seconds * 0.2);
-        return TimeSpan.FromSeconds(seconds + jitter);
+        credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
+        var response = await GetAsync<CloudStoreListResponse>(credential, "/v1/stores", cancellationToken);
+        return response.Stores;
+    }
+
+    private async Task<CloudCredential> RequireCredentialAsync(CancellationToken cancellationToken)
+        => await _credentials.LoadAsync(cancellationToken)
+           ?? throw new InvalidOperationException("Connect a cloud account before synchronizing.");
+
+    private async Task<CloudCredential> EnsureFreshAccessTokenAsync(
+        CloudCredential credential,
+        CancellationToken cancellationToken)
+    {
+        if (credential.AccessTokenExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return credential;
+        var refreshed = await PostWithoutTokenAsync<CloudAuthResponse>(credential.Endpoint, "/v1/auth/refresh", new
+        {
+            refreshToken = credential.RefreshToken,
+            deviceKey = credential.DeviceKey
+        }, cancellationToken);
+        if (refreshed.Owner == null || refreshed.Device == null || refreshed.Tokens == null)
+            throw new InvalidOperationException("The cloud API returned an incomplete refresh response.");
+        credential.OwnerId = refreshed.Owner.Id;
+        credential.Email = refreshed.Owner.Email;
+        credential.DisplayName = refreshed.Owner.DisplayName;
+        credential.DeviceId = refreshed.Device.Id;
+        credential.DeviceName = refreshed.Device.Name;
+        credential.AccessToken = refreshed.Tokens.AccessToken;
+        credential.RefreshToken = refreshed.Tokens.RefreshToken;
+        credential.AccessTokenExpiresAt = refreshed.Tokens.ExpiresAt;
+        await _credentials.SaveAsync(credential, cancellationToken);
+        return credential;
+    }
+
+    private static async Task<T> PostAsync<T>(
+        CloudCredential credential,
+        string path,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, credential.Endpoint + path)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential.AccessToken);
+        return await SendAsync<T>(request, cancellationToken);
+    }
+
+    private static async Task<T> PostWithoutTokenAsync<T>(
+        string endpoint,
+        string path,
+        object payload,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint + path)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return await SendAsync<T>(request, cancellationToken);
+    }
+
+    private static async Task<T> GetAsync<T>(
+        CloudCredential credential,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, credential.Endpoint + path);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", credential.AccessToken);
+        return await SendAsync<T>(request, cancellationToken);
+    }
+
+    private static async Task<T> SendAsync<T>(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode) throw CreateApiException(response.StatusCode, json);
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, JsonOptions)
+                   ?? throw new InvalidOperationException("The cloud API returned an empty response.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("The cloud API returned an invalid response.", ex);
+        }
+    }
+
+    private static Exception CreateApiException(HttpStatusCode statusCode, string json)
+    {
+        try
+        {
+            var error = JsonSerializer.Deserialize<CloudApiError>(json, JsonOptions);
+            if (!string.IsNullOrWhiteSpace(error?.Error)) return new InvalidOperationException(error.Error);
+        }
+        catch (JsonException) { }
+        return new InvalidOperationException($"Cloud API request failed ({(int)statusCode} {statusCode}).");
+    }
+
+    private static int ChangePriority(PullChange change)
+    {
+        var priority = change.EntityType switch
+        {
+            nameof(Store) => 0,
+            nameof(User) or nameof(Category) or nameof(Customer) or nameof(Supplier) or
+                nameof(Tax) or nameof(Discount) or nameof(Setting) => 10,
+            nameof(Product) => 20,
+            nameof(CashSession) => 30,
+            nameof(PurchaseDocument) or nameof(Sale) or nameof(StockTransfer) => 40,
+            nameof(PurchaseItem) or nameof(SaleItem) or nameof(SalePayment) or nameof(CashMovement) or nameof(StockTransferItem) => 50,
+            nameof(StockTransaction) => 60,
+            _ => 100
+        };
+        return string.Equals(change.Operation, "delete", StringComparison.OrdinalIgnoreCase)
+            ? 1000 - priority
+            : priority;
+    }
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out value)) return true;
+        if (name.Length > 0)
+        {
+            var camel = char.ToLowerInvariant(name[0]) + name[1..];
+            if (element.ValueKind == JsonValueKind.Object && element.TryGetProperty(camel, out value)) return true;
+        }
+        value = default;
+        return false;
+    }
+
+    private static JsonElement RequireProperty(JsonElement element, string name)
+        => TryGetProperty(element, name, out var value)
+            ? value
+            : throw new InvalidOperationException($"Cloud snapshot is missing {name}.");
+
+    private static string? GetString(JsonElement element, string name)
+    {
+        if (!TryGetProperty(element, name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
+    }
+
+    private static bool? GetBoolean(JsonElement element, string name)
+    {
+        if (!TryGetProperty(element, name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False) return value.GetBoolean();
+        return bool.TryParse(value.ToString(), out var parsed) ? parsed : null;
+    }
+
+    private static int ReadEntityId(StoreScopedEntity entity)
+        => (int)(entity.GetType().GetProperty("Id")?.GetValue(entity) ?? 0);
+
+    private static string Limit(string? value, int maximum)
+    {
+        var text = value ?? string.Empty;
+        return text.Length <= maximum ? text : text[..maximum];
+    }
+
+    private sealed class PushResponse
+    {
+        public List<PushResult> Results { get; set; } = new();
+    }
+
+    private sealed class PushResult
+    {
+        public string ChangeId { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public long CloudVersion { get; set; }
+        public string Operation { get; set; } = string.Empty;
+        public JsonElement Payload { get; set; }
+        public string Message { get; set; } = string.Empty;
+    }
+
+    private sealed class PullResponse
+    {
+        public long NextCursor { get; set; }
+        public bool HasMore { get; set; }
+        public List<PullChange> Changes { get; set; } = new();
+    }
+
+    private sealed class PullChange
+    {
+        public long Cursor { get; set; }
+        public string ChangeId { get; set; } = string.Empty;
+        public string EntityType { get; set; } = string.Empty;
+        public string EntitySyncId { get; set; } = string.Empty;
+        public long CloudVersion { get; set; }
+        public long EntityVersion { get; set; }
+        public string Operation { get; set; } = string.Empty;
+        public JsonElement Payload { get; set; }
+        public string OriginDeviceId { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudStoreListResponse
+    {
+        public List<CloudStore> Stores { get; set; } = new();
+    }
+
+    private sealed class CloudStore
+    {
+        public string SyncId { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class SnapshotDownload
+    {
+        public long Version { get; set; }
+        public long RowCount { get; set; }
+        public long SyncCursor { get; set; }
+        public JsonElement Payload { get; set; }
+    }
+
+    private sealed class CloudApiError
+    {
+        public string Error { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudAuthResponse
+    {
+        public CloudOwner? Owner { get; set; }
+        public CloudDevice? Device { get; set; }
+        public CloudTokens? Tokens { get; set; }
+    }
+
+    private sealed class CloudOwner
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudDevice
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudTokens
+    {
+        public string AccessToken { get; set; } = string.Empty;
+        public string RefreshToken { get; set; } = string.Empty;
+        public DateTimeOffset ExpiresAt { get; set; }
     }
 }

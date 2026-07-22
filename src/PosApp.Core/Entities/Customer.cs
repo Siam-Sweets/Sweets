@@ -5,7 +5,7 @@ namespace PosApp.Core.Entities;
 /// <summary>
 /// A customer record. Optional on a sale - walk-ins use the built-in "Guest" customer.
 /// </summary>
-public class Customer
+public class Customer : StoreScopedEntity
 {
     public int Id { get; set; }
 

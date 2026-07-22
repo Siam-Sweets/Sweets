@@ -4,81 +4,66 @@
         Title="{DynamicResource Login_Title}"
         Icon="/PosApp;component/Assets/PosApp.ico"
         Width="520" Height="700"
-        MinWidth="420" MinHeight="420"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="CanResize"
+        ResizeMode="NoResize"
         Background="{DynamicResource BackgroundBrush}">
     <Grid>
-        <ScrollViewer x:Name="LoginScrollViewer"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
-                      CanContentScroll="False"
-                      PanningMode="VerticalOnly"
-                      IsManipulationEnabled="True"
-                      Focusable="False">
-            <Grid MinWidth="360">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="220"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Height="220" Background="{StaticResource PrimaryBrush}">
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <Border Width="86" Height="86" Background="White" CornerRadius="22"
-                                Padding="5" Margin="0,0,0,12">
-                            <Image Source="/PosApp;component/Assets/PosAppLogo.png" Stretch="Uniform"/>
-                        </Border>
-                        <TextBlock Text="{DynamicResource App_Title}" FontSize="28" FontWeight="SemiBold"
-                                   Foreground="White" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{DynamicResource App_Tagline}" FontSize="13"
-                                   Foreground="#DBEAFE" HorizontalAlignment="Center" Margin="0,4,0,0"/>
-                    </StackPanel>
+        <Border Grid.Row="0" Background="{StaticResource PrimaryBrush}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <Border Width="86" Height="86" Background="White" CornerRadius="22"
+                        Padding="5" Margin="0,0,0,12">
+                    <Image Source="/PosApp;component/Assets/PosAppLogo.png" Stretch="Uniform"/>
                 </Border>
+                <TextBlock Text="{DynamicResource App_Title}" FontSize="28" FontWeight="SemiBold"
+                           Foreground="White" HorizontalAlignment="Center"/>
+                <TextBlock Text="{DynamicResource App_Tagline}" FontSize="13"
+                           Foreground="#DBEAFE" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
 
-                <Border Grid.Row="1" Background="{DynamicResource CardBrush}" CornerRadius="12" Margin="40,24"
-                        Padding="32">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.15"/>
-                    </Border.Effect>
-                    <StackPanel>
-                        <TextBlock Text="{DynamicResource Login_Title}" Style="{StaticResource Heading2}"
-                                   HorizontalAlignment="Center" Margin="0,0,0,20"/>
+        <Border Grid.Row="1" Background="{DynamicResource CardBrush}" CornerRadius="12" Margin="40,24"
+                Padding="32" VerticalAlignment="Stretch">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.15"/>
+            </Border.Effect>
+            <StackPanel>
+                <TextBlock Text="{DynamicResource Login_Title}" Style="{StaticResource Heading2}"
+                           HorizontalAlignment="Center" Margin="0,0,0,20"/>
 
-                        <TextBlock Text="{DynamicResource Login_Username}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                        <TextBox x:Name="UsernameBox" Margin="0,0,0,12" FontSize="15" MaxLength="60"
-                                 Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"/>
+                <TextBlock Text="{DynamicResource Login_Username}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                <TextBox x:Name="UsernameBox" Margin="0,0,0,12" FontSize="15" MaxLength="60"
+                         Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"/>
 
-                        <TextBlock Text="{DynamicResource Login_Password}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                        <PasswordBox x:Name="PinBox" Margin="0,0,0,8" FontSize="15" MaxLength="12"
-                                     KeyDown="PinBox_KeyDown"/>
+                <TextBlock Text="{DynamicResource Login_Password}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                <PasswordBox x:Name="PinBox" Margin="0,0,0,8" FontSize="15" MaxLength="12"
+                             KeyDown="PinBox_KeyDown"/>
 
-                        <TextBlock x:Name="ErrorText" Text="{Binding Error}"
-                                   Foreground="{StaticResource DangerBrush}" FontSize="12"
-                                   Margin="0,4,0,8" Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                <TextBlock x:Name="ErrorText" Text="{Binding Error}"
+                           Foreground="{StaticResource DangerBrush}" FontSize="12"
+                           Margin="0,4,0,8" Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-                        <Button Content="{DynamicResource Login_Button}" Style="{StaticResource PrimaryButton}"
-                                Margin="0,12,0,8" Padding="0,14" FontSize="15"
-                                Click="LoginButton_Click"/>
+                <Button Content="{DynamicResource Login_Button}" Style="{StaticResource PrimaryButton}"
+                        Margin="0,12,0,8" Padding="0,14" FontSize="15"
+                        Click="LoginButton_Click"/>
 
-                        <Button Content="{DynamicResource Cloud_OnlineAccountButton}" Style="{StaticResource OutlineButton}"
-                                Margin="0,4,0,4" Padding="0,11" Click="OnlineAccount_Click"/>
+                <Button Content="{DynamicResource Login_Exit}" Style="{StaticResource OutlineButton}"
+                        Margin="0,4,0,0" Padding="0,10"
+                        Click="Exit_Click"/>
 
-                        <Button Content="{DynamicResource Login_Exit}" Style="{StaticResource OutlineButton}"
-                                Margin="0,4,0,0" Padding="0,10"
-                                Click="Exit_Click"/>
-
-                        <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="6" Padding="12" Margin="0,16,0,0">
-                            <TextBlock Text="{DynamicResource Cloud_LoginOfflineHint}" Style="{StaticResource Muted}"
-                                       TextWrapping="Wrap" TextAlignment="Center"/>
-                        </Border>
-                    </StackPanel>
+                <Border Background="{DynamicResource SurfaceMutedBrush}" CornerRadius="6" Padding="12" Margin="0,16,0,0">
+                    <TextBlock Text="{DynamicResource Login_SetupHint}" Style="{StaticResource Muted}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
                 </Border>
+            </StackPanel>
+        </Border>
 
-                <TextBlock Grid.Row="2" Text="{DynamicResource Login_Footer}"
-                           Style="{StaticResource Muted}" HorizontalAlignment="Center" Margin="16,0,16,12"
-                           TextWrapping="Wrap" TextAlignment="Center"/>
-            </Grid>
-        </ScrollViewer>
+        <TextBlock Grid.Row="2" Text="{DynamicResource Login_Footer}"
+                   Style="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,0,0,12"/>
     </Grid>
 </Window>

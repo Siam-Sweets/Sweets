@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v2.1.3) - leave empty for dev build'
+        description: 'Version tag (e.g. v1.0.5) - leave empty for dev build'
         required: false
         default: ''
 
@@ -36,6 +36,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Validate cloud Worker syntax
+        shell: pwsh
+        run: npm run check --prefix cloud/worker
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -43,16 +47,6 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore ${{ env.PROJECT_PATH }}
-
-      - name: Restore synchronization tests
-        run: dotnet restore tests/PosApp.Sync.Tests/PosApp.Sync.Tests.csproj
-
-      - name: Run local synchronization and localization tests
-        run: >-
-          dotnet test tests/PosApp.Sync.Tests/PosApp.Sync.Tests.csproj
-          --configuration ${{ env.CONFIGURATION }}
-          --no-restore
-          --logger "trx;LogFileName=posapp-sync-tests.trx"
 
       - name: Determine version
         id: ver
@@ -104,39 +98,6 @@ jobs:
           "numeric_version=$numericVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "is_release=$isRelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Configure cloud API endpoint
-        shell: pwsh
-        env:
-          CLOUD_API_BASE_URL_SECRET: ${{ secrets.POSAPP_CLOUD_API_BASE_URL }}
-        run: |
-          $raw = $env:CLOUD_API_BASE_URL_SECRET
-          if ([string]::IsNullOrWhiteSpace($raw)) {
-            if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-              Write-Warning 'POSAPP_CLOUD_API_BASE_URL is unavailable for this pull request. The verification build will compile with online account creation disabled.'
-              'PosAppCloudApiBaseUrl=__NOT_CONFIGURED__' | Out-File -FilePath $env:GITHUB_ENV -Append
-              exit 0
-            }
-            throw 'Missing required GitHub Actions secret: POSAPP_CLOUD_API_BASE_URL'
-          }
-
-          $candidate = $raw.Trim().TrimEnd('/')
-          $uri = $null
-          if (-not [Uri]::TryCreate($candidate, [UriKind]::Absolute, [ref]$uri)) {
-            throw 'POSAPP_CLOUD_API_BASE_URL must be an absolute HTTPS URL.'
-          }
-          if ($uri.Scheme -ne 'https') {
-            throw 'POSAPP_CLOUD_API_BASE_URL must use HTTPS.'
-          }
-          if (-not [string]::IsNullOrWhiteSpace($uri.Query) -or
-              -not [string]::IsNullOrWhiteSpace($uri.Fragment) -or
-              $uri.AbsolutePath.Trim('/') -ne '') {
-            throw 'POSAPP_CLOUD_API_BASE_URL must contain only the Worker origin, without /api paths, query parameters, or fragments.'
-          }
-
-          $normalized = $uri.GetLeftPart([UriPartial]::Authority)
-          "PosAppCloudApiBaseUrl=$normalized" | Out-File -FilePath $env:GITHUB_ENV -Append
-          Write-Host 'Cloud API endpoint validated and embedded into the desktop build.'
-
       - name: Build
         run: >-
           dotnet build ${{ env.PROJECT_PATH }}
@@ -146,7 +107,6 @@ jobs:
           -p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }}
           -p:FileVersion=${{ steps.ver.outputs.numeric_version }}
           -p:InformationalVersion=${{ steps.ver.outputs.version }}
-          -p:PosAppCloudApiBaseUrl="$env:PosAppCloudApiBaseUrl"
 
       - name: Publish single-file self-contained exe
         run: |
@@ -163,7 +123,6 @@ jobs:
             --p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }} `
             --p:FileVersion=${{ steps.ver.outputs.numeric_version }} `
             --p:InformationalVersion=${{ steps.ver.outputs.version }} `
-            --p:PosAppCloudApiBaseUrl="$env:PosAppCloudApiBaseUrl" `
             --output ./publish
 
       - name: Sign application executable
@@ -229,12 +188,10 @@ jobs:
           2. Verify that Windows shows the expected PosApp publisher. If Windows
              cannot verify the publisher, obtain a signed installer from the trusted
              PosApp release source instead of bypassing the warning.
-          3. The first organization keeps its database in:
+          3. First run will create the database in:
              %LOCALAPPDATA%\PosApp\posapp.db
-             Additional organizations use isolated databases under:
-             %LOCALAPPDATA%\PosApp\Profiles\<profile-id>\posapp.db
-          4. Sign in to an existing online organization or create one, then let
-             the complete initial synchronization finish before cashier login.
+          4. Complete the one-time store and administrator setup, then sign in
+             with the administrator username and PIN you selected.
 
           To remove only the program: delete PosApp.exe. Business data remains in
           %LOCALAPPDATA%\PosApp. Delete that data folder only after making a backup
@@ -514,7 +471,7 @@ jobs:
           4. Complete the first-run store and administrator setup inside PosApp
 
           ## What's inside
-          - Offline-first POS and checkout with barcode scanner support
+          - Aronium-style offline POS and checkout with barcode scanner support
           - Products, purchases, inventory, register sessions, and physical counts
           - Customer contact records and purchase history
           - Sales history with refunds, voids, held sales, and split payments
@@ -523,7 +480,7 @@ jobs:
           - Bilingual EN + বাংলা UI with Light and Dark themes
           - ESC/POS receipt-printer support and reliable single-click checkboxes
           - Safe local updates with verified pre-update database backups
-          - Local SQLite operation with optional Cloudflare Worker + Turso synchronization
+          - Local SQLite database (no cloud, no runtime internet)
 
           _This is an automated development build. For a stable release, push a tag such as vX.Y.Z._
           EOF

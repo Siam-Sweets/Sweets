@@ -10,13 +10,20 @@ namespace PosApp.Services;
 public class SettingsService : ISettingsService
 {
     private readonly AppDbContext _db;
+    private readonly IStoreContext _storeContext;
+    private static readonly SemaphoreSlim CacheGate = new(1, 1);
+    private static readonly Dictionary<int, string?> CachedJsonByStore = new();
 
-    public SettingsService(AppDbContext db) => _db = db;
+    public SettingsService(AppDbContext db, IStoreContext storeContext)
+    {
+        _db = db;
+        _storeContext = storeContext;
+    }
 
     public async Task<string?> GetAsync(string key)
     {
         var normalizedKey = NormalizeKey(key);
-        var setting = await FindVisibleSettingAsync(normalizedKey, tracking: false);
+        var setting = await _db.Settings.AsNoTracking().FirstOrDefaultAsync(x => x.Key == normalizedKey);
         return setting?.Value;
     }
 
@@ -25,7 +32,7 @@ public class SettingsService : ISettingsService
         var normalizedKey = NormalizeKey(key);
         if (value?.Length > 8192)
             throw new InvalidOperationException("A setting value cannot exceed 8192 characters.");
-        var setting = await FindVisibleSettingAsync(normalizedKey, tracking: true);
+        var setting = await _db.Settings.FirstOrDefaultAsync(x => x.Key == normalizedKey);
         if (setting == null)
         {
             setting = new Setting { Key = normalizedKey, Value = value };
@@ -37,15 +44,30 @@ public class SettingsService : ISettingsService
             setting.UpdatedAt = DateTime.UtcNow;
         }
         await _db.SaveChangesAsync();
+        if (normalizedKey == "store:config")
+        {
+            await CacheGate.WaitAsync();
+            try { CachedJsonByStore[_storeContext.StoreId] = value; }
+            finally { CacheGate.Release(); }
+        }
     }
 
     public async Task<StoreSettings> GetStoreSettingsAsync()
     {
-        // A background pull may replace this record at any time. Read the
-        // SQLite working copy so synchronized settings are never hidden by a
-        // process-wide stale value.
-        var json = await GetAsync("store:config") ?? JsonSerializer.Serialize(new StoreSettings());
-        return DeserializeClone(json);
+        await CacheGate.WaitAsync();
+        try
+        {
+            if (!CachedJsonByStore.TryGetValue(_storeContext.StoreId, out var json) || json == null)
+            {
+                json = await GetAsync("store:config") ?? JsonSerializer.Serialize(new StoreSettings());
+                CachedJsonByStore[_storeContext.StoreId] = json;
+            }
+            return DeserializeClone(json);
+        }
+        finally
+        {
+            CacheGate.Release();
+        }
     }
 
     public async Task SetStoreSettingsAsync(StoreSettings settings)
@@ -87,33 +109,12 @@ public class SettingsService : ISettingsService
         await SetAsync("store:config", json);
     }
 
-    private async Task<Setting?> FindVisibleSettingAsync(string normalizedKey, bool tracking)
+
+    internal static void InvalidateStoreCache(int storeId)
     {
-        IQueryable<Setting> settings = _db.Settings.IgnoreQueryFilters();
-        if (!tracking) settings = settings.AsNoTracking();
-
-        var capture = SyncCaptureContext.Current;
-        if (!capture.Enabled || string.IsNullOrWhiteSpace(capture.StoreId) ||
-            normalizedKey.StartsWith("app:", StringComparison.OrdinalIgnoreCase))
-            return await settings.FirstOrDefaultAsync(value => value.Key == normalizedKey);
-
-        var storeId = capture.StoreId;
-        var scoped = await settings.FirstOrDefaultAsync(value =>
-            value.Key == normalizedKey &&
-            _db.SyncIdentities.Any(identity =>
-                identity.EntityType == "settings" &&
-                identity.LocalId == value.Id &&
-                identity.StoreId == storeId &&
-                identity.DeletedAtUtc == null));
-        if (scoped != null) return scoped;
-
-        // An unlinked legacy setting is visible until it is adopted by the
-        // currently selected branch. A setting linked to another branch must
-        // never be updated merely because it uses the same key.
-        return await settings.FirstOrDefaultAsync(value =>
-            value.Key == normalizedKey &&
-            !_db.SyncIdentities.Any(identity =>
-                identity.EntityType == "settings" && identity.LocalId == value.Id));
+        CacheGate.Wait();
+        try { CachedJsonByStore.Remove(storeId); }
+        finally { CacheGate.Release(); }
     }
 
     private static string NormalizeKey(string? key)

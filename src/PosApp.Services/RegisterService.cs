@@ -202,7 +202,6 @@ public class RegisterService : IRegisterService
                     : CombineNotes(session.Note, normalizedNote);
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
-            SyncCaptureContext.NotifyOutboxChanged();
 
             summary.ClosedAt = closedAt;
             summary.CountedCash = countedCash;

@@ -1,3 +1,9 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
@@ -6,711 +12,560 @@ using PosApp.Data;
 
 namespace PosApp.Services;
 
+/// <summary>
+/// Configures the self-hosted PosApp cloud account and uploads the baseline
+/// snapshot used by the offline-first incremental synchronization engine.
+/// </summary>
 public sealed class CloudAccountService : ICloudAccountService
 {
-    private readonly IDbContextFactory<AppDbContext> _dbFactory;
-    private readonly CloudApiClient _api;
-    private readonly CloudSessionManager _session;
-    private readonly ICloudSyncService _sync;
-    private readonly IBackupService _backup;
-    private readonly LocalOrganizationProfileStore _profiles;
-
-    public CloudAccountService(
-        IDbContextFactory<AppDbContext> dbFactory,
-        CloudApiClient api,
-        CloudSessionManager session,
-        ICloudSyncService sync,
-        IBackupService backup,
-        LocalOrganizationProfileStore profiles)
+    private const int MaximumSnapshotBytes = 15_000_000;
+    private static readonly HttpClient Http = new()
     {
-        _dbFactory = dbFactory;
-        _api = api;
-        _session = session;
-        _sync = sync;
-        _backup = backup;
-        _profiles = profiles;
-    }
-
-    public async Task InitializeCachedSessionAsync(CancellationToken cancellationToken = default)
+        Timeout = TimeSpan.FromMinutes(2)
+    };
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        await _session.InitializeAsync(cancellationToken);
-        if (_session.Account is { } account && !string.IsNullOrWhiteSpace(account.TenantId))
-            _profiles.UpdateActiveProfile(account.TenantId, account.TenantName,
-                account.CurrentStoreName, string.Empty);
-        if (_session.IsSignedIn)
-            await _sync.StartAsync(cancellationToken);
-    }
-
-    public async Task<bool> CanUseCachedSessionAsync(
-        int localUserId,
-        CancellationToken cancellationToken = default)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var state = await db.CloudAccountStates.SingleOrDefaultAsync(cancellationToken);
-        if (state == null || string.IsNullOrWhiteSpace(state.TenantId)) return true;
-        if (state.IsDeviceRevoked) return false;
-        var identity = await db.SyncIdentities.AsNoTracking().SingleOrDefaultAsync(value =>
-            value.EntityType == "users" && value.LocalId == localUserId, cancellationToken);
-        var matches = identity != null && identity.DeletedAtUtc == null &&
-                      string.Equals(identity.TenantId, state.TenantId, StringComparison.OrdinalIgnoreCase);
-        if (!matches) return false;
-
-        // A shared terminal may cache several organization users. Never let a
-        // user who entered an offline PIN inherit another user's access token.
-        // Their local work remains allowed and is queued under their own cloud
-        // user UUID, but online calls pause until that user signs in online.
-        if (!string.Equals(identity!.RecordId, state.CurrentCloudUserId,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            await _sync.StopAsync(cancellationToken);
-            state.IsEnabled = false;
-            state.UpdatedAtUtc = DateTime.UtcNow;
-            db.SuppressSyncCapture = true;
-            await db.SaveChangesAsync(cancellationToken);
-            _session.UpdateAccount(state);
-            await _session.ClearAsync(cancellationToken);
-        }
-
-        // Attribute every offline outbox row to the PIN-authenticated local
-        // user's own cloud UUID. In particular, never reuse the former token
-        // owner's UUID after clearing a mismatched shared-terminal session.
-        SyncCaptureContext.Enable(state.TenantId, state.CurrentStoreId, state.DeviceId, identity!.RecordId);
-        return matches;
-    }
-
-    public async Task<CloudAuthenticationResult> LoginAsync(
-        CloudLoginRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ValidateLoginRequest(request);
-        var deviceId = await GetOrCreateDeviceIdAsync(cancellationToken);
-        var result = await _api.PostAnonymousAsync<CloudAuthenticationResult>(
-            request.ApiBaseUrl,
-            "/api/v1/auth/login",
-            new
-            {
-                usernameOrEmail = request.UsernameOrEmail.Trim(),
-                password = request.Password,
-                device = BuildDevice(deviceId, request.DeviceName),
-                clientVersion = CloudProtocol.ClientVersion,
-                clientSchemaVersion = CloudProtocol.ClientSchemaVersion
-            },
-            cancellationToken);
-        result.DeviceId = deviceId;
-        return await CompleteAuthenticationAsync(result, request.ApiBaseUrl, request.OfflinePin,
-            request.DeviceName, cancellationToken);
-    }
-
-    public async Task<CloudAuthenticationResult> CreateOrganizationAsync(
-        CloudOrganizationRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ValidateLoginRequest(request);
-        // A linked profile must never be repurposed for another tenant. The UI
-        // creates and restarts into an empty isolated profile before invoking
-        // this method for an additional organization.
-        await using (var existingDb = await _dbFactory.CreateDbContextAsync(cancellationToken))
-        {
-            if (await existingDb.CloudAccountStates.AsNoTracking()
-                    .AnyAsync(value => value.TenantId != string.Empty, cancellationToken))
-                throw new InvalidOperationException(
-                    "This organization profile is already linked. Select Add organization to create a separate protected profile.");
-        }
-        if (string.IsNullOrWhiteSpace(request.OrganizationName) || request.OrganizationName.Trim().Length > 160)
-            throw new ArgumentException("Organization name is required and must be 160 characters or fewer.");
-        if (string.IsNullOrWhiteSpace(request.StoreName) || request.StoreName.Trim().Length > 160)
-            throw new ArgumentException("Store name is required and must be 160 characters or fewer.");
-        if (string.IsNullOrWhiteSpace(request.FullName) || request.FullName.Trim().Length > 100)
-            throw new ArgumentException("Full name is required and must be 100 characters or fewer.");
-
-        var deviceId = await GetOrCreateDeviceIdAsync(cancellationToken);
-        var result = await _api.PostAnonymousAsync<CloudAuthenticationResult>(
-            request.ApiBaseUrl,
-            "/api/v1/auth/signup",
-            new
-            {
-                organizationName = request.OrganizationName.Trim(),
-                storeName = request.StoreName.Trim(),
-                fullName = request.FullName.Trim(),
-                username = request.UsernameOrEmail.Trim(),
-                email = request.Email.Trim(),
-                password = request.Password,
-                device = BuildDevice(deviceId, request.DeviceName),
-                clientVersion = CloudProtocol.ClientVersion,
-                clientSchemaVersion = CloudProtocol.ClientSchemaVersion
-            },
-            cancellationToken);
-        result.DeviceId = deviceId;
-        return await CompleteAuthenticationAsync(result, request.ApiBaseUrl, request.OfflinePin,
-            request.DeviceName, cancellationToken);
-    }
-
-    public async Task LogoutAsync(bool revokeAllDeviceSessions = false, CancellationToken cancellationToken = default)
-    {
-        if (_session.IsSignedIn)
-        {
-            try { await _sync.SyncNowAsync(false, cancellationToken); }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch { /* logout still revokes tokens; queued local work remains safe */ }
-        }
-        await _sync.StopAsync(cancellationToken);
-        try
-        {
-            if (_session.IsSignedIn)
-                await _api.PostAuthorizedAsync<OkEnvelope>("/api/v1/auth/logout",
-                    new { revokeAllDeviceSessions }, cancellationToken);
-        }
-        finally
-        {
-            await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-            var state = await db.CloudAccountStates.SingleOrDefaultAsync(cancellationToken);
-            if (state != null)
-            {
-                state.IsEnabled = false;
-                state.UpdatedAtUtc = DateTime.UtcNow;
-                db.SuppressSyncCapture = true;
-                await db.SaveChangesAsync(cancellationToken);
-                _session.UpdateAccount(state);
-            }
-            await _session.ClearAsync(cancellationToken);
-            // Secure online logout revokes and removes tokens, but the current
-            // cached user may continue operating offline. Keep capturing those
-            // operations for that same user so the next authorized sign-in can
-            // synchronize them instead of creating an untracked local gap.
-            if (state != null && !string.IsNullOrWhiteSpace(state.TenantId) &&
-                !string.IsNullOrWhiteSpace(state.CurrentStoreId) &&
-                !string.IsNullOrWhiteSpace(state.CurrentCloudUserId))
-                SyncCaptureContext.Enable(state.TenantId, state.CurrentStoreId,
-                    state.DeviceId, state.CurrentCloudUserId);
-        }
-    }
-
-    public async Task<IReadOnlyList<CloudStoreDto>> GetStoresAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await _api.GetAuthorizedAsync<StoresEnvelope>("/api/v1/stores", cancellationToken);
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        db.SuppressSyncCapture = true;
-        foreach (var store in response.Stores)
-        {
-            var cached = await db.CloudCachedStores.SingleOrDefaultAsync(
-                value => value.CloudStoreId == store.Id, cancellationToken);
-            if (cached == null)
-            {
-                db.CloudCachedStores.Add(new CloudCachedStore
-                {
-                    CloudStoreId = store.Id,
-                    TenantId = store.TenantId,
-                    Name = store.Name,
-                    Code = store.Code,
-                    IsActive = store.IsActive
-                });
-            }
-            else
-            {
-                cached.Name = store.Name;
-                cached.Code = store.Code;
-                cached.IsActive = store.IsActive;
-                cached.UpdatedAtUtc = DateTime.UtcNow;
-            }
-        }
-        await db.SaveChangesAsync(cancellationToken);
-        return response.Stores;
-    }
-
-    public async Task SelectStoreAsync(string storeId, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(storeId)) throw new ArgumentException("Select a store.", nameof(storeId));
-        var stores = await GetStoresAsync(cancellationToken);
-        var selected = stores.SingleOrDefault(store => store.Id == storeId && store.IsActive)
-                       ?? throw new InvalidOperationException("The selected store is unavailable.");
-
-        var current = _session.Account ?? throw new InvalidOperationException("Sign in to select a store.");
-        await _api.PostAuthorizedAsync<OkEnvelope>("/api/v1/auth/register-device", new
-        {
-            device = BuildDevice(current.DeviceId, current.DeviceName),
-            storeId = selected.Id
-        }, cancellationToken);
-
-        await _sync.StopAsync(cancellationToken);
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var state = await db.CloudAccountStates.SingleAsync(cancellationToken);
-        await PreserveCursorAsync(db, state, cancellationToken);
-        state.CurrentStoreId = selected.Id;
-        state.CurrentStoreName = selected.Name;
-        state.LastServerCursor = await ReadCursorAsync(db, state.TenantId, selected.Id,
-            state.DeviceId, cancellationToken);
-        state.UpdatedAtUtc = DateTime.UtcNow;
-        db.SuppressSyncCapture = true;
-        await db.SaveChangesAsync(cancellationToken);
-        _profiles.UpdateActiveProfile(state.TenantId, state.TenantName,
-            state.CurrentStoreName, string.Empty);
-        _session.UpdateAccount(state);
-        await _sync.StartAsync(cancellationToken);
-        await _sync.SyncNowAsync(true, cancellationToken);
-    }
-
-    public async Task<string> CreateStoreAsync(
-        string name,
-        string code,
-        CancellationToken cancellationToken = default)
-    {
-        name = name?.Trim() ?? string.Empty;
-        code = code?.Trim().ToUpperInvariant() ?? string.Empty;
-        if (name.Length is < 1 or > 160)
-            throw new ArgumentException("Enter a store name of 160 characters or fewer.", nameof(name));
-        if (code.Length is < 2 or > 20 || code.Any(character =>
-                !((character is >= 'A' and <= 'Z') || char.IsAsciiDigit(character) || character is '_' or '-')))
-            throw new ArgumentException("Use 2 to 20 letters, numbers, underscores, or hyphens for the store code.", nameof(code));
-        var response = await _api.PostAuthorizedAsync<CreatedEnvelope>("/api/v1/stores",
-            new { name, code }, cancellationToken);
-        await GetStoresAsync(cancellationToken);
-        return response.Id;
-    }
-
-    public async Task<IReadOnlyList<CloudDeviceSessionDto>> GetDeviceSessionsAsync(
-        CancellationToken cancellationToken = default)
-    {
-        var response = await _api.GetAuthorizedAsync<SessionsEnvelope>("/api/v1/auth/sessions", cancellationToken);
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        db.SuppressSyncCapture = true;
-        db.CloudCachedDeviceSessions.RemoveRange(db.CloudCachedDeviceSessions);
-        db.CloudCachedDeviceSessions.AddRange(response.Sessions.Select(session => new CloudCachedDeviceSession
-        {
-            CloudSessionId = session.SessionId,
-            DeviceId = session.DeviceId,
-            DeviceName = session.DeviceName,
-            StoreId = session.StoreId,
-            StoreName = session.StoreName,
-            OperatingSystem = session.OperatingSystem,
-            FirstRegisteredAtUtc = session.FirstRegisteredAtUtc,
-            LastLoginAtUtc = session.LastLoginAtUtc,
-            LastSyncAtUtc = session.LastSyncAtUtc,
-            ExpiresAtUtc = session.ExpiresAtUtc,
-            IsCurrent = session.IsCurrent,
-            IsRevoked = session.IsRevoked
-        }));
-        await db.SaveChangesAsync(cancellationToken);
-        return response.Sessions;
-    }
-
-    public async Task RevokeDeviceSessionAsync(string sessionId, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId)) throw new ArgumentException("Session ID is required.", nameof(sessionId));
-        if (string.Equals(_session.Tokens?.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Use Secure online logout to end the current session.");
-        await _api.DeleteAuthorizedAsync<OkEnvelope>(
-            $"/api/v1/auth/sessions/{Uri.EscapeDataString(sessionId)}", cancellationToken);
-        await GetDeviceSessionsAsync(cancellationToken);
-    }
-
-    public async Task RevokeDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
-    {
-        if (!Guid.TryParse(deviceId, out _)) throw new ArgumentException("Select a valid device.", nameof(deviceId));
-        if (string.Equals(_session.Account?.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Use Secure online logout instead of revoking this computer.");
-        await _api.DeleteAuthorizedAsync<OkEnvelope>(
-            $"/api/v1/auth/devices/{Uri.EscapeDataString(deviceId)}", cancellationToken);
-        await GetDeviceSessionsAsync(cancellationToken);
-    }
-
-    public async Task AuthorizeDeviceAsync(string deviceId, CancellationToken cancellationToken = default)
-    {
-        if (!Guid.TryParse(deviceId, out _)) throw new ArgumentException("Select a valid device.", nameof(deviceId));
-        await _api.PatchAuthorizedAsync<OkEnvelope>(
-            $"/api/v1/auth/devices/{Uri.EscapeDataString(deviceId)}", new { status = "active" }, cancellationToken);
-        await GetDeviceSessionsAsync(cancellationToken);
-    }
-
-    public async Task<IReadOnlyList<CloudUserProfile>> GetUsersAsync(
-        CancellationToken cancellationToken = default)
-    {
-        var response = await _api.GetAuthorizedAsync<UsersEnvelope>("/api/v1/users", cancellationToken);
-        return response.Users;
-    }
-
-    public async Task<string> CreateUserAsync(
-        CloudUserCreateRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        if (string.IsNullOrWhiteSpace(request.Username) || request.Username.Length > 60 ||
-            request.Username.Any(char.IsWhiteSpace))
-            throw new ArgumentException("Enter a username of 60 characters or fewer without spaces.");
-        if (string.IsNullOrWhiteSpace(request.Email) || request.Email.Length > 255 || !request.Email.Contains('@'))
-            throw new ArgumentException("Enter a valid email address.");
-        if (string.IsNullOrWhiteSpace(request.FullName) || request.FullName.Length > 100)
-            throw new ArgumentException("Enter a full name of 100 characters or fewer.");
-        if (string.IsNullOrWhiteSpace(request.StoreId))
-            throw new ArgumentException("Select a store for the user.");
-        ValidateCloudPassword(request.Password);
-        var localLink = await EnsureLocalUserRecordIdentityAsync(request.Username.Trim(), cancellationToken);
-        var response = await _api.PostAuthorizedAsync<CreatedEnvelope>("/api/v1/users", new
-        {
-            username = request.Username.Trim(),
-            email = request.Email.Trim(),
-            fullName = request.FullName.Trim(),
-            password = request.Password,
-            role = request.Role.ToString().ToLowerInvariant(),
-            storeId = request.StoreId,
-            recordId = localLink?.RecordId,
-            permissions = Array.Empty<string>()
-        }, cancellationToken);
-        if (localLink != null && !string.Equals(localLink.RecordId, response.Id, StringComparison.OrdinalIgnoreCase))
-            await ReconcileLocalUserRecordIdentityAsync(localLink, response.Id, cancellationToken);
-        _ = _sync.SyncNowAsync(false, CancellationToken.None);
-        return response.Id;
-    }
-
-    public async Task UpdateUserAsync(
-        string userId,
-        CloudUserUpdateRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (!Guid.TryParse(userId, out _)) throw new ArgumentException("Select a valid online user.");
-        ArgumentNullException.ThrowIfNull(request);
-        await _api.PatchAuthorizedAsync<OkEnvelope>($"/api/v1/users/{Uri.EscapeDataString(userId)}", new
-        {
-            fullName = string.IsNullOrWhiteSpace(request.FullName) ? null : request.FullName.Trim(),
-            role = request.Role?.ToString().ToLowerInvariant(),
-            isActive = request.IsActive
-        }, cancellationToken);
-        _ = _sync.SyncNowAsync(false, CancellationToken.None);
-    }
-
-    public async Task ChangePasswordAsync(
-        string currentPassword,
-        string newPassword,
-        CancellationToken cancellationToken = default)
-    {
-        ValidateCloudPassword(newPassword);
-        await _api.PostAuthorizedAsync<OkEnvelope>("/api/v1/account/password",
-            new { currentPassword, newPassword }, cancellationToken);
-    }
-
-    public async Task<CloudAccountState?> GetAccountStateAsync(CancellationToken cancellationToken = default)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        return await db.CloudAccountStates.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
-    }
-
-    private async Task<CloudAuthenticationResult> CompleteAuthenticationAsync(
-        CloudAuthenticationResult result,
-        string apiBaseUrl,
-        string offlinePin,
-        string deviceName,
-        CancellationToken cancellationToken)
-    {
-        if (result.ApiVersion != CloudProtocol.ApiVersion || result.SchemaVersion < CloudProtocol.ClientSchemaVersion)
-            throw new CloudApiException("SERVER_VERSION_INCOMPATIBLE",
-                "This PosApp version is not compatible with the online service.",
-                System.Net.HttpStatusCode.Conflict);
-
-        DbSeeder.ValidatePin(offlinePin);
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        db.BypassStoreFilter = true;
-        db.SuppressSyncCapture = true;
-        var linkedAccount = await db.CloudAccountStates.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
-        if (linkedAccount != null && !string.IsNullOrWhiteSpace(linkedAccount.TenantId) &&
-            !string.Equals(linkedAccount.TenantId, result.OrganizationId, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException(
-                "This local database is linked to another online organization. Use a separate database or complete the documented reconciliation workflow.");
-        var setupComplete = await db.Settings.AsNoTracking().AnyAsync(value =>
-            value.Key == SetupService.SetupCompleteKey && value.Value == "true", cancellationToken);
-        var requiresDataReview = setupComplete &&
-                                 InitialSyncOutboxBuilder.HasUnlinkedRecords(db, result.OrganizationId);
-        var reconciliationBackupPath = linkedAccount?.ReconciliationBackupPath;
-        if (requiresDataReview && linkedAccount?.RequiresReconciliation != true)
-            reconciliationBackupPath = await _backup.CreateBackupAsync(retentionCount: null);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var committed = false;
-        try
-        {
-            var localUser = await UpsertLocalUserAsync(db, result.User, offlinePin, cancellationToken);
-            result.LocalUser = localUser;
-
-            var state = await db.CloudAccountStates.SingleOrDefaultAsync(cancellationToken) ?? new CloudAccountState();
-            if (db.Entry(state).State == EntityState.Detached) db.CloudAccountStates.Add(state);
-            if (!string.IsNullOrWhiteSpace(state.TenantId) && !string.IsNullOrWhiteSpace(state.CurrentStoreId))
-                await PreserveCursorAsync(db, state, cancellationToken);
-            state.ApiBaseUrl = apiBaseUrl.Trim().TrimEnd('/');
-            state.TenantId = result.OrganizationId;
-            state.TenantName = result.OrganizationName;
-            state.CurrentStoreId = result.Store.Id;
-            state.CurrentStoreName = result.Store.Name;
-            state.CurrentCloudUserId = result.User.Id;
-            state.DeviceId = result.DeviceId;
-            state.DeviceName = string.IsNullOrWhiteSpace(deviceName) ? Environment.MachineName : deviceName.Trim();
-            state.IsEnabled = true;
-            state.IsDeviceRevoked = false;
-            state.LastLoginAtUtc = DateTime.UtcNow;
-            state.ServerApiVersion = result.ApiVersion;
-            state.ServerSchemaVersion = result.SchemaVersion;
-            if (requiresDataReview)
-            {
-                state.RequiresReconciliation = true;
-                state.ReconciliationBackupPath = reconciliationBackupPath;
-            }
-            state.LastServerCursor = await ReadCursorAsync(db, result.OrganizationId, result.Store.Id,
-                result.DeviceId, cancellationToken);
-            state.UpdatedAtUtc = DateTime.UtcNow;
-
-            var cachedStore = await db.CloudCachedStores.SingleOrDefaultAsync(
-                value => value.CloudStoreId == result.Store.Id, cancellationToken);
-            if (cachedStore == null)
-                db.CloudCachedStores.Add(new CloudCachedStore
-                {
-                    CloudStoreId = result.Store.Id,
-                    TenantId = result.Store.TenantId,
-                    Name = result.Store.Name,
-                    Code = result.Store.Code,
-                    IsActive = true
-                });
-
-            await db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            committed = true;
-            _profiles.UpdateActiveProfile(result.OrganizationId, result.OrganizationName,
-                result.Store.Name, result.User.Username);
-            await _session.SetAuthenticatedAsync(state, result.Tokens, result.User, cancellationToken);
-            if (setupComplete)
-            {
-                await _sync.StartAsync(cancellationToken);
-                _ = _sync.SyncNowAsync(false, CancellationToken.None);
-            }
-            return result;
-        }
-        catch
-        {
-            if (!committed)
-                await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
-    }
-
-    private static async Task<User> UpsertLocalUserAsync(
-        AppDbContext db,
-        CloudUserProfile cloudUser,
-        string offlinePin,
-        CancellationToken cancellationToken)
-    {
-        var identity = await db.SyncIdentities.SingleOrDefaultAsync(value =>
-            value.EntityType == "users" && value.RecordId == cloudUser.Id, cancellationToken);
-        User? user = identity == null ? null : await db.Users.FindAsync(new object[] { identity.LocalId }, cancellationToken);
-        user ??= await db.Users.FirstOrDefaultAsync(value => value.Username == cloudUser.Username, cancellationToken);
-
-        if (user != null && identity == null)
-        {
-            var existingIdentity = await db.SyncIdentities.AsNoTracking().SingleOrDefaultAsync(value =>
-                value.EntityType == "users" && value.LocalId == user.Id, cancellationToken);
-            if (existingIdentity != null)
-                throw new InvalidOperationException(
-                    "That local user is already linked to another online account. Reconcile the user mapping before signing in.");
-        }
-
-        var (hash, salt) = DbSeeder.HashPin(offlinePin);
-        if (user == null)
-        {
-            user = new User
-            {
-                Username = cloudUser.Username,
-                FullName = cloudUser.FullName,
-                Email = cloudUser.Email,
-                Role = cloudUser.Role,
-                IsActive = cloudUser.IsActive,
-                PasswordHash = hash,
-                PasswordSalt = salt
-            };
-            db.Users.Add(user);
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        else
-        {
-            user.FullName = cloudUser.FullName;
-            user.Email = cloudUser.Email;
-            user.Role = cloudUser.Role;
-            user.IsActive = cloudUser.IsActive;
-            user.PasswordHash = hash;
-            user.PasswordSalt = salt;
-            user.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
-        }
-
-        if (identity == null)
-        {
-            db.SyncIdentities.Add(new SyncIdentity
-            {
-                EntityType = "users",
-                LocalId = user.Id,
-                RecordId = cloudUser.Id,
-                TenantId = cloudUser.TenantId,
-                ServerVersion = 1
-            });
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        return user;
-    }
-
-    private async Task<string> GetOrCreateDeviceIdAsync(CancellationToken cancellationToken)
-    {
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        var state = await db.CloudAccountStates.SingleOrDefaultAsync(cancellationToken);
-        if (state != null && !string.IsNullOrWhiteSpace(state.DeviceId)) return state.DeviceId;
-
-        var deviceId = Guid.NewGuid().ToString("D");
-        if (state == null)
-        {
-            state = new CloudAccountState
-            {
-                DeviceId = deviceId,
-                DeviceName = Environment.MachineName,
-                IsEnabled = false
-            };
-            db.CloudAccountStates.Add(state);
-        }
-        else
-        {
-            state.DeviceId = deviceId;
-            state.DeviceName = Environment.MachineName;
-            state.UpdatedAtUtc = DateTime.UtcNow;
-        }
-        db.SuppressSyncCapture = true;
-        await db.SaveChangesAsync(cancellationToken);
-        return deviceId;
-    }
-
-    private static async Task PreserveCursorAsync(
-        AppDbContext db,
-        CloudAccountState state,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(state.TenantId) || string.IsNullOrWhiteSpace(state.CurrentStoreId) ||
-            string.IsNullOrWhiteSpace(state.DeviceId)) return;
-        var cursor = await db.SyncCursorStates.SingleOrDefaultAsync(value =>
-            value.TenantId == state.TenantId && value.StoreId == state.CurrentStoreId &&
-            value.DeviceId == state.DeviceId, cancellationToken);
-        if (cursor == null)
-        {
-            db.SyncCursorStates.Add(new SyncCursorState
-            {
-                TenantId = state.TenantId,
-                StoreId = state.CurrentStoreId,
-                DeviceId = state.DeviceId,
-                Cursor = state.LastServerCursor,
-                LastPullAtUtc = state.LastSuccessfulSyncAtUtc
-            });
-        }
-        else
-        {
-            cursor.Cursor = Math.Max(cursor.Cursor, state.LastServerCursor);
-            cursor.LastPullAtUtc ??= state.LastSuccessfulSyncAtUtc;
-        }
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private static async Task<long> ReadCursorAsync(
-        AppDbContext db,
-        string tenantId,
-        string storeId,
-        string deviceId,
-        CancellationToken cancellationToken)
-        => await db.SyncCursorStates.AsNoTracking()
-            .Where(value => value.TenantId == tenantId && value.StoreId == storeId && value.DeviceId == deviceId)
-            .Select(value => (long?)value.Cursor)
-            .SingleOrDefaultAsync(cancellationToken) ?? 0;
-
-    private async Task<LocalUserRecordLink?> EnsureLocalUserRecordIdentityAsync(
-        string username,
-        CancellationToken cancellationToken)
-    {
-        var account = _session.Account ?? throw new InvalidOperationException("Sign in to manage online users.");
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        db.BypassStoreFilter = true;
-        db.SuppressSyncCapture = true;
-        var normalized = username.ToLowerInvariant();
-        var localUser = await db.Users.SingleOrDefaultAsync(
-            value => value.Username.ToLower() == normalized, cancellationToken);
-        if (localUser == null) return null;
-
-        var identity = await db.SyncIdentities.SingleOrDefaultAsync(value =>
-            value.EntityType == "users" && value.LocalId == localUser.Id, cancellationToken);
-        if (identity == null)
-        {
-            identity = new SyncIdentity
-            {
-                EntityType = "users",
-                LocalId = localUser.Id,
-                RecordId = Guid.NewGuid().ToString("D"),
-                TenantId = account.TenantId,
-                ServerVersion = 0
-            };
-            db.SyncIdentities.Add(identity);
-            await db.SaveChangesAsync(cancellationToken);
-        }
-        else if (!string.Equals(identity.TenantId, account.TenantId, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "That local user is already linked to another online organization. Reconcile the database before continuing.");
-        }
-
-        return new LocalUserRecordLink(localUser.Id, identity.RecordId);
-    }
-
-    private async Task ReconcileLocalUserRecordIdentityAsync(
-        LocalUserRecordLink localLink,
-        string serverRecordId,
-        CancellationToken cancellationToken)
-    {
-        if (!Guid.TryParse(serverRecordId, out _))
-            throw new InvalidOperationException("The server returned an invalid synchronized user ID.");
-
-        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken);
-        db.BypassStoreFilter = true;
-        db.SuppressSyncCapture = true;
-        var identity = await db.SyncIdentities.SingleAsync(value =>
-            value.EntityType == "users" && value.LocalId == localLink.LocalId, cancellationToken);
-        var collision = await db.SyncIdentities.AsNoTracking().AnyAsync(value =>
-            value.RecordId == serverRecordId && value.Id != identity.Id, cancellationToken);
-        if (collision)
-            throw new InvalidOperationException(
-                "The online user is already linked to a different local record. Resolve the synchronization conflict first.");
-
-        identity.RecordId = serverRecordId;
-        identity.UpdatedAtUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private static object BuildDevice(string deviceId, string deviceName) => new
-    {
-        id = deviceId,
-        name = string.IsNullOrWhiteSpace(deviceName) ? Environment.MachineName : deviceName.Trim(),
-        operatingSystem = Environment.OSVersion.VersionString,
-        machineName = Environment.MachineName
+        PropertyNameCaseInsensitive = true
     };
 
-    private static void ValidateLoginRequest(CloudLoginRequest request)
+    private readonly AppDbContext _db;
+    private readonly CloudCredentialStore _credentials = new();
+
+    public CloudAccountService(AppDbContext db)
+    {
+        _db = db;
+    }
+
+    public async Task<CloudAccountStatus> GetStatusAsync(CancellationToken cancellationToken = default)
+    {
+        var credential = await _credentials.LoadAsync(cancellationToken);
+        if (credential == null)
+        {
+            var identity = await _credentials.GetOrCreateDeviceIdentityAsync(cancellationToken);
+            return new CloudAccountStatus
+            {
+                DeviceName = identity.DeviceName,
+                Message = "Cloud account is not connected. Local checkout remains available."
+            };
+        }
+
+        return ToStatus(credential, "Cloud account connected. Offline-first synchronization is available.");
+    }
+
+    public async Task TestConnectionAsync(string endpoint, CancellationToken cancellationToken = default)
+    {
+        var normalizedEndpoint = NormalizeEndpoint(endpoint);
+        using var response = await Http.GetAsync($"{normalizedEndpoint}/v1/health", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task<CloudAccountStatus> SignUpAsync(
+        CloudSignUpRequest request,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (CloudDeploymentSettings.IsConfigured)
-            request.ApiBaseUrl = CloudDeploymentSettings.ApiBaseUrl;
-        _ = CloudApiClient.BuildUri(request.ApiBaseUrl, "/api/v1/meta");
-        if (string.IsNullOrWhiteSpace(request.UsernameOrEmail) || request.UsernameOrEmail.Length > 255)
-            throw new ArgumentException("Username or email is required.");
-        ValidateCloudPassword(request.Password);
-        DbSeeder.ValidatePin(request.OfflinePin);
+        var endpoint = NormalizeEndpoint(request.Endpoint);
+        var email = NormalizeEmail(request.Email);
+        ValidatePassword(request.Password);
+        var displayName = NormalizeRequired(request.DisplayName, 100, "Display name");
+        var registrationKey = NormalizeRequired(request.RegistrationKey, 256, "Registration key");
+        var identity = await _credentials.GetOrCreateDeviceIdentityAsync(cancellationToken);
+        var deviceName = NormalizeDeviceName(request.DeviceName, identity.DeviceName);
+
+        var auth = await PostAsync<CloudAuthResponse>(endpoint, "/v1/auth/signup", new
+        {
+            email,
+            password = request.Password,
+            displayName,
+            registrationKey,
+            deviceKey = identity.DeviceKey,
+            deviceName,
+            platform = "Windows",
+            appVersion = CurrentVersion()
+        }, null, cancellationToken);
+
+        var credential = ToCredential(endpoint, identity.DeviceKey, auth);
+        await _credentials.SaveAsync(credential, cancellationToken);
+        return ToStatus(credential, "Cloud account created and this device was registered.");
     }
 
-    private static void ValidateCloudPassword(string password)
+    public async Task<CloudAccountStatus> SignInAsync(
+        CloudSignInRequest request,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(password) || password.Length is < 10 or > 128 ||
-            !password.Any(char.IsLetter) || !password.Any(char.IsDigit))
-            throw new ArgumentException(
-                "The online password must contain 10 to 128 characters and include at least one letter and one number.");
+        ArgumentNullException.ThrowIfNull(request);
+        var endpoint = NormalizeEndpoint(request.Endpoint);
+        var email = NormalizeEmail(request.Email);
+        ValidatePassword(request.Password);
+        var identity = await _credentials.GetOrCreateDeviceIdentityAsync(cancellationToken);
+        var deviceName = NormalizeDeviceName(request.DeviceName, identity.DeviceName);
+
+        var auth = await PostAsync<CloudAuthResponse>(endpoint, "/v1/auth/login", new
+        {
+            email,
+            password = request.Password,
+            deviceKey = identity.DeviceKey,
+            deviceName,
+            platform = "Windows",
+            appVersion = CurrentVersion()
+        }, null, cancellationToken);
+
+        var credential = ToCredential(endpoint, identity.DeviceKey, auth);
+        await _credentials.SaveAsync(credential, cancellationToken);
+        return ToStatus(credential, "Signed in and this device was registered.");
     }
 
-    private sealed class OkEnvelope { public bool Ok { get; set; } }
-    private sealed class StoresEnvelope { public IReadOnlyList<CloudStoreDto> Stores { get; set; } = Array.Empty<CloudStoreDto>(); }
-    private sealed class SessionsEnvelope { public IReadOnlyList<CloudDeviceSessionDto> Sessions { get; set; } = Array.Empty<CloudDeviceSessionDto>(); }
-    private sealed class UsersEnvelope { public IReadOnlyList<CloudUserProfile> Users { get; set; } = Array.Empty<CloudUserProfile>(); }
-    private sealed class CreatedEnvelope { public string Id { get; set; } = string.Empty; }
-    private sealed record LocalUserRecordLink(int LocalId, string RecordId);
+    public Task DisconnectAsync(CancellationToken cancellationToken = default)
+        => _credentials.ClearAsync(cancellationToken);
+
+    public async Task<CloudSnapshotUploadSummary> UploadInitialSnapshotsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var credential = await RequireCredentialAsync(cancellationToken);
+        var stores = await _db.Stores.AsNoTracking().OrderBy(x => x.Id).ToListAsync(cancellationToken);
+        if (stores.Count == 0) throw new InvalidOperationException("No local stores are available to upload.");
+
+        long totalRows = 0;
+        foreach (var store in stores)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = await BuildSnapshotAsync(store, cancellationToken);
+            var snapshotJson = JsonSerializer.Serialize(snapshot, JsonOptions);
+            var byteCount = Encoding.UTF8.GetByteCount(snapshotJson);
+            if (byteCount > MaximumSnapshotBytes)
+            {
+                throw new InvalidOperationException(
+                    $"The initial snapshot for {store.Name} is {byteCount / 1_000_000d:0.0} MB. " +
+                    "Snapshots are limited to 15 MB per store. Reduce archived data before uploading a new full snapshot.");
+            }
+
+            credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
+            var state = await _db.SyncStates.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.StoreId == store.Id, cancellationToken);
+            var uploaded = await PostAsync<CloudSnapshotResponse>(credential.Endpoint, "/v1/sync/snapshot/upload", new
+            {
+                store = new
+                {
+                    syncId = store.SyncId,
+                    store.Code,
+                    store.Name,
+                    store.Address,
+                    store.Phone,
+                    store.IsActive,
+                    store.CreatedAt,
+                    store.UpdatedAt
+                },
+                schemaVersion = 2,
+                appVersion = CurrentVersion(),
+                syncCursor = state?.PullCursor ?? 0,
+                rowCount = snapshot.RowCount,
+                payload = snapshot
+            }, credential.AccessToken, cancellationToken);
+
+            totalRows += snapshot.RowCount;
+            await RecordSnapshotSuccessAsync(
+                store.Id, credential.DeviceId, uploaded.SyncCursor, cancellationToken);
+        }
+
+        var uploadedAt = DateTimeOffset.UtcNow;
+        credential.InitialSnapshotUploadedAt = uploadedAt;
+        await _credentials.SaveAsync(credential, cancellationToken);
+        return new CloudSnapshotUploadSummary
+        {
+            StoreCount = stores.Count,
+            TotalRows = totalRows,
+            UploadedAt = uploadedAt
+        };
+    }
+
+    private async Task<StoreSnapshot> BuildSnapshotAsync(Store store, CancellationToken cancellationToken)
+    {
+        var entities = new SortedDictionary<string, IReadOnlyList<SortedDictionary<string, object?>>>(StringComparer.Ordinal)
+        {
+            [nameof(CashMovement)] = await ReadRowsAsync<CashMovement>(store.Id, cancellationToken),
+            [nameof(CashSession)] = await ReadRowsAsync<CashSession>(store.Id, cancellationToken),
+            [nameof(Category)] = await ReadRowsAsync<Category>(store.Id, cancellationToken),
+            [nameof(Customer)] = await ReadRowsAsync<Customer>(store.Id, cancellationToken),
+            [nameof(Discount)] = await ReadRowsAsync<Discount>(store.Id, cancellationToken),
+            [nameof(Product)] = await ReadRowsAsync<Product>(store.Id, cancellationToken),
+            [nameof(PurchaseDocument)] = await ReadRowsAsync<PurchaseDocument>(store.Id, cancellationToken),
+            [nameof(PurchaseItem)] = await ReadRowsAsync<PurchaseItem>(store.Id, cancellationToken),
+            [nameof(Sale)] = await ReadRowsAsync<Sale>(store.Id, cancellationToken),
+            [nameof(SaleItem)] = await ReadRowsAsync<SaleItem>(store.Id, cancellationToken),
+            [nameof(SalePayment)] = await ReadRowsAsync<SalePayment>(store.Id, cancellationToken),
+            [nameof(Setting)] = await ReadSettingsAsync(store.Id, cancellationToken),
+            [nameof(StockTransaction)] = await ReadRowsAsync<StockTransaction>(store.Id, cancellationToken),
+            [nameof(StockTransfer)] = await ReadRowsAsync<StockTransfer>(store.Id, cancellationToken),
+            [nameof(StockTransferItem)] = await ReadRowsAsync<StockTransferItem>(store.Id, cancellationToken),
+            [nameof(Supplier)] = await ReadRowsAsync<Supplier>(store.Id, cancellationToken),
+            [nameof(Tax)] = await ReadRowsAsync<Tax>(store.Id, cancellationToken),
+            [nameof(User)] = await ReadRowsAsync<User>(store.Id, cancellationToken)
+        };
+        var rowCount = 1L + entities.Values.Sum(x => (long)x.Count);
+        return new StoreSnapshot
+        {
+            SchemaVersion = 4,
+            AppVersion = CurrentVersion(),
+            ExportedAtUtc = DateTimeOffset.UtcNow,
+            Store = SyncPayloadSerializer.CreateValues(store),
+            Entities = entities,
+            RowCount = rowCount
+        };
+    }
+
+    private async Task<IReadOnlyList<SortedDictionary<string, object?>>> ReadRowsAsync<TEntity>(
+        int storeId,
+        CancellationToken cancellationToken)
+        where TEntity : StoreScopedEntity
+    {
+        var rows = await _db.Set<TEntity>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.StoreId == storeId)
+            .OrderBy(x => x.SyncId)
+            .ToListAsync(cancellationToken);
+        return rows.Select(x => SyncPayloadSerializer.CreateValuesForSync(x, _db)).ToList();
+    }
+
+    private async Task<IReadOnlyList<SortedDictionary<string, object?>>> ReadSettingsAsync(
+        int storeId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _db.Settings
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.StoreId == storeId &&
+                        !x.Key.StartsWith("cloud:") &&
+                        !x.Key.StartsWith("device:"))
+            .OrderBy(x => x.SyncId)
+            .ToListAsync(cancellationToken);
+        return rows.Select(x => SyncPayloadSerializer.CreateValuesForSync(x, _db)).ToList();
+    }
+
+    private async Task RecordSnapshotSuccessAsync(
+        int storeId,
+        string deviceId,
+        long pullCursor,
+        CancellationToken cancellationToken)
+    {
+        var state = await _db.SyncStates.FirstOrDefaultAsync(x => x.StoreId == storeId, cancellationToken);
+        if (state == null)
+        {
+            state = new SyncState { StoreId = storeId };
+            _db.SyncStates.Add(state);
+        }
+        state.DeviceId = deviceId;
+        state.PullCursor = Math.Max(state.PullCursor, pullCursor);
+        state.LastSyncAt = DateTime.UtcNow;
+        state.LastSuccessfulSyncAt = DateTime.UtcNow;
+        state.LastSnapshotUploadedAt = DateTime.UtcNow;
+        state.LastError = null;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<CloudCredential> RequireCredentialAsync(CancellationToken cancellationToken)
+        => await _credentials.LoadAsync(cancellationToken)
+           ?? throw new InvalidOperationException("Connect a cloud account before uploading a snapshot.");
+
+    private async Task<CloudCredential> EnsureFreshAccessTokenAsync(
+        CloudCredential credential,
+        CancellationToken cancellationToken)
+    {
+        if (credential.AccessTokenExpiresAt > DateTimeOffset.UtcNow.AddMinutes(1)) return credential;
+        var refreshed = await PostAsync<CloudAuthResponse>(credential.Endpoint, "/v1/auth/refresh", new
+        {
+            refreshToken = credential.RefreshToken,
+            deviceKey = credential.DeviceKey
+        }, null, cancellationToken);
+        var updated = ToCredential(credential.Endpoint, credential.DeviceKey, refreshed);
+        updated.InitialSnapshotUploadedAt = credential.InitialSnapshotUploadedAt;
+        await _credentials.SaveAsync(updated, cancellationToken);
+        return updated;
+    }
+
+    private static CloudCredential ToCredential(
+        string endpoint,
+        string deviceKey,
+        CloudAuthResponse auth)
+    {
+        if (auth.Owner == null || auth.Device == null || auth.Tokens == null ||
+            string.IsNullOrWhiteSpace(auth.Tokens.AccessToken) ||
+            string.IsNullOrWhiteSpace(auth.Tokens.RefreshToken))
+            throw new InvalidOperationException("The cloud API returned an incomplete authentication response.");
+
+        return new CloudCredential
+        {
+            Endpoint = endpoint,
+            OwnerId = auth.Owner.Id,
+            Email = auth.Owner.Email,
+            DisplayName = auth.Owner.DisplayName,
+            DeviceId = auth.Device.Id,
+            DeviceKey = deviceKey,
+            DeviceName = auth.Device.Name,
+            AccessToken = auth.Tokens.AccessToken,
+            RefreshToken = auth.Tokens.RefreshToken,
+            AccessTokenExpiresAt = auth.Tokens.ExpiresAt
+        };
+    }
+
+    private static CloudAccountStatus ToStatus(CloudCredential credential, string message)
+        => new()
+        {
+            IsConfigured = true,
+            IsAuthenticated = !string.IsNullOrWhiteSpace(credential.AccessToken),
+            Endpoint = credential.Endpoint,
+            Email = credential.Email,
+            DisplayName = credential.DisplayName,
+            DeviceName = credential.DeviceName,
+            DeviceId = credential.DeviceId,
+            AccessTokenExpiresAt = credential.AccessTokenExpiresAt,
+            InitialSnapshotUploadedAt = credential.InitialSnapshotUploadedAt,
+            Message = message
+        };
+
+    private static async Task<T> PostAsync<T>(
+        string endpoint,
+        string path,
+        object payload,
+        string? accessToken,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint + path)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (!string.IsNullOrWhiteSpace(accessToken))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw CreateApiException(response.StatusCode, json);
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, JsonOptions)
+                   ?? throw new InvalidOperationException("The cloud API returned an empty response.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("The cloud API returned an invalid response.", ex);
+        }
+    }
+
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode) return;
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        throw CreateApiException(response.StatusCode, json);
+    }
+
+    private static Exception CreateApiException(HttpStatusCode statusCode, string json)
+    {
+        try
+        {
+            var error = JsonSerializer.Deserialize<CloudApiError>(json, JsonOptions);
+            if (!string.IsNullOrWhiteSpace(error?.Error))
+                return new InvalidOperationException(error.Error);
+        }
+        catch (JsonException) { }
+        return new InvalidOperationException($"Cloud API request failed ({(int)statusCode} {statusCode}).");
+    }
+
+    private static string NormalizeEndpoint(string? endpoint)
+    {
+        var value = endpoint?.Trim().TrimEnd('/') ?? string.Empty;
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri))
+            throw new InvalidOperationException("Enter a valid cloud API URL.");
+        if (uri.Scheme != Uri.UriSchemeHttps && !(uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback))
+            throw new InvalidOperationException("The cloud API URL must use HTTPS. HTTP is allowed only for localhost development.");
+        if (!string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+            throw new InvalidOperationException("The cloud API URL cannot contain a query string or fragment.");
+        return value;
+    }
+
+    private static string NormalizeEmail(string? email)
+    {
+        var normalized = email?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (normalized.Length is < 3 or > 254 || !normalized.Contains('@'))
+            throw new InvalidOperationException("Enter a valid email address.");
+        return normalized;
+    }
+
+    private static void ValidatePassword(string? password)
+    {
+        if (password == null || password.Length < 10 || password.Length > 128)
+            throw new InvalidOperationException("Cloud password must contain 10 to 128 characters.");
+    }
+
+    private static string NormalizeRequired(string? value, int maximum, string field)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (normalized.Length == 0) throw new InvalidOperationException($"{field} is required.");
+        if (normalized.Length > maximum) throw new InvalidOperationException($"{field} cannot exceed {maximum} characters.");
+        return normalized;
+    }
+
+    private static string NormalizeDeviceName(string? requested, string fallback)
+    {
+        var value = string.IsNullOrWhiteSpace(requested) ? fallback : requested.Trim();
+        if (value.Length > 100) value = value[..100];
+        return value.Length == 0 ? "Windows POS" : value;
+    }
+
+    private static string CurrentVersion()
+        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.9.0";
+
+    private sealed class StoreSnapshot
+    {
+        public int SchemaVersion { get; init; }
+        public string AppVersion { get; init; } = string.Empty;
+        public DateTimeOffset ExportedAtUtc { get; init; }
+        public SortedDictionary<string, object?> Store { get; init; } = new(StringComparer.Ordinal);
+        public SortedDictionary<string, IReadOnlyList<SortedDictionary<string, object?>>> Entities { get; init; } = new(StringComparer.Ordinal);
+        public long RowCount { get; init; }
+    }
+
+    private sealed class CloudApiError
+    {
+        public string Error { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudSnapshotResponse
+    {
+        public string SnapshotId { get; set; } = string.Empty;
+        public long Version { get; set; }
+        public long SyncCursor { get; set; }
+    }
+
+    private sealed class CloudAuthResponse
+    {
+        public CloudOwner? Owner { get; set; }
+        public CloudDevice? Device { get; set; }
+        public CloudTokens? Tokens { get; set; }
+    }
+
+    private sealed class CloudOwner
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudDevice
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudTokens
+    {
+        public string AccessToken { get; set; } = string.Empty;
+        public string RefreshToken { get; set; } = string.Empty;
+        public DateTimeOffset ExpiresAt { get; set; }
+    }
+}
+
+internal sealed class CloudCredentialStore
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly byte[] Entropy = SHA256.HashData(Encoding.UTF8.GetBytes("PosApp.CloudCredentials.v1"));
+    private readonly string _folder;
+    private readonly string _credentialPath;
+    private readonly string _identityPath;
+
+    public CloudCredentialStore()
+    {
+        _folder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PosApp");
+        _credentialPath = Path.Combine(_folder, "cloud-credentials.dat");
+        _identityPath = Path.Combine(_folder, "cloud-device.json");
+    }
+
+    public async Task<CloudCredential?> LoadAsync(CancellationToken cancellationToken)
+    {
+        if (!File.Exists(_credentialPath)) return null;
+        try
+        {
+            var protectedBytes = await File.ReadAllBytesAsync(_credentialPath, cancellationToken);
+            var clearBytes = ProtectedData.Unprotect(protectedBytes, Entropy, DataProtectionScope.CurrentUser);
+            return JsonSerializer.Deserialize<CloudCredential>(clearBytes, JsonOptions);
+        }
+        catch (CryptographicException ex)
+        {
+            throw new InvalidOperationException(
+                "Saved cloud credentials cannot be decrypted for this Windows user. Disconnect and sign in again.", ex);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException("Saved cloud credentials are invalid. Disconnect and sign in again.", ex);
+        }
+    }
+
+    public async Task SaveAsync(CloudCredential credential, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(credential);
+        Directory.CreateDirectory(_folder);
+        var clearBytes = JsonSerializer.SerializeToUtf8Bytes(credential, JsonOptions);
+        var protectedBytes = ProtectedData.Protect(clearBytes, Entropy, DataProtectionScope.CurrentUser);
+        var temp = _credentialPath + ".tmp";
+        await File.WriteAllBytesAsync(temp, protectedBytes, cancellationToken);
+        File.Move(temp, _credentialPath, true);
+    }
+
+    public Task ClearAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (File.Exists(_credentialPath)) File.Delete(_credentialPath);
+        return Task.CompletedTask;
+    }
+
+    public async Task<CloudDeviceIdentity> GetOrCreateDeviceIdentityAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (File.Exists(_identityPath))
+            {
+                var existing = JsonSerializer.Deserialize<CloudDeviceIdentity>(
+                    await File.ReadAllTextAsync(_identityPath, cancellationToken), JsonOptions);
+                if (existing != null && existing.DeviceKey.Length >= 16) return existing;
+            }
+        }
+        catch (JsonException) { }
+
+        Directory.CreateDirectory(_folder);
+        var identity = new CloudDeviceIdentity
+        {
+            DeviceKey = Guid.NewGuid().ToString("N"),
+            DeviceName = string.IsNullOrWhiteSpace(Environment.MachineName)
+                ? "Windows POS"
+                : Environment.MachineName
+        };
+        var temp = _identityPath + ".tmp";
+        await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(identity, JsonOptions), cancellationToken);
+        File.Move(temp, _identityPath, true);
+        return identity;
+    }
+}
+
+internal sealed class CloudCredential
+{
+    public string Endpoint { get; set; } = string.Empty;
+    public string OwnerId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string DeviceId { get; set; } = string.Empty;
+    public string DeviceKey { get; set; } = string.Empty;
+    public string DeviceName { get; set; } = string.Empty;
+    public string AccessToken { get; set; } = string.Empty;
+    public string RefreshToken { get; set; } = string.Empty;
+    public DateTimeOffset AccessTokenExpiresAt { get; set; }
+    public DateTimeOffset? InitialSnapshotUploadedAt { get; set; }
+}
+
+internal sealed class CloudDeviceIdentity
+{
+    public string DeviceKey { get; set; } = string.Empty;
+    public string DeviceName { get; set; } = string.Empty;
 }

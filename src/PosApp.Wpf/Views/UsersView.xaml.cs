@@ -10,7 +10,6 @@ public partial class UsersView : UserControl, IRefreshable
 {
     private readonly Data.AppDbContext _db;
     private readonly IAuthService _auth;
-    private bool _onlineMode;
 
     public UsersView(Data.AppDbContext db, IAuthService auth)
     {
@@ -38,21 +37,12 @@ public partial class UsersView : UserControl, IRefreshable
 
     private async Task LoadAsync()
     {
-        // Once this database belongs to an online organization, authentication
-        // users must be managed by the Worker even while the cloud session is
-        // signed out or temporarily expired. Otherwise an offline local edit
-        // could bypass server-side role and final-administrator protections.
-        _onlineMode = await _db.CloudAccountStates.AsNoTracking()
-            .AnyAsync(value => value.TenantId != string.Empty);
-        OnlineModeHint.Visibility = _onlineMode ? Visibility.Visible : Visibility.Collapsed;
-        AddUserButton.IsEnabled = !_onlineMode;
         var users = await _db.Users.AsNoTracking().OrderBy(u => u.Username).ToListAsync();
         UsersGrid.ItemsSource = users;
     }
 
     private void Add_Click(object sender, RoutedEventArgs e)
     {
-        if (!CanManageLocalUsers()) return;
         var dlg = new UserEditDialog(_db, null) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true) _ = RefreshAsync();
     }
@@ -61,7 +51,6 @@ public partial class UsersView : UserControl, IRefreshable
     {
         if (sender is Button btn && btn.Tag is User u)
         {
-            if (!CanManageLocalUsers()) return;
             var dlg = new UserEditDialog(_db, u) { Owner = Window.GetWindow(this) };
             if (dlg.ShowDialog() == true) _ = RefreshAsync();
         }
@@ -74,7 +63,6 @@ public partial class UsersView : UserControl, IRefreshable
             return;
 
         e.Handled = true;
-        if (!CanManageLocalUsers()) return;
         var previousState = user.IsActive;
         var requestedState = !previousState;
         checkBox.IsChecked = requestedState;
@@ -105,12 +93,25 @@ public partial class UsersView : UserControl, IRefreshable
             }
 
             var updatedAt = DateTime.UtcNow;
-            var trackedUser = _db.Users.Local.FirstOrDefault(x => x.Id == user.Id)
-                              ?? await _db.Users.FindAsync(user.Id)
-                              ?? throw new InvalidOperationException("The selected user could not be found.");
-            trackedUser.IsActive = requestedState;
-            trackedUser.UpdatedAt = updatedAt;
-            await _db.SaveChangesAsync();
+            var trackedUser = _db.Users.Local.FirstOrDefault(x => x.Id == user.Id);
+
+            if (trackedUser != null)
+            {
+                trackedUser.IsActive = requestedState;
+                trackedUser.UpdatedAt = updatedAt;
+                await _db.SaveChangesAsync();
+            }
+            else
+            {
+                var affected = await _db.Users
+                    .Where(x => x.Id == user.Id)
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.IsActive, requestedState)
+                        .SetProperty(x => x.UpdatedAt, updatedAt));
+
+                if (affected != 1)
+                    throw new InvalidOperationException("The selected user could not be found.");
+            }
 
             user.IsActive = requestedState;
         }
@@ -149,7 +150,6 @@ public partial class UsersView : UserControl, IRefreshable
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: User user }) return;
-        if (!CanManageLocalUsers()) return;
 
         if (user.Id == App.CurrentUser?.Id)
         {
@@ -201,17 +201,6 @@ public partial class UsersView : UserControl, IRefreshable
             PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
                 "Unable to delete user", MessageBoxButton.OK, MessageBoxImage.Error);
         }
-    }
-
-    private bool CanManageLocalUsers()
-    {
-        if (!_onlineMode) return true;
-        PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
-            TryFindResource("Cloud_UserManagementHint") as string
-            ?? "Online user access is managed from Online account & sync. PIN reset remains available here for offline access.",
-            TryFindResource("Cloud_OnlineUsers") as string ?? "Online users",
-            MessageBoxButton.OK, MessageBoxImage.Information);
-        return false;
     }
 }
 

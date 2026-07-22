@@ -395,7 +395,6 @@ public class InventoryService : IInventoryService
             }
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
-            SyncCaptureContext.NotifyOutboxChanged();
             _db.ChangeTracker.Clear();
         }
         catch

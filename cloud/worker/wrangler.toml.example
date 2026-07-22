@@ -1,0 +1,11 @@
+name = "posapp-cloud"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+workers_dev = true
+
+# Store all values below with `npx wrangler secret put <NAME>`.
+# Never commit real values.
+# TURSO_DATABASE_URL
+# TURSO_AUTH_TOKEN
+# JWT_SECRET          (at least 32 random characters)
+# REGISTRATION_KEY    (required by the desktop app only during owner sign-up)

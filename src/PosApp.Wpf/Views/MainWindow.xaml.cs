@@ -3,9 +3,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using PosApp.Core.Entities;
-using PosApp.Core.Interfaces;
-using PosApp.Core.Models;
-using PosApp.Wpf.Helpers;
 
 namespace PosApp.Wpf.Views;
 
@@ -16,29 +13,26 @@ public partial class MainWindow : Window
     private readonly ProductsView _products;
     private readonly PromotionsView _promotions;
     private readonly InventoryView _inventory;
+    private readonly TransfersView _transfers;
     private readonly CustomersView _customers;
     private readonly SalesView _sales;
     private readonly ReportsView _reports;
     private readonly UsersView _users;
     private readonly SettingsView _settings;
+    private readonly StoresView _stores;
     private readonly PurchasesView _purchases;
     private readonly RegisterView _register;
-    private readonly CloudAccountView _cloud;
-    private readonly ICloudSyncService _cloudSync;
-    private readonly ISettingsService _settingsService;
     private bool _fullScreen;
     private WindowStyle _windowedStyle;
     private WindowState _windowedState;
     private ResizeMode _windowedResizeMode;
     private bool _windowedTopmost;
-    private bool _terminalSessionHandled;
     private Rect _windowedBounds;
 
     public MainWindow(PosView pos, DashboardView dashboard, ProductsView products, PromotionsView promotions,
-        InventoryView inventory, CustomersView customers, SalesView sales,
-        ReportsView reports, UsersView users, SettingsView settings,
-        PurchasesView purchases, RegisterView register, CloudAccountView cloud,
-        ICloudSyncService cloudSync, ISettingsService settingsService)
+        InventoryView inventory, TransfersView transfers, CustomersView customers, SalesView sales,
+        ReportsView reports, UsersView users, SettingsView settings, StoresView stores,
+        PurchasesView purchases, RegisterView register)
     {
         InitializeComponent();
         _windowedStyle = WindowStyle;
@@ -51,19 +45,23 @@ public partial class MainWindow : Window
         _products = products;
         _promotions = promotions;
         _inventory = inventory;
+        _transfers = transfers;
         _customers = customers;
         _sales = sales;
         _reports = reports;
         _users = users;
         _settings = settings;
+        _stores = stores;
         _purchases = purchases;
         _register = register;
-        _cloud = cloud;
-        _cloudSync = cloudSync;
-        _settingsService = settingsService;
-        _cloudSync.StatusChanged += CloudSync_StatusChanged;
-        Closed += (_, _) => _cloudSync.StatusChanged -= CloudSync_StatusChanged;
-        UpdateCloudStatus(_cloudSync.CurrentStatus);
+        App.StoreChanged += App_StoreChanged;
+        Closed += (_, _) => App.StoreChanged -= App_StoreChanged;
+    }
+
+    private void App_StoreChanged(object? sender, EventArgs e)
+    {
+        if (CurrentStoreName != null)
+            CurrentStoreName.Text = App.CurrentStore?.Name ?? App.StoreSettings.StoreName;
     }
 
     public void SetCurrentUser(User user)
@@ -72,6 +70,7 @@ public partial class MainWindow : Window
         UserRoleLabel.Text = user.Role.ToString();
         UserInitials.Text = string.IsNullOrWhiteSpace(user.FullName) ? "?" : user.FullName[..1].ToUpperInvariant();
         DrawerTitle.Text = $"POS – {user.FullName}";
+        CurrentStoreName.Text = App.CurrentStore?.Name ?? App.StoreSettings.StoreName;
         DrawerDate.Text = DateTime.Now.ToString("D");
         ApplyUiScale(App.StoreSettings.UiScalePercent);
 
@@ -80,13 +79,14 @@ public partial class MainWindow : Window
         NavDashboard.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavProducts.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavInventory.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavTransfers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavPurchases.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavCustomers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavPromotions.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavUsers.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        NavStores.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
         NavSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
-        NavCloud.Visibility = Visibility.Visible;
         DrawerManagement.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         DrawerReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
 
@@ -108,7 +108,7 @@ public partial class MainWindow : Window
         }
         if (!IsAuthorized(tag))
         {
-            LocalizedMessageBox.Show("Your account does not have permission to open this page.",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Your account does not have permission to open this page.",
                 "Access denied", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -121,13 +121,14 @@ public partial class MainWindow : Window
             "products" => _products,
             "promotions" => _promotions,
             "inventory" => _inventory,
+            "transfers" => _transfers,
             "purchases" => _purchases,
             "customers" => _customers,
             "sales" => _sales,
             "reports" => _reports,
             "users" => _users,
+            "stores" => _stores,
             "settings" => _settings,
-            "cloud" => _cloud,
             _ => null
         };
         if (view == null) return;
@@ -145,13 +146,14 @@ public partial class MainWindow : Window
             "products" => NavProducts,
             "promotions" => NavPromotions,
             "inventory" => NavInventory,
+            "transfers" => NavTransfers,
             "purchases" => NavPurchases,
             "customers" => NavCustomers,
             "sales" => NavSales,
             "reports" => NavReports,
             "users" => NavUsers,
+            "stores" => NavStores,
             "settings" => NavSettings,
-            "cloud" => NavCloud,
             _ => null
         };
         ResetNavigationStyles();
@@ -172,7 +174,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             App.LogError("View refresh", ex);
-            LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to refresh page",
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to refresh page",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -184,10 +186,9 @@ public partial class MainWindow : Window
         return tag.ToLowerInvariant() switch
         {
             "pos" or "register" => true,
-            "dashboard" or "products" or "promotions" or "inventory" or
+            "dashboard" or "products" or "promotions" or "inventory" or "transfers" or
             "purchases" or "customers" or "sales" or "reports" => role >= UserRole.Manager,
-            "users" or "settings" => role >= UserRole.Admin,
-            "cloud" => true,
+            "users" or "stores" or "settings" => role >= UserRole.Admin,
             _ => false
         };
     }
@@ -197,9 +198,8 @@ public partial class MainWindow : Window
         var inactiveStyle = (Style)FindResource("NavButton");
         foreach (var button in new[]
                  {
-                     NavDashboard, NavSales, NavProducts, NavInventory, NavPurchases,
-                     NavRegister, NavCustomers, NavReports, NavPromotions, NavUsers, NavSettings,
-                     NavCloud
+                     NavDashboard, NavSales, NavProducts, NavInventory, NavTransfers, NavPurchases,
+                     NavRegister, NavCustomers, NavReports, NavPromotions, NavUsers, NavStores, NavSettings
                  })
         {
             button.Style = inactiveStyle;
@@ -217,12 +217,6 @@ public partial class MainWindow : Window
     }
 
     public void CloseManagementDrawer() => ManagementOverlay.Visibility = Visibility.Collapsed;
-
-    public void ResetCurrentSaleForStoreSwitch()
-    {
-        if (_pos.DataContext is PosViewModel viewModel)
-            viewModel.ResetForStoreSwitch();
-    }
 
     public void ApplyUiScale(int percent)
     {
@@ -249,106 +243,8 @@ public partial class MainWindow : Window
     {
         var user = App.CurrentUser;
         if (user == null) return;
-        var connection = CloudStatusText.Text;
-        LocalizedMessageBox.Show($"{user.FullName}\nUsername: {user.Username}\nRole: {user.Role}\n\n{connection}",
+        PosApp.Wpf.Helpers.LocalizedMessageBox.Show($"{user.FullName}\nUsername: {user.Username}\nRole: {user.Role}\n\nThis terminal is working offline.",
             "User Information", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    private void CloudSync_StatusChanged(object? sender, CloudSyncStatus status)
-        => Dispatcher.InvokeAsync(() =>
-        {
-            UpdateCloudStatus(status);
-            if (status.State == "up_to_date" && status.DownloadedChangeCount > 0)
-                _ = ApplyDownloadedChangesAsync();
-            if (IsVisible && App.CurrentUser != null && IsTerminalCloudSessionError(status.LastErrorCode))
-                EndTerminalCloudSession(status.LastErrorCode!);
-        });
-
-    private static bool IsTerminalCloudSessionError(string? code) => code is
-        "DEVICE_REVOKED" or "USER_DISABLED" or "ORGANIZATION_DISABLED" or "STORE_DISABLED" or
-        "SESSION_REVOKED" or "REFRESH_TOKEN_REVOKED" or "REFRESH_TOKEN_EXPIRED" or "REFRESH_TOKEN_REUSE";
-
-    private void EndTerminalCloudSession(string code)
-    {
-        if (_terminalSessionHandled) return;
-        _terminalSessionHandled = true;
-        var reason = TryFindResource($"Cloud_Error_{code}") as string
-                     ?? TryFindResource("Cloud_StatusExpired") as string
-                     ?? "The online session is no longer active.";
-        var format = TryFindResource("Cloud_SessionEndedNotice") as string
-                     ?? "{0}\n\nThis active session has ended. Return to sign-in to continue safely.";
-        LocalizedMessageBox.Show(string.Format(format, reason),
-            TryFindResource("Cloud_StatusExpired") as string ?? "Online session expired",
-            MessageBoxButton.OK, MessageBoxImage.Warning);
-        SignOut();
-    }
-
-    private async Task ApplyDownloadedChangesAsync()
-    {
-        try
-        {
-            // Settings are synchronized records too. Publish the selected
-            // branch's current copy before refreshing the visible page so
-            // receipts, totals, language, theme, and printer state update live.
-            var settings = await _settingsService.GetStoreSettingsAsync();
-            App.PublishSettings(settings);
-            App.ApplyTheme(settings.Theme);
-            App.ApplyLanguage(settings.Language);
-            if (ContentArea.Content is IRefreshable refreshable)
-                await refreshable.RefreshAsync();
-        }
-        catch (Exception exception)
-        {
-            App.LogError("Apply downloaded cloud changes", exception);
-        }
-    }
-
-    private void UpdateCloudStatus(CloudSyncStatus status)
-    {
-        var key = status.State switch
-        {
-            "up_to_date" => "Cloud_StatusUpToDate",
-            "syncing" => "Cloud_StatusSyncing",
-            "signed_out" => "Cloud_StatusSignedOut",
-            "session_expired" => "Cloud_StatusExpired",
-            "revoked" => "Cloud_StatusRevoked",
-            "reconciliation_required" => "Cloud_StatusReconciliation",
-            "upgrade_required" => "Cloud_StatusUpgrade",
-            "error" => "Cloud_StatusError",
-            "ready" => "Cloud_StatusReady",
-            _ => "Cloud_StatusOffline"
-        };
-        CloudStatusText.Text = TryFindResource(key) as string ?? status.State;
-        DrawerConnectionStatus.Text = CloudStatusText.Text;
-        CloudSyncProgress.Visibility = status.IsSyncing ? Visibility.Visible : Visibility.Collapsed;
-        var pendingLabel = TryFindResource("Cloud_PendingShort") as string ?? "Pending";
-        var conflictLabel = TryFindResource("Cloud_ConflictsShort") as string ?? "Conflicts";
-        var last = status.LastSuccessfulSyncAtUtc?.ToLocalTime().ToString("g")
-                   ?? (TryFindResource("Cloud_Never") as string ?? "Never");
-        CloudStatusDetails.Text = $"{pendingLabel}: {status.PendingUploadCount}  •  {conflictLabel}: {status.ConflictCount}  •  {last}";
-        CloudStatusDot.Fill = status.IsSyncing
-            ? FindBrush("InfoTextBrush", Brushes.DodgerBlue)
-            : status.State == "up_to_date"
-                ? FindBrush("SuccessTextBrush", Brushes.SeaGreen)
-                : status.State is "offline" or "signed_out"
-                    ? FindBrush("TextMutedBrush", Brushes.Gray)
-                    : FindBrush("DangerTextBrush", Brushes.IndianRed);
-    }
-
-    private Brush FindBrush(string key, Brush fallback) => TryFindResource(key) as Brush ?? fallback;
-
-    private void OpenCloud_Click(object sender, RoutedEventArgs e) => NavigateTo("cloud");
-
-    private async void ManualCloudSync_Click(object sender, RoutedEventArgs e)
-    {
-        try { await _cloudSync.SyncNowAsync(true); }
-        catch
-        {
-            LocalizedMessageBox.Show(
-                TryFindResource("Cloud_UnexpectedError") as string ?? "Synchronization could not be completed. Local data remains safe.",
-                TryFindResource("Cloud_OnlineSync") as string ?? "Online synchronization",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
     }
 
     private void DrawerFullscreen_Click(object sender, RoutedEventArgs e)
@@ -428,7 +324,7 @@ public partial class MainWindow : Window
 
     private void DrawerExit_Click(object sender, RoutedEventArgs e)
     {
-        if (LocalizedMessageBox.Show("Exit PosApp?", "Exit", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        if (PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Exit PosApp?", "Exit", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
             Close();
     }
 
@@ -455,7 +351,7 @@ public partial class MainWindow : Window
             App.CurrentUser = signedInUser;
             if (newSessionCreated) App.RestorePreviousSession(previousSession);
             App.LogError("Sign out", ex);
-            LocalizedMessageBox.Show(
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
                 ex.GetBaseException().Message,
                 "Unable to sign out",
                 MessageBoxButton.OK,

@@ -85,6 +85,21 @@ public partial class ProductsView : UserControl, IRefreshable
         ProductsGrid.ItemsSource = filtered;
     }
 
+    private async void ManageCategories_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new CategoryManagerDialog(_inventory) { Owner = Window.GetWindow(this) };
+            dialog.ShowDialog();
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to manage categories",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private async void Add_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -96,27 +111,6 @@ public partial class ProductsView : UserControl, IRefreshable
         catch (Exception ex)
         {
             PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to open product editor", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private async void ManageCategories_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var dialog = new CategoryManagementWindow(_inventory)
-            {
-                Owner = Window.GetWindow(this)
-            };
-            dialog.ShowDialog();
-            await RefreshAsync();
-        }
-        catch (Exception ex)
-        {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
-                ex.GetBaseException().Message,
-                DialogLayout.Text("Cat_LoadErrorTitle", "Unable to manage categories"),
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
         }
     }
 
@@ -382,18 +376,18 @@ public class ProductEditDialog : Window
         _unitBox.SelectionChanged += (_, _) => UpdateMeasurementLabels();
 
         var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Name", "Name"), _nameBox));
-        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_SkuOnly", "SKU"), _skuBox));
-        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Barcode", "Barcode"), _barcodeBox));
-        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Category", "Category"), _categoryBox));
-        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_SaleMode", "Sale mode"), _saleModeBox));
-        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_Unit", "Pricing unit"), _unitBox));
+        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_Name", "Name"), _nameBox));
+        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_SkuOnly", "SKU"), _skuBox));
+        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_Barcode", "Barcode"), _barcodeBox));
+        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_Category", "Category"), _categoryBox));
+        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_SaleMode", "Sale mode"), _saleModeBox));
+        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_Unit", "Pricing unit"), _unitBox));
         panel.Children.Add(_measurementHelp);
-        panel.Children.Add(MakeRow(_priceLabel, _priceBox));
-        panel.Children.Add(MakeRow(_costLabel, _costBox));
-        panel.Children.Add(MakeRow(_stockLabel, _stockBox));
-        panel.Children.Add(MakeRow(_thresholdLabel, _thresholdBox));
-        panel.Children.Add(MakeRow(DialogLayout.Text("Prod_TaxRate", "Tax rate %"), _taxBox));
+        panel.Children.Add(MakeRowForExternal(_priceLabel, _priceBox));
+        panel.Children.Add(MakeRowForExternal(_costLabel, _costBox));
+        panel.Children.Add(MakeRowForExternal(_stockLabel, _stockBox));
+        panel.Children.Add(MakeRowForExternal(_thresholdLabel, _thresholdBox));
+        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_TaxRate", "Tax rate %"), _taxBox));
         _allowDiscountBox.Margin = new Thickness(0, 0, 0, 16);
         panel.Children.Add(_allowDiscountBox);
 
@@ -627,15 +621,200 @@ public class ProductEditDialog : Window
         Margin = new Thickness(0, 0, 0, 4)
     };
 
-    private static Border MakeRow(string label, FrameworkElement control)
-        => MakeRow(CreateEditorLabel(label), control);
+    internal static Border MakeRowForExternal(string label, FrameworkElement control)
+        => MakeRowForExternal(CreateEditorLabel(label), control);
 
-    private static Border MakeRow(TextBlock label, FrameworkElement control)
+    internal static Border MakeRowForExternal(TextBlock label, FrameworkElement control)
     {
         var stack = new StackPanel();
         stack.Children.Add(label);
         control.Margin = new Thickness(0, 0, 0, 12);
         stack.Children.Add(control);
         return new Border { Child = stack };
+    }
+}
+
+
+public sealed class CategoryManagerDialog : Window
+{
+    private readonly IInventoryService _service;
+    private readonly DataGrid _grid = new();
+    private readonly ObservableCollection<Category> _categories = new();
+
+    public CategoryManagerDialog(IInventoryService service)
+    {
+        _service = service;
+        Title = DialogLayout.Text("Prod_ManageCategories", "Categories");
+        Width = 720;
+        Height = 520;
+        MinWidth = 560;
+        MinHeight = 400;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
+
+        var root = new Grid { Margin = new Thickness(24) };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var heading = new Grid { Margin = new Thickness(0, 0, 0, 12) };
+        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        heading.Children.Add(new TextBlock
+        {
+            Text = DialogLayout.Text("Prod_CategoriesHelp", "Create, edit, or remove product categories."),
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = (System.Windows.Media.Brush)Application.Current.FindResource("TextMutedBrush")
+        });
+        var add = new Button
+        {
+            Content = DialogLayout.Text("Prod_NewCategory", "New Category"),
+            Style = (Style)Application.Current.FindResource("PrimaryButton"),
+            Padding = new Thickness(16, 9, 16, 9)
+        };
+        add.Click += async (_, _) => await OpenEditorAsync(null);
+        Grid.SetColumn(add, 1);
+        heading.Children.Add(add);
+        root.Children.Add(heading);
+
+        _grid.AutoGenerateColumns = false;
+        _grid.IsReadOnly = true;
+        _grid.HeadersVisibility = DataGridHeadersVisibility.Column;
+        _grid.ItemsSource = _categories;
+        _grid.Columns.Add(new DataGridTextColumn { Header = DialogLayout.Text("Prod_Name", "Name"), Binding = new System.Windows.Data.Binding(nameof(Category.Name)), Width = new DataGridLength(2, DataGridLengthUnitType.Star) });
+        _grid.Columns.Add(new DataGridTextColumn { Header = DialogLayout.Text("Prod_CategoryDescription", "Description"), Binding = new System.Windows.Data.Binding(nameof(Category.Description)), Width = new DataGridLength(3, DataGridLengthUnitType.Star) });
+        _grid.Columns.Add(new DataGridTextColumn { Header = DialogLayout.Text("Prod_CategoryColor", "Color"), Binding = new System.Windows.Data.Binding(nameof(Category.Color)), Width = 90 });
+        var actions = new DataGridTemplateColumn { Header = DialogLayout.Text("Common_Actions", "Actions"), Width = 150 };
+        var factory = new FrameworkElementFactory(typeof(StackPanel));
+        factory.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+        var edit = new FrameworkElementFactory(typeof(Button));
+        edit.SetValue(Button.ContentProperty, DialogLayout.Text("Common_Edit", "Edit"));
+        edit.SetValue(Button.MarginProperty, new Thickness(2));
+        edit.SetValue(Button.PaddingProperty, new Thickness(10, 4, 10, 4));
+        edit.AddHandler(Button.ClickEvent, new RoutedEventHandler(Edit_Click));
+        var delete = new FrameworkElementFactory(typeof(Button));
+        delete.SetValue(Button.ContentProperty, DialogLayout.Text("Common_Delete", "Delete"));
+        delete.SetValue(Button.MarginProperty, new Thickness(2));
+        delete.SetValue(Button.PaddingProperty, new Thickness(10, 4, 10, 4));
+        delete.AddHandler(Button.ClickEvent, new RoutedEventHandler(Delete_Click));
+        factory.AppendChild(edit);
+        factory.AppendChild(delete);
+        actions.CellTemplate = new DataTemplate { VisualTree = factory };
+        _grid.Columns.Add(actions);
+        Grid.SetRow(_grid, 1);
+        root.Children.Add(_grid);
+
+        var close = new Button
+        {
+            Content = DialogLayout.Text("Common_Close", "Close"),
+            Style = (Style)Application.Current.FindResource("OutlineButton"),
+            Padding = new Thickness(18, 9, 18, 9),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0)
+        };
+        close.Click += (_, _) => Close();
+        Grid.SetRow(close, 2);
+        root.Children.Add(close);
+        Content = root;
+        Loaded += async (_, _) => await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var items = await _service.ListCategoriesAsync();
+        _categories.Clear();
+        foreach (var category in items) _categories.Add(category);
+    }
+
+    private async void Edit_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is Category category)
+            await OpenEditorAsync(category);
+    }
+
+    private async void Delete_Click(object sender, RoutedEventArgs e)
+    {
+        if (((FrameworkElement)sender).DataContext is not Category category) return;
+        var result = PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+            string.Format(DialogLayout.Text("Prod_DeleteCategoryConfirm", "Delete category '{0}'?"), category.Name),
+            DialogLayout.Text("Prod_DeleteCategory", "Delete Category"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+        try
+        {
+            IsEnabled = false;
+            await _service.DeleteCategoryAsync(category.Id);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                DialogLayout.Text("Prod_DeleteCategory", "Delete Category"), MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally { IsEnabled = true; }
+    }
+
+    private async Task OpenEditorAsync(Category? existing)
+    {
+        var editor = new CategoryEditDialog(_service, existing) { Owner = this };
+        if (editor.ShowDialog() == true) await ReloadAsync();
+    }
+}
+
+public sealed class CategoryEditDialog : Window
+{
+    private readonly IInventoryService _service;
+    private readonly Category _category;
+    private readonly TextBox _name = new();
+    private readonly TextBox _description = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 90 };
+    private readonly TextBox _color = new();
+
+    public CategoryEditDialog(IInventoryService service, Category? existing)
+    {
+        _service = service;
+        _category = existing == null ? new Category { Color = "#2D7FF9", IsActive = true } : new Category
+        {
+            Id = existing.Id, Name = existing.Name, Description = existing.Description,
+            Color = existing.Color, SortOrder = existing.SortOrder, IsActive = existing.IsActive,
+            CreatedAt = existing.CreatedAt, UpdatedAt = existing.UpdatedAt
+        };
+        Title = existing == null ? DialogLayout.Text("Prod_NewCategory", "New Category") : DialogLayout.Text("Prod_EditCategory", "Edit Category");
+        Width = 480;
+        Height = 400;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
+        _name.Text = _category.Name;
+        _description.Text = _category.Description ?? string.Empty;
+        _color.Text = _category.Color;
+
+        var panel = new StackPanel { Margin = new Thickness(24) };
+        panel.Children.Add(ProductEditDialog.MakeRowForExternal(DialogLayout.Text("Prod_Name", "Name"), _name));
+        panel.Children.Add(ProductEditDialog.MakeRowForExternal(DialogLayout.Text("Prod_CategoryDescription", "Description"), _description));
+        panel.Children.Add(ProductEditDialog.MakeRowForExternal(DialogLayout.Text("Prod_CategoryColor", "Color (#RRGGBB)"), _color));
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
+        var cancel = new Button { Content = DialogLayout.Text("Common_Cancel", "Cancel"), Style = (Style)Application.Current.FindResource("OutlineButton"), Padding = new Thickness(18, 9, 18, 9), Margin = new Thickness(0, 0, 8, 0) };
+        cancel.Click += (_, _) => { DialogResult = false; Close(); };
+        var save = new Button { Content = DialogLayout.Text("Common_Save", "Save"), Style = (Style)Application.Current.FindResource("PrimaryButton"), Padding = new Thickness(18, 9, 18, 9) };
+        save.Click += Save_Click;
+        buttons.Children.Add(cancel); buttons.Children.Add(save); panel.Children.Add(buttons);
+        Content = panel;
+    }
+
+    private async void Save_Click(object sender, RoutedEventArgs e)
+    {
+        _category.Name = _name.Text.Trim();
+        _category.Description = string.IsNullOrWhiteSpace(_description.Text) ? null : _description.Text.Trim();
+        _category.Color = _color.Text.Trim();
+        try
+        {
+            IsEnabled = false;
+            await _service.CreateOrUpdateCategoryAsync(_category);
+            DialogResult = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally { IsEnabled = true; }
     }
 }

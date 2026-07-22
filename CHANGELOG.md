@@ -1,256 +1,72 @@
 # Changelog
 
-## 2.1.3 — Exclusive all-or-nothing database restore
+## 1.9.0 — Multi-store operations and stock transfers
 
-- Fixed startup restore failure when a recently closed PosApp process still owned `posapp.db-wal` or `posapp.db-shm`.
-- Made restore shutdown stop and drain background synchronization, skip database-reopening exit work, dispose application scopes, and clear native Microsoft.Data.Sqlite connection pools before exit.
-- Added a bounded startup handoff that checkpoints the outgoing WAL and waits for exclusive access to the main database, WAL, shared-memory, and rollback-journal files.
-- Made successful restore fully replace the local SQLite state: the staged backup is validated privately, the outgoing database is preserved, old sidecars are removed under an exclusive lease, and the main file is atomically replaced and revalidated before the pending marker is deleted.
-- Left both the live database and staged backup unchanged when exclusive access cannot be obtained, with a clear retry message instead of a raw startup `IOException`.
-- Preserved the existing cloud reconciliation gate so restored records cannot overwrite newer synchronized data without an explicit administrator decision.
-- Added regression tests for complete replacement, stale sidecar removal, pre-restore safety-copy contents, contention rollback, retained pending state, and successful retry.
-- Added matching English/Bengali restore messages and updated application, installer, cloud client, Worker package, tests, README, workflow examples, and release metadata to version 2.1.3.
+- Added an administrator **All Stores** scope to dashboard and report KPIs, daily trends, products, categories, payments, and printable summaries.
+- Added per-store performance rows and an all-store inventory view with store, product, quantity, unit, and low-stock status.
+- Added auditable stock transfers with Draft, Dispatched, Received, and Cancelled states.
+- Dispatch and receipt create linked append-only inventory-ledger entries; cancelling a dispatched transfer creates compensating source-store entries.
+- Automatically creates missing destination catalog/category records while explicitly leaving `ImagePath` null and transferring no image files.
+- Added transfer and transfer-item cloud payloads, dependency resolution, snapshots, restore ordering, conflict protection, Worker entity validation, and sync priorities.
+- Added collision-resistant transfer numbers for independently operating offline devices and atomic pull application with destination store/category/product placeholders when related cloud changes arrive out of order.
+- Added additive local tables/indexes and transfer links on stock transactions; no Turso schema migration is required from v1.7.0 or v1.8.0.
+- Preserved role isolation: administrators can consolidate stores; managers remain scoped to the active store.
+- Added English/Bengali resources and bumped application, assembly, file, informational, installer, Worker, README, and changelog versions.
 
-## 2.1.2 — Category management and synchronized sample onboarding
+## 1.8.0 — Conflict center and multi-device hardening
 
-- Added a visible **Products → Manage Categories** workflow with create, edit, description, color, sort-order, and safe delete controls that preserve the existing light/dark theme, visible borders, and English/Bengali localization.
-- Routed category changes through the existing SQLite inventory service and transactional sync outbox; categories referenced by products remain protected from deletion.
-- Fixed the new-organization **Add the standard sample catalog** option being ignored. Checked setup now creates six categories, fifteen products, and their opening inventory movements after the authoritative first download, then uploads and verifies them before setup is finalized.
-- Kept existing-organization sign-in download-only and unchecked new organizations empty. The device-local setup marker preserves the sample choice across an interrupted onboarding retry without duplicating records.
-- Added synchronization regression coverage for sample categories, products, opening inventory, idempotent retries, and the existing-organization no-seed boundary.
-- Updated application, installer, cloud client, Worker package, tests, README, workflow examples, and release metadata to version 2.1.2.
+- Added a dedicated **Synchronization Center** with unresolved conflicts, per-store status, failed queue items, registered devices, and the latest 100 sync runs.
+- Added explicit **Keep Local**, **Use Cloud**, and field-level merge resolution for editable records.
+- Prevented field-level merging of sales, payments, stock transactions, purchases, and register ledger records; those require choosing one complete version.
+- Added deterministic conflict re-queueing against the latest cloud revision, related-conflict closure, resolved-conflict cleanup, and manual retry for non-conflict failures.
+- Added local sync-run history with success/failure diagnostics and automatic retention.
+- Added the authenticated Worker device-list endpoint and multi-device smoke coverage for sequential edits, cursor pulls, idempotency, and revision conflicts.
+- Added additive v1.7.0-to-v1.8.0 local database upgrades for conflict operations, resolution metadata, and sync history. No Turso schema migration is required from v1.7.0.
+- Continued excluding `ImagePath` and all image files from cloud payloads.
+- Added English/Bengali UI resources and bumped application, assembly, file, informational, installer, Worker, README, and changelog versions.
 
-## 2.1.1 — WPF organization-profile build correction
+## 1.7.0 — Offline-first incremental synchronization
 
-- Added the explicit `System.IO` import required by WPF's temporary compilation project for `File.Exists` in `OrganizationProfileSwitcher`.
-- Fixed GitHub Actions build error `CS0103: The name 'File' does not exist in the current context` without changing profile isolation, switching behavior, synchronization, or tenant security.
-- Updated application, installer, cloud client, Worker package, tests, README, workflow examples, and release metadata to version 2.1.1.
+- Added durable local outbox capture after a cloud account is connected, with per-record sync IDs, local revisions, cloud revisions, retry metadata, and store isolation.
+- Added automatic synchronization after startup, network reconnection, local commits, and a periodic one-minute check, without blocking local checkout.
+- Added idempotent Worker push, cursor-based pull, per-record atomic transactions, deletion tombstones, and cloud revision conflict detection.
+- Added conflict retention in local SQLite so concurrent edits are never silently overwritten; Settings displays pending and conflict counts.
+- Added manual **Sync Now** and latest-snapshot restore controls.
+- Added fresh-device restore with a pre-restore local backup, relational validation, per-store cursor restoration, and mandatory restart after completion.
+- Added Turso v1.7.0 migration/schema changes and Worker smoke coverage for push, duplicate replay, conflict, and pull.
+- Continued excluding product/user image paths and all image files from snapshots and incremental payloads.
+- Added English/Bengali UI text and bumped application, assembly, file, informational, installer, Worker, README, and changelog versions.
+- Full snapshots remain limited to 15 MB per store; conflict resolution UI is deferred to the next milestone.
 
-## 2.1.0 — Isolated multi-organization profiles
+## 1.6.0 — Cloud account API and initial snapshots
 
-- Added local organization profiles so one Windows installation can create, sign in to, and switch among multiple cloud organizations without mixing tenant data.
-- Kept existing installations in a backward-compatible `legacy` profile without moving their SQLite database, backups, device identity, pending outbox, or DPAPI token file.
-- Gave every additional organization a separate SQLite database, backup/restore scope, device ID, offline users and PINs, synchronization cursor/outbox, and DPAPI-encrypted cloud-session file.
-- Made successful-version markers profile-specific so every organization receives its own validated pre-migration backup on first launch after an application upgrade.
-- Added organization profile selectors and **Add organization** / **Switch** actions to onboarding and Online account & sync, with a best-effort pre-switch sync and a process restart that keeps EF Core bound to one tenant database for its entire lifetime.
-- Preserved unsynchronized offline work when switching profiles; an unavailable Worker or Turso service cannot erase or transfer the original profile's outbox.
-- Updated the Worker account portal with **Create another organization**, fresh cross-tenant browser device identities, remembered non-secret browser device mappings, and a safe retry when an existing device belongs to a different tenant.
-- Added English and Bengali profile UI text, profile-isolation tests, portal regression checks, README usage instructions, architecture/security/troubleshooting guidance, and consistent version 2.1.0 metadata.
+- Added an optional self-hosted Cloudflare Worker API backed by Turso/libSQL.
+- Added owner sign-up/sign-in, private registration-key protection, rotating refresh tokens, device registration, and authentication rate limiting.
+- Added a Settings → Cloud workflow for connection testing, account creation, sign-in, disconnect, and initial all-store snapshot upload.
+- Protects desktop access/refresh tokens with Windows DPAPI for the current Windows user; passwords are never stored by the desktop app.
+- Added Turso schema and endpoints for owners, devices, stores, snapshots, and per-device sync cursors.
+- Initial snapshots include all scalar POS data while explicitly excluding product/user image paths and all image files.
+- Retains offline-first checkout and keeps incremental outbox capture disabled until the v1.7.0 push/pull engine is available.
+- Added English and Bengali localization, cloud deployment documentation, Worker syntax validation in GitHub Actions, and version updates.
 
-## 2.0.21 — UTC-safe synchronization timestamps
+## 1.5.0 — Multi-store foundation and sync-ready data
 
-- Fixed store-configuration and other pending uploads being rejected with `VALIDATION_ERROR: clientTimestampUtc must be a UTC timestamp` after SQLite materialized an operation timestamp with `DateTimeKind.Unspecified`.
-- Added one wire-boundary normalizer that preserves the ticks of SQLite UTC values, marks them as UTC, converts genuinely local timestamps, and leaves existing UTC values unchanged.
-- Ensured `System.Text.Json` emits the required ISO-8601 `Z` suffix without weakening the Worker's timestamp validation or accepting ambiguous client input.
-- Added regression coverage for the exact SQLite materialization case, including tick preservation, UTC `Kind`, web JSON property naming, the `Z` suffix, and parseable wire output.
-- Updated application, installer, cloud client, Worker package, tests, README, troubleshooting guidance, and release metadata to version 2.0.21.
+- Added admin-only Store Management with create, edit, activate/deactivate, and store switching.
+- Isolated products, categories, customers, users, sales, payments, stock, purchases, register sessions, promotions, taxes, and settings by store.
+- Migrates all existing v1.4.25 data into a default `MAIN` store without deleting working records.
+- Added per-store uniqueness for usernames, product identifiers, categories, receipt numbers, purchase numbers, discounts, and settings.
+- Added stable sync IDs, revisions, update timestamps, per-store sync state, and an outbox schema for later cloud synchronization; capture remains disabled until cloud setup exists.
+- New stores receive administrator/user access plus starter categories, taxes, discounts, and independent settings.
+- Added English and Bengali localization for store management.
+- Cloud upload/download remains disabled until the Cloudflare Worker and Turso account/API milestone is deployed and configured.
 
-## 2.0.20 — Reliable outbox upload recovery
+## 1.4.25 — Product category management
 
-- Fixed the online-onboarding upload failure identified by diagnostic attempt `59EC1AB93502`: `ids.Contains(...)` could bind to the .NET span overload, which EF Core cannot evaluate inside its query expression tree.
-- Forced the reset query through `Enumerable.Contains(...)`, preserving a parameterized SQL `IN` query without introducing per-record database round trips.
-- Prevented an outbox-cleanup exception from replacing the original Worker, Turso, network, or response error. Interrupted `Uploading` rows remain recoverable on the next synchronization cycle.
-- Added a privacy-safe `sync.push_batch_failed` entry containing the batch number, entity summary, structured API code, request ID, and original sanitized exception before cleanup begins.
-- Added regression coverage proving that only the selected failed-upload rows return to `Pending`, receive retry timing, and no longer trigger the `ReadOnlySpan<string>` expression-tree failure.
-- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.20.
-
-## 2.0.19 — Correlated onboarding and synchronization diagnostics
-
-- Added a rotating, structured desktop cloud diagnostic log at `%LOCALAPPDATA%\PosApp\Logs\cloud-sync.jsonl` with one correlation ID for each online sign-in or organization-creation attempt.
-- Recorded the complete onboarding path—authentication, background-sync shutdown, cache preparation, session initialization, server compatibility, batched push, paged pull, settings upload, and final verification—without recording credentials or business payloads.
-- Preserved unexpected synchronization exceptions that were previously swallowed by the generic `SYNC_FAILED` fallback, including the failed stage, exception type, HRESULT, sanitized message, inner error, and stack trace.
-- Added safe outbox diagnostics grouped only by entity, status, structured error code, and retry count, plus conflicts, cursor, downloaded count, and Worker request IDs.
-- Added log rotation at 2 MiB with four retained history files so repeated offline retries cannot grow storage without bound.
-- Added a diagnostic ID, exact log path, detailed sync-state summary, and localized **Open log folder** action to the online-account failure UI.
-- Prevented the periodic background loop from retaining an expired onboarding diagnostic scope after the sign-in window closes.
-- Documented how to collect and correlate desktop diagnostics with Cloudflare Worker request IDs while keeping tokens, passwords, PINs, SQL, payloads, and customer data out of support material.
-- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.19.
-
-## 2.0.18 — Account portal and deterministic onboarding synchronization
-
-- Published the tenant-scoped browser account portal at the Worker root URL and kept deployment diagnostics at `/status`.
-- Added exact organization total/active user counts, administrator-only user listing, and safe user deletion with current-user and final-administrator protection.
-- Kept deletion non-destructive: access is disabled, device sessions and refresh tokens are revoked, synchronized tombstones are emitted, audit history is written, and financial references remain intact.
-- Added rotating browser-session renewal, server-side logout, a nonce-restricted content security policy, and explicit guidance that portal credentials are PosApp organization credentials rather than a shared GitHub Actions password.
-- Fixed first-run and resumed sign-in synchronization falsely reporting that the complete organization download did not finish when a startup background sync held the synchronization gate for more than three seconds.
-- Changed user-initiated synchronization to wait asynchronously for the active cycle and then run a verified cycle of its own; background cycles remain non-blocking and coalesced.
-- Stopped treating Windows network-availability notifications as proof that HTTPS is unavailable. The bounded Worker request now determines connectivity, preventing false offline failures on usable connections.
-- Added Worker integration coverage for portal security markers, tenant user counts, safe deletion, session revocation, tombstones, audit records, and current-user protection.
-- Updated application, installer, cloud client, Worker package, tests, README, deployment documentation, and release metadata to version 2.0.18.
-
-## 2.0.17
-
-- Added a secure browser account portal at the Worker root URL.
-- Added browser sign-in and organization creation using the same API contract as the Windows client.
-- Added organization user counts and an administrator-only user list.
-- Added safe user deletion with current-user and final-administrator protection, session revocation, and synchronized tombstones.
-- Moved public deployment diagnostics to `/status` and updated deployment validation.
-
-## 2.0.17 — Online onboarding migration-state recovery
-
-- Removed the initial local-to-cloud migration branch from first-run onboarding. New installations now always treat Turso as authoritative and download the complete organization snapshot.
-- Cleared stale bootstrap rows, pending outbox operations, conflicts, identities, cursors, and interrupted migration markers before the first full download.
-- Preserved only the authenticated local user mapping and device-local `app:` settings while rebuilding the synchronized cache.
-- Applied organization-creation store details through normal synchronized settings after the initial download instead of through the migration snapshot.
-- Added exact synchronization error code, message, and request ID reporting when onboarding cannot complete.
-
-## 2.0.15 — Online-only onboarding and complete initial synchronization
-
-- Removed the independent offline setup wizard and its local store, administrator, currency, receipt, backup, and sample-catalog form.
-- Changed first launch to require either online sign-in to an existing organization or creation of a new organization before cashier login can open.
-- Changed database seeding before onboarding to schema-only; no business templates or local default account are created outside an authenticated organization.
-- Moved store identity, receipt settings, language, theme, backup preference, and optional sample products into the online organization-creation form.
-- Added a protected two-phase onboarding boundary that writes the local completion marker only after a complete cursor-zero download or verified initial snapshot upload finishes without pending operations or conflicts.
-- Preserved older local databases through the reviewed cloud-empty migration and safety-backup path instead of silently deleting or merging their users, catalog, inventory, and transaction history.
-- Added tests for fresh existing-organization downloads, complete new-organization snapshot seeding, resumable uploads, and preservation of legacy local data.
-- Removed unused setup views, DTOs, service methods, dependency registrations, and English/Bengali setup strings.
-- Updated application, installer, cloud client, Worker package, tests, README, architecture, deployment, security, and release metadata to version 2.0.17.
-
-## 2.0.14 — Reliable public status-page deployment verification
-
-- Fixed the final Worker deployment gate, which searched the initial HTML for `Organization creation preflight` even though that check name is populated later by browser JavaScript from `/api/v1/diagnostics`.
-- Added machine-readable `x-posapp-status-page` and `x-posapp-deployment-version` response headers plus matching HTML metadata to the public root status page.
-- Updated GitHub Actions to wait independently for the root page to serve the expected rolling-deployment version instead of validating whichever old Worker instance answered first.
-- Replaced the dynamic-text grep with structural checks for the status-page title, diagnostics link, run button, and deployment markers.
-- Added cache-busting deployment probes and concise failure output so a stale root route is retried instead of dumping an entire HTML document.
-- Added integration coverage for the root status-page headers and metadata.
-- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.14.
-
-## 2.0.13 — Free-plan authentication crypto and rolling deployment verification
-
-- Replaced new online-password records with a deployment-secret-peppered PBKDF2 verifier that stays within the Cloudflare Workers Free per-request CPU budget while preserving unique salts, constant-time comparison, and database-leak resistance through a dedicated domain-separated password-pepper secret.
-- Kept legacy 310,000-round PBKDF2 verification support for backward compatibility; every newly created or changed password uses the v2.0.13 verifier.
-- Reduced the public authentication diagnostic to one representative password derivation instead of hashing and verifying in the same request, and added the exact failed cryptographic stage.
-- Updated signup, login, password changes, and user creation to use the deployment-bound verifier.
-- Added the required `PASSWORD_PEPPER_SECRET` Worker binding and GitHub Actions validation; keep this independent secret stable because changing it invalidates stored online-password verifiers.
-- Fixed deployment validation for Cloudflare rolling propagation: metadata and diagnostics are now polled independently until both routes serve the expected Worker version.
-- Preserved diagnostic response bodies from older HTTP 503 routes instead of failing before the deployed version can be identified.
-- Added tests proving unique salts, correct verification, wrong-password rejection, and binding to deployment authentication secrets.
-- Updated application, installer, cloud client, Worker package, tests, README, security documentation, and release metadata to version 2.0.13.
-
-## 2.0.12 — Atomic Turso signup batch and transparent deployment diagnostics
-
-- Replaced organization creation's long-lived interactive Turso transaction with one non-interactive `client.batch(..., "write")` transaction, eliminating the repeated remote round trips that could expire before provisioning completed.
-- Preserved atomic all-or-nothing creation of the organization, store, administrator, assignment, device, session, refresh token, synchronized user record, sync change, and audit events.
-- Added failed batch-statement mapping so `ORGANIZATION_PROVISIONING_FAILED` still identifies the exact safe provisioning stage.
-- Reworked the public organization preflight to use the same atomic batch mechanism and an intentional final primary-key conflict as a rollback sentinel, then verifies that no diagnostic organization remains.
-- Changed `/api/v1/diagnostics` to always return readable JSON with HTTP 200; readiness remains explicit in `ready`, `accountCreationReady`, and each check's status.
-- Updated GitHub Actions to wait for the expected deployed Worker version, capture diagnostics without `curl --fail`, print every check and failed stage, and report the request ID instead of repeating an opaque HTTP 503 twelve times.
-- Updated the status page and cloud documentation to describe the atomic batch preflight and machine-readable readiness contract.
-- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.12.
-
-## 2.0.11 — Public Worker diagnostics and reliable organization provisioning
-
-- Replaced the authenticated root API response with a public, responsive Worker status page at `/` that shows deployment, database, schema, authentication, and organization-creation readiness without exposing secrets or user data.
-- Added `/api/v1/diagnostics`, including production password hashing, JWT verification, required table-and-column inspection, and a complete organization/account/device/session/sync/audit write transaction that is always rolled back and verified.
-- Replaced the opaque organization-creation SQL batch with ordered transaction steps so remote libSQL failures identify the exact safe provisioning stage while preserving atomic rollback.
-- Added `ORGANIZATION_PROVISIONING_FAILED` responses with a request ID, sanitized stage, and provider code instead of a generic internal error.
-- Tightened unique-constraint detection so foreign-key and other database constraints are no longer mislabeled as an existing username or email.
-- Updated the deployment workflow to require the environment-specific `POSAPP_CLOUD_API_BASE_URL`, call the deployed diagnostic endpoint, verify `accountCreationReady`, and fail the deployment when the public status page does not pass.
-- Added real SQLite/libSQL integration coverage for the public status page, rollback preflight, and production organization-signup transaction; all 38 Worker tests pass.
-- Updated application, installer, cloud client, Worker package, README, and release metadata to version 2.0.11.
-
-## 2.0.10 — Automated Turso migration and schema readiness
-
-- Added an idempotent Turso migration runner that applies pending reviewed SQL files in order and verifies schema version 4, required tables, and the `registered_devices.assigned_store_id` column.
-- Updated GitHub Actions to migrate and verify the selected development or production database before deploying the Worker, so an empty Turso database can no longer produce a reachable but unusable API.
-- Changed `/api/v1/meta` to verify actual database reachability and migration state instead of reporting readiness from secret presence alone.
-- Added `DATABASE_SCHEMA_NOT_READY` handling, localized desktop guidance, and sanitized request-ID logging without SQL, payloads, URLs, tokens, or credentials.
-- Added Worker tests for missing and outdated Turso schemas and validated the migration runner against a local libSQL database twice to confirm idempotency.
-- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.10.
-
-## 2.0.9 — Worker runtime-secret deployment validation
-
-- Added the required Turso and authentication secret declarations to Wrangler configuration.
-- Updated GitHub Actions to validate and upload `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `JWT_SIGNING_SECRET`, and `REFRESH_TOKEN_SECRET` before deploying the selected Worker environment.
-- Split database and authentication configuration failures into actionable API error codes and desktop messages.
-- Added non-sensitive Worker readiness flags to `/api/v1/meta` so deployment configuration can be verified in a browser.
-- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.9.
-
-## 2.0.8 — Visible online-account validation and responsive creation dialog
-
-- Added immediate field validation before online sign-in or organization creation, including the Worker-compatible username, email, password, offline PIN, and device-name rules.
-- Displayed password requirements directly below the organization password fields: 10–128 characters with at least one letter and one number.
-- Replaced silent footer-only failures with an owner-bound warning or error dialog, while retaining a high-contrast status message and request ID in the account window.
-- Forced the busy indicator to render before network work begins so a slow DNS, TLS, Worker, or Turso request no longer appears as an unresponsive button.
-- Constrained the online-account window to the Windows working area, made it resizable, and enabled mouse-wheel, touchpad, and touch scrolling at high display scaling.
-- Aligned desktop password validation with the Cloudflare Worker password policy and added Bengali localization for all new validation feedback.
-- Updated application, installer, cloud client, Worker package, tests, README, and release metadata to version 2.0.8.
-
-## 2.0.7 — Build-configured cloud endpoint
-
-- Removed the Cloudflare Worker address fields from online sign-in and organization creation; users now enter only their account, password, offline PIN, device, organization, and store details.
-- Added the `POSAPP_CLOUD_API_BASE_URL` GitHub Actions secret, strict HTTPS-origin validation, and build-time assembly metadata so the Windows executable receives one administrator-controlled Worker endpoint.
-- Made the embedded endpoint authoritative for existing cached cloud sessions, automatically replacing a previously stored endpoint after an application update.
-- Replaced the visible endpoint on the account-management page with a generic configured-service status so the deployment address is no longer part of normal UI workflow.
-- Kept pull-request verification builds possible when repository secrets are unavailable while requiring the endpoint secret for main, tag, and manually dispatched distributable builds.
-- Updated application, installer, cloud client, Worker package, tests, README, and cloud deployment documentation to version 2.0.7.
-
-## 2.0.6 — Responsive, scrollable login window
-
-- Wrapped the complete cashier login layout in a vertical `ScrollViewer` so mouse-wheel, touchpad, touchscreen, and scrollbar navigation work when the content exceeds the available height.
-- Constrained the login window to the active Windows working area, including high-DPI display scaling and the taskbar.
-- Allowed the login window to be resized while retaining safe minimum dimensions and horizontal layout constraints.
-- Preserved access to online-account, exit, offline-help, and footer controls on smaller displays.
-
-## 2.0.5 — WPF localized message helper build fix
-
-- Imported `PosApp.Wpf.Helpers` in `MainWindow.xaml.cs`, resolving CS0103 for its unqualified `LocalizedMessageBox` calls, including the terminal cloud-session warning at line 279.
-- Normalized the existing fully qualified `LocalizedMessageBox` calls in `MainWindow` to use the same namespace import.
-- Updated application, installer, cloud client, Worker package, tests, and README version metadata to 2.0.5.
-
-## 2.0.4 — Immutable sale composition capture fix
-
-- Counted sale items, sale payments, and purchase items with the permanent local key bound after `SaveChanges(false)` instead of the entity CLR `Id`, which can still expose its pre-save default value during atomic outbox capture.
-- Restored accurate `expectedItemCount` and `expectedPaymentCount` values for newly completed sales, allowing immutable financial composition validation to pass.
-- Updated application, installer, cloud client, Worker package, workflow examples, tests, and README version metadata to 2.0.4.
-
-## 2.0.3 — Synchronization runtime and test reliability fixes
-
-- Bound outbox capture to permanent post-save SQLite keys so added, edited, and deleted records retain one stable UUID identity and one compacted pending operation.
-- Reloaded already-tracked sync identities and outbox rows after the atomic metadata write, preventing stale server versions, tombstones, and payloads in long-lived application contexts.
-- Made settings lookup explicitly branch-aware so two stores can safely retain the same synchronized setting key without overwriting one another.
-- Disabled SQLite pooling in file-backed synchronization tests, closed test connections deterministically, and removed database, WAL, and shared-memory files without Windows runner lock failures.
-- Corrected product test fixtures to include their required category relationship and added an explicit single-threaded xUnit runner configuration for the process-wide synchronization scope.
-- Updated application, installer, cloud client, Worker package, workflow examples, and README version metadata to 2.0.3.
-
-## 2.0.2 — Synchronization test build fix
-
-- Added a project-wide xUnit namespace import so `Fact`, `Theory`, `InlineData`, `Assert`, and `IAsyncLifetime` compile across every synchronization test file.
-- Replaced interpolated table-identifier deletion commands in restore reconciliation with a reviewed fixed-SQL statement list, eliminating EF1002 without suppressing the analyzer.
-- Updated application, installer, cloud client, Worker package, workflow examples, and README version metadata to 2.0.2.
-
-## 2.0.1 — Build and deployment compatibility fixes
-
-- Rewrote EF Core pull and status queries to use expression-tree-compatible comparisons and captured scalar parameters, fixing CS8122 and CS8110 during the Windows synchronization-test build.
-- Enforced a non-null cloud user identity while capturing local outbox operations, removing nullable assignments and preserving audit attribution.
-- Replaced the obsolete EF Core check-constraint configuration and executed validated internal SQLite index DDL through database commands, removing the reported EF warnings without accepting untrusted identifiers.
-- Updated the Cloudflare deployment action to its Node 24-compatible v4 release, pinned Wrangler 4.112.0, and added explicit credential preflight errors for missing GitHub secrets.
-
-## 2.0.0 — Secure multi-device offline-first synchronization
-
-- Preserved the complete v1.4.24 WPF application and added optional organization accounts, stores, registered devices, secure online login, session management, and administrator-created online users.
-- Added a transactional SQLite outbox, UUID identity map, incremental cursors, bounded push/pull batches, retry with jittered exponential backoff, tombstones, explicit conflict records, and live background synchronization without blocking the register.
-- Deferred event-triggered uploads until their outer checkout/refund/void/purchase/register/import/inventory SQLite transaction has committed, preventing pre-commit reads while still starting an immediate online sync after important operations.
-- Added a versioned Cloudflare Worker REST API with PBKDF2 password hashing, short-lived signed access tokens, rotating hashed refresh tokens, device/session revocation, persistent hashed-key brute-force protection, structured errors, request IDs, decompressed input limits, parameterized Turso queries, audit events, and server-side role/tenant/store validation.
-- Added ordered Turso/libSQL migrations covering organizations, stores, users, devices, sessions, synchronized operational entities, operation deduplication, change cursors, tombstones, and audit logs.
-- Added immutable financial-transition checks, versioned catalog-price validation, cumulative refund limits, related-record and arithmetic validation, unique business-source protections, and append-only inventory movement synchronization so completed payments, sales, purchases, refunds, voids, and stock deductions cannot be silently overwritten or replayed.
-- Preserved suspended-sale identity through recall and checkout, staged draft lines before finalization, declared immutable child counts with server-side aggregate reconciliation, cancelled never-uploaded create/delete pairs, and added explicit purchase document/item ledger links with deterministic legacy backfill.
-- Added initial migration safeguards with pre-sync detection of unlinked local records, a verified safety backup and explicit local/server reconciliation gate, an atomic server-side cloud-empty lease, dependency-ordered resumable upload, UUID conversion, operation idempotency, count verification, and explicit reconciliation after restoring an older local backup.
-- Added the Account & Sync UI, connection status bar, manual sync/retry, pending/conflict counts, device sessions, store selector, migration flow, conflict decisions, restore reconciliation, secure logout, password changes, and matching English/Bengali resources.
-- Added direct online sign-in/organization creation to first-run setup, removed known bootstrap credentials, kept device-local setup state out of synchronization, and made a new device clear template-only data before downloading its organization.
-- Made first-run online setup two-phase and restart-safe: organization creation retains its protected initial-upload decision until verified completion, while an existing organization cannot be marked ready before its cursor-zero pull succeeds. Lost migration completion responses recover from server lease history and count verification.
-- Made one local SQLite working copy branch-aware by separating identical store-scoped catalog/settings identifiers and open registers across authorized branches; added matching server-side normalized identifiers and a shared SKU/barcode namespace.
-- Made branch switching reload the selected store's receipt, currency, printer, language, and theme settings and explicitly clear the warned-about unsaved cart, preventing a cached cart or settings from crossing stores.
-- Added per-operation Turso savepoints so a partial constraint, cursor, or audit failure cannot survive as a rejected synchronization result.
-- Capped push requests at two operations and pipelined independent Turso reads and savepoint recovery statements, retaining transactional batching while leaving headroom beneath the Cloudflare Workers Free external-subrequest ceiling.
-- Added schema-v4 financial composition staging: finalized sale/purchase headers and children remain private during interrupted multi-batch uploads, then publish atomically through a cursor-ordered completion replay only after immutable counts and monetary totals reconcile.
-- Persisted the installation UUID before the first network request, isolated cached PIN users from one another's cloud tokens on shared terminals, and continued capturing correctly attributed offline changes after secure online logout.
-- Locked the active WPF session back to the sign-in window after an explicit user/device/session/organization/store revocation or terminal refresh expiry, with localized notification while retaining the documented cached-offline sign-in policy.
-- Made expired initial-migration leases resumable only by their original tenant/store/user/device, retained the verified migration-backup path across restart, and preserved device-local `app:` settings during server-authoritative restore reconciliation.
-- Restricted server-stored custom permissions to an explicit allow-list and rejected wildcard or unknown client-supplied grants.
-- Added DPAPI-protected desktop token storage; no Turso credential, Worker secret, access token, or refresh token is stored in ordinary configuration or SQLite.
-- Added Worker authentication/rotation/revocation and synchronization tests, transactional SQLite outbox tests, localization parity checks, a separate Cloudflare deployment workflow, and complete architecture/setup/security/protocol/free-plan/troubleshooting documentation.
+- Added a Categories button to the Products page.
+- Added a category manager with New Category, Edit, and Delete actions.
+- Added category name, description, and color editing with existing validation rules.
+- Added English and Bengali localization for the new category-management UI.
+- Product filters refresh immediately after category changes.
 
 ## 1.4.24 — Higher-contrast borders and table grid lines
 

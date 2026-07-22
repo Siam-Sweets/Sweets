@@ -29,11 +29,5 @@ posapp.db
 Thumbs.db
 desktop.ini
 
-# Cloudflare Worker local state and dependencies
-node_modules/
-.wrangler/
-.dev.vars
-cloud/worker/coverage/
-
 # Publish profiles (optional)
 *.pubxml.user

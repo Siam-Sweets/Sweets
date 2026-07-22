@@ -1,9 +1,9 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "2.1.3"
+  #define MyAppVersion "1.9.0"
 #endif
 
 #ifndef MyAppNumericVersion
-  #define MyAppNumericVersion "2.1.3.0"
+  #define MyAppNumericVersion "1.9.0.0"
 #endif
 
 #ifndef MyAppSourceDir
@@ -56,7 +56,7 @@ RestartApplications=no
 ; never installed into or deleted from {app}. Keeping the AppId stable makes
 ; this installer an in-place program-file upgrade without touching store data.
 VersionInfoCompany={#MyAppPublisher}
-VersionInfoDescription={#MyAppName} offline-first installer
+VersionInfoDescription={#MyAppName} offline installer
 VersionInfoProductName={#MyAppName}
 VersionInfoVersion={#MyAppNumericVersion}
 VersionInfoProductVersion={#MyAppNumericVersion}
