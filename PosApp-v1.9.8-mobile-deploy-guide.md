@@ -1,4 +1,4 @@
-# PosApp v1.9.7 Phone-Only Cloud Setup
+# PosApp v1.9.8 Phone-Only Cloud Setup
 
 ## Cloud-enabled build
 
@@ -18,4 +18,4 @@ The Worker URL is embedded only when the variable is supplied. PosApp does not d
 
 ## Current workflow fixes
 
-Cloud deployment uses Node.js 24 and Wrangler 4.81.0 directly. Worker code and `POSAPP_CLOUD_CONFIG` are deployed together, so the old **Failed to upload secrets** stage is not used. The v1.9.7 build/release workflow also accepts `1.9.7`, `v1.9.7`, or `V1.9.7`. Do not enable the insecure Node 20 compatibility setting.
+Cloud deployment uses Node.js 24 and Wrangler 4.81.0 directly. Worker code and `POSAPP_CLOUD_CONFIG` are deployed together, so the old **Failed to upload secrets** stage is not used. The v1.9.8 build/release workflow also accepts `1.9.8`, `v1.9.8`, or `V1.9.8`. Do not enable the insecure Node 20 compatibility setting.

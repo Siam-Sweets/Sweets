@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.8 — Fresh-install default-store startup fix
+
+- Fixed fresh installations failing at startup with `No active store is available.`
+- The schema upgrader now supplies every required sync column when creating the initial `MAIN` store instead of silently ignoring the insert.
+- Added a defensive startup repair that creates `MAIN` when no stores exist and reactivates the oldest store if all stores are inactive.
+- Startup repair suppresses cloud outbox capture until the local store context is valid.
+- No Turso schema, synchronization protocol, cloud Worker endpoint, desktop layout, or image-handling changes.
+
 ## 1.9.7 — Linux release version normalization
 
 - Fixed the GitHub Release job rejecting uppercase version prefixes such as `V1.9.7`.

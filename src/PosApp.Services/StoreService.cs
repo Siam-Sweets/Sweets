@@ -20,10 +20,40 @@ public sealed class StoreService : IStoreService
 
     public async Task InitializeAsync()
     {
-        var stores = await _db.Stores.AsNoTracking().OrderBy(x => x.Id).ToListAsync();
+        var stores = await _db.Stores.OrderBy(x => x.Id).ToListAsync();
         var selected = stores.FirstOrDefault(x => x.Id == _context.StoreId && x.IsActive)
-                       ?? stores.FirstOrDefault(x => x.IsActive)
-                       ?? throw new InvalidOperationException("No active store is available.");
+                       ?? stores.FirstOrDefault(x => x.IsActive);
+
+        // A fresh EF-created database can reach this service before any store row
+        // exists. Repair that state locally so first-run setup can continue. Also
+        // recover a damaged database where every store was marked inactive.
+        if (selected == null)
+        {
+            selected = stores.FirstOrDefault();
+            if (selected == null)
+            {
+                selected = new Store
+                {
+                    Code = "MAIN",
+                    Name = "Main Store",
+                    Address = string.Empty,
+                    Phone = string.Empty,
+                    IsActive = true
+                };
+                _db.Stores.Add(selected);
+            }
+            else
+            {
+                selected.IsActive = true;
+                selected.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // Startup repair must not create a cloud outbox record before an
+            // active local store has been selected.
+            using (_context.SuppressCloudCapture())
+                await _db.SaveChangesAsync();
+        }
+
         _context.SetCurrentStore(selected);
     }
 

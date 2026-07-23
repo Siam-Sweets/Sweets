@@ -337,15 +337,20 @@ public static class DbSchemaUpgrader
                 $"WHERE \"SyncId\" IS NULL OR TRIM(\"SyncId\") = '' OR \"SyncUpdatedAt\" = '1970-01-01 00:00:00';");
         }
 
+        // EnsureCreated builds the current Store table with non-null sync metadata
+        // columns. Supply those values explicitly; INSERT OR IGNORE previously hid
+        // the constraint failure and left a fresh installation with no active store.
         await db.Database.ExecuteSqlRawAsync(
             """
-            INSERT OR IGNORE INTO "Stores"
-                ("Id", "SyncId", "Code", "Name", "Address", "Phone", "IsActive", "CreatedAt")
+            INSERT INTO "Stores"
+                ("Id", "SyncId", "Code", "Name", "Address", "Phone", "IsActive", "CreatedAt",
+                 "SyncVersion", "SyncUpdatedAt", "CloudVersion")
             SELECT 1, lower(hex(randomblob(16))), 'MAIN',
                    COALESCE((SELECT CASE WHEN json_valid("Value") THEN json_extract("Value", '$.StoreName') END FROM "Settings" WHERE "Key" = 'store:config' ORDER BY "Id" LIMIT 1), 'Main Store'),
                    COALESCE((SELECT CASE WHEN json_valid("Value") THEN json_extract("Value", '$.Address') END FROM "Settings" WHERE "Key" = 'store:config' ORDER BY "Id" LIMIT 1), ''),
                    COALESCE((SELECT CASE WHEN json_valid("Value") THEN json_extract("Value", '$.Phone') END FROM "Settings" WHERE "Key" = 'store:config' ORDER BY "Id" LIMIT 1), ''),
-                   1, CURRENT_TIMESTAMP;
+                   1, CURRENT_TIMESTAMP, 1, CURRENT_TIMESTAMP, 0
+            WHERE NOT EXISTS (SELECT 1 FROM "Stores");
             """);
 
         // Releases that stored only IsWeighted implicitly meant kilograms. Keep
