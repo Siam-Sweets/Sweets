@@ -18,18 +18,25 @@ public partial class SettingsView : UserControl, IRefreshable
     private readonly IHardwareService _hardware;
     private readonly IBackupService _backup;
     private readonly IUpdateService _updates;
+    private readonly ICloudAccountService _cloud;
+    private readonly ICloudSyncService _sync;
+    private readonly ICloudSyncCoordinator _syncCoordinator;
     private StoreSettings _current = new();
     private bool _isLoading;
     private readonly SemaphoreSlim _appearanceSaveGate = new(1, 1);
 
     public SettingsView(ISettingsService settings, IHardwareService hardware, IBackupService backup,
-        IUpdateService updates)
+        IUpdateService updates, ICloudAccountService cloud, ICloudSyncService sync,
+        ICloudSyncCoordinator syncCoordinator)
     {
         InitializeComponent();
         _settings = settings;
         _hardware = hardware;
         _backup = backup;
         _updates = updates;
+        _cloud = cloud;
+        _sync = sync;
+        _syncCoordinator = syncCoordinator;
     }
 
     public async Task RefreshAsync()
@@ -50,10 +57,11 @@ public partial class SettingsView : UserControl, IRefreshable
             "products" => 2,
             "documents" => 3,
             "email" => 4,
-            "print" => 5,
-            "database" => 6,
-            "update" => 7,
-            "about" => 8,
+            "cloud" => 5,
+            "print" => 6,
+            "database" => 7,
+            "update" => 8,
+            "about" => 9,
             _ => 0
         };
     }
@@ -123,6 +131,7 @@ public partial class SettingsView : UserControl, IRefreshable
             LangBn.IsChecked = _current.Language == "bn";
             ThemeLight.IsChecked = !string.Equals(_current.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
             ThemeDark.IsChecked = string.Equals(_current.Theme, "Dark", StringComparison.OrdinalIgnoreCase);
+            await LoadCloudStatusAsync();
         }
         catch (Exception ex)
         {
@@ -131,6 +140,146 @@ public partial class SettingsView : UserControl, IRefreshable
         finally
         {
             _isLoading = false;
+        }
+    }
+
+
+    private async Task LoadCloudStatusAsync()
+    {
+        var account = await _cloud.GetStatusAsync();
+        var sync = await _sync.GetStatusAsync();
+        if (account.IsConfigured)
+        {
+            CloudEmailBox.Text = account.Email;
+            CloudDisplayNameBox.Text = account.DisplayName;
+        }
+
+        var snapshot = account.InitialSnapshotUploadedAt.HasValue
+            ? $" Snapshot: {account.InitialSnapshotUploadedAt.Value.LocalDateTime:g}."
+            : string.Empty;
+        var lastSync = sync.LastSuccessfulSyncAt.HasValue
+            ? $" Last sync: {sync.LastSuccessfulSyncAt.Value.LocalDateTime:g}."
+            : string.Empty;
+        CloudStatusText.Text = PosApp.Wpf.Helpers.RuntimeUiText.Translate(
+            $"{account.Message} {sync.Message} Pending: {sync.PendingChanges:N0}. " +
+            $"Conflicts: {sync.ConflictCount:N0}.{snapshot}{lastSync}");
+        CloudUploadSnapshotButton.IsEnabled = account.IsAuthenticated && !sync.IsRunning;
+        CloudSyncNowButton.IsEnabled = account.IsAuthenticated && !sync.IsRunning;
+        CloudSyncCenterButton.IsEnabled = account.IsAuthenticated && !sync.IsRunning;
+        CloudRestoreButton.IsEnabled = account.IsAuthenticated && !sync.IsRunning;
+    }
+
+    private async void CloudTest_Click(object sender, RoutedEventArgs e)
+        => await RunCloudActionAsync(async () =>
+        {
+            await _cloud.TestConnectionAsync();
+            CloudStatusText.Text = PosApp.Wpf.Helpers.RuntimeUiText.Translate("Cloud API connection succeeded.");
+        }, "Cloud connection failed");
+
+    private async void CloudSignUp_Click(object sender, RoutedEventArgs e)
+        => await RunCloudActionAsync(async () =>
+        {
+            var status = await _cloud.SignUpAsync(new CloudSignUpRequest
+            {
+                Email = CloudEmailBox.Text,
+                Password = CloudPasswordBox.Password,
+                DisplayName = CloudDisplayNameBox.Text,
+                RegistrationKey = CloudRegistrationKeyBox.Password
+            });
+            CloudPasswordBox.Clear();
+            CloudRegistrationKeyBox.Clear();
+            CloudStatusText.Text = PosApp.Wpf.Helpers.RuntimeUiText.Translate(status.Message);
+            _syncCoordinator.Trigger();
+            await LoadCloudStatusAsync();
+        }, "Unable to create cloud account");
+
+    private async void CloudSignIn_Click(object sender, RoutedEventArgs e)
+        => await RunCloudActionAsync(async () =>
+        {
+            var status = await _cloud.SignInAsync(new CloudSignInRequest
+            {
+                Email = CloudEmailBox.Text,
+                Password = CloudPasswordBox.Password
+            });
+            CloudPasswordBox.Clear();
+            CloudStatusText.Text = PosApp.Wpf.Helpers.RuntimeUiText.Translate(status.Message);
+            _syncCoordinator.Trigger();
+            await LoadCloudStatusAsync();
+        }, "Unable to sign in");
+
+    private async void CloudDisconnect_Click(object sender, RoutedEventArgs e)
+        => await RunCloudActionAsync(async () =>
+        {
+            await _cloud.DisconnectAsync();
+            CloudPasswordBox.Clear();
+            CloudRegistrationKeyBox.Clear();
+            CloudStatusText.Text = PosApp.Wpf.Helpers.RuntimeUiText.Translate("Cloud account disconnected. Local checkout remains available.");
+            await LoadCloudStatusAsync();
+        }, "Unable to disconnect cloud account");
+
+    private async void CloudUploadSnapshot_Click(object sender, RoutedEventArgs e)
+        => await RunCloudActionAsync(async () =>
+        {
+            var account = await _cloud.GetStatusAsync();
+            if (account.InitialSnapshotUploadedAt.HasValue)
+                await _sync.SyncNowAsync();
+            var result = await _cloud.UploadInitialSnapshotsAsync();
+            CloudStatusText.Text = PosApp.Wpf.Helpers.RuntimeUiText.Translate(
+                $"Uploaded {result.StoreCount} store snapshot(s) containing {result.TotalRows:N0} rows. " +
+                "Automatic incremental synchronization is active.");
+            _syncCoordinator.Trigger();
+            await LoadCloudStatusAsync();
+        }, "Unable to upload initial snapshot");
+
+    private async void CloudSyncNow_Click(object sender, RoutedEventArgs e)
+        => await RunCloudActionAsync(async () =>
+        {
+            var result = await _sync.SyncNowAsync();
+            CloudStatusText.Text = PosApp.Wpf.Helpers.RuntimeUiText.Translate(
+                $"Synchronized {result.StoreCount} store(s): {result.PushedChanges:N0} pushed, " +
+                $"{result.PulledChanges:N0} pulled, {result.ConflictCount:N0} conflicts.");
+            await LoadCloudStatusAsync();
+        }, "Cloud synchronization failed");
+
+    private async void CloudSyncCenter_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new SyncCenterWindow(_sync, _syncCoordinator) { Owner = Window.GetWindow(this) };
+        window.ShowDialog();
+        await LoadCloudStatusAsync();
+    }
+
+    private async void CloudRestore_Click(object sender, RoutedEventArgs e)
+    {
+        var answer = PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+            "Restore the latest cloud snapshots? This creates a backup, then replaces all local store data. PosApp will close after a successful restore.",
+            "Restore cloud data", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes) return;
+
+        await RunCloudActionAsync(async () =>
+        {
+            var result = await _sync.RestoreLatestSnapshotsAsync(replaceLocalData: true);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                $"Restored {result.StoreCount} store(s) and {result.RestoredRows:N0} rows. PosApp will now close; reopen it to continue.",
+                "Cloud restore complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            Application.Current.Shutdown();
+        }, "Cloud restore failed");
+    }
+
+    private async Task RunCloudActionAsync(Func<Task> action, string errorTitle)
+    {
+        IsEnabled = false;
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                ex.Message, errorTitle, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
         }
     }
 

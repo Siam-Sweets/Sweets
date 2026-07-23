@@ -22,13 +22,21 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
     public static User? CurrentUser { get; set; }
+    public static Store? CurrentStore { get; private set; }
     public static StoreSettings StoreSettings { get; private set; } = new();
     public static event EventHandler? SettingsChanged;
+    public static event EventHandler? StoreChanged;
 
     public static void PublishSettings(StoreSettings settings)
     {
         StoreSettings = settings;
         SettingsChanged?.Invoke(null, EventArgs.Empty);
+    }
+
+    public static void PublishStore(Store store)
+    {
+        CurrentStore = store;
+        StoreChanged?.Invoke(null, EventArgs.Empty);
     }
     private bool _startupCompleted;
     private bool _dispatcherErrorDialogOpen;
@@ -170,8 +178,12 @@ public partial class App : Application
                 Log("Database ready (created or already exists).");
                 await DbSchemaUpgrader.ApplyAsync(db);
                 Log("Database schema upgrades applied.");
+                var storeService = scope.ServiceProvider.GetRequiredService<IStoreService>();
+                await storeService.InitializeAsync();
+                PublishStore(await storeService.GetCurrentStoreAsync());
+                Log($"Active store selected: {CurrentStore.Name} ({CurrentStore.Code}).");
                 await DbSeeder.SeedAsync(db);
-                Log("Database seeded.");
+                Log("Database seeded for the active store.");
             }
 
             // Load settings
@@ -202,6 +214,7 @@ public partial class App : Application
                 }
 
                 PublishSettings(await settingsService.GetStoreSettingsAsync());
+                PublishStore(await Services.GetRequiredService<IStoreService>().GetCurrentStoreAsync());
                 ApplyTheme(StoreSettings.Theme);
                 ApplyLanguage(StoreSettings.Language);
                 Log($"First-run setup completed. Store: {StoreSettings.StoreName}");
@@ -229,6 +242,7 @@ public partial class App : Application
             MainWindow = login;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             login.Show();
+            Services.GetRequiredService<ICloudSyncCoordinator>().Start();
             _startupCompleted = true;
             try
             {
@@ -285,14 +299,21 @@ public partial class App : Application
 
     private static void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton<IStoreContext, StoreContext>();
+
         // DbContext
         services.AddDbContext<AppDbContext>(opt =>
             opt.UseSqlite(DbPathResolver.ConnectionString()),
             ServiceLifetime.Transient);
 
         // Services
+        services.AddTransient<IStoreService, StoreService>();
+        services.AddTransient<ICloudAccountService, CloudAccountService>();
+        services.AddTransient<ICloudSyncService, CloudSyncService>();
+        services.AddSingleton<ICloudSyncCoordinator, CloudSyncCoordinator>();
         services.AddTransient<IAuthService, AuthService>();
         services.AddTransient<IInventoryService, InventoryService>();
+        services.AddTransient<IStockTransferService, StockTransferService>();
         services.AddTransient<ISaleService, SaleService>();
         services.AddTransient<ICustomerService, CustomerService>();
         services.AddTransient<IReportService, ReportService>();
@@ -323,11 +344,13 @@ public partial class App : Application
         services.AddTransient<PromotionsView>();
         services.AddTransient<ProductsView>();
         services.AddTransient<InventoryView>();
+        services.AddTransient<TransfersView>();
         services.AddTransient<CustomersView>();
         services.AddTransient<SalesView>();
         services.AddTransient<ReportsView>();
         services.AddTransient<UsersView>();
         services.AddTransient<SettingsView>();
+        services.AddTransient<StoresView>();
         services.AddTransient<PurchasesView>();
         services.AddTransient<RegisterView>();
     }

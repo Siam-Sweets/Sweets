@@ -13,11 +13,13 @@ public partial class MainWindow : Window
     private readonly ProductsView _products;
     private readonly PromotionsView _promotions;
     private readonly InventoryView _inventory;
+    private readonly TransfersView _transfers;
     private readonly CustomersView _customers;
     private readonly SalesView _sales;
     private readonly ReportsView _reports;
     private readonly UsersView _users;
     private readonly SettingsView _settings;
+    private readonly StoresView _stores;
     private readonly PurchasesView _purchases;
     private readonly RegisterView _register;
     private bool _fullScreen;
@@ -28,8 +30,8 @@ public partial class MainWindow : Window
     private Rect _windowedBounds;
 
     public MainWindow(PosView pos, DashboardView dashboard, ProductsView products, PromotionsView promotions,
-        InventoryView inventory, CustomersView customers, SalesView sales,
-        ReportsView reports, UsersView users, SettingsView settings,
+        InventoryView inventory, TransfersView transfers, CustomersView customers, SalesView sales,
+        ReportsView reports, UsersView users, SettingsView settings, StoresView stores,
         PurchasesView purchases, RegisterView register)
     {
         InitializeComponent();
@@ -43,13 +45,23 @@ public partial class MainWindow : Window
         _products = products;
         _promotions = promotions;
         _inventory = inventory;
+        _transfers = transfers;
         _customers = customers;
         _sales = sales;
         _reports = reports;
         _users = users;
         _settings = settings;
+        _stores = stores;
         _purchases = purchases;
         _register = register;
+        App.StoreChanged += App_StoreChanged;
+        Closed += (_, _) => App.StoreChanged -= App_StoreChanged;
+    }
+
+    private void App_StoreChanged(object? sender, EventArgs e)
+    {
+        if (CurrentStoreName != null)
+            CurrentStoreName.Text = App.CurrentStore?.Name ?? App.StoreSettings.StoreName;
     }
 
     public void SetCurrentUser(User user)
@@ -58,6 +70,7 @@ public partial class MainWindow : Window
         UserRoleLabel.Text = user.Role.ToString();
         UserInitials.Text = string.IsNullOrWhiteSpace(user.FullName) ? "?" : user.FullName[..1].ToUpperInvariant();
         DrawerTitle.Text = $"POS – {user.FullName}";
+        CurrentStoreName.Text = App.CurrentStore?.Name ?? App.StoreSettings.StoreName;
         DrawerDate.Text = DateTime.Now.ToString("D");
         ApplyUiScale(App.StoreSettings.UiScalePercent);
 
@@ -66,11 +79,13 @@ public partial class MainWindow : Window
         NavDashboard.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavProducts.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavInventory.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
+        NavTransfers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavPurchases.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavCustomers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavPromotions.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavUsers.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
+        NavStores.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
         NavSettings.Visibility = admin ? Visibility.Visible : Visibility.Collapsed;
         DrawerManagement.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         DrawerReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
@@ -106,11 +121,13 @@ public partial class MainWindow : Window
             "products" => _products,
             "promotions" => _promotions,
             "inventory" => _inventory,
+            "transfers" => _transfers,
             "purchases" => _purchases,
             "customers" => _customers,
             "sales" => _sales,
             "reports" => _reports,
             "users" => _users,
+            "stores" => _stores,
             "settings" => _settings,
             _ => null
         };
@@ -129,11 +146,13 @@ public partial class MainWindow : Window
             "products" => NavProducts,
             "promotions" => NavPromotions,
             "inventory" => NavInventory,
+            "transfers" => NavTransfers,
             "purchases" => NavPurchases,
             "customers" => NavCustomers,
             "sales" => NavSales,
             "reports" => NavReports,
             "users" => NavUsers,
+            "stores" => NavStores,
             "settings" => NavSettings,
             _ => null
         };
@@ -167,9 +186,9 @@ public partial class MainWindow : Window
         return tag.ToLowerInvariant() switch
         {
             "pos" or "register" => true,
-            "dashboard" or "products" or "promotions" or "inventory" or
+            "dashboard" or "products" or "promotions" or "inventory" or "transfers" or
             "purchases" or "customers" or "sales" or "reports" => role >= UserRole.Manager,
-            "users" or "settings" => role >= UserRole.Admin,
+            "users" or "stores" or "settings" => role >= UserRole.Admin,
             _ => false
         };
     }
@@ -179,8 +198,8 @@ public partial class MainWindow : Window
         var inactiveStyle = (Style)FindResource("NavButton");
         foreach (var button in new[]
                  {
-                     NavDashboard, NavSales, NavProducts, NavInventory, NavPurchases,
-                     NavRegister, NavCustomers, NavReports, NavPromotions, NavUsers, NavSettings
+                     NavDashboard, NavSales, NavProducts, NavInventory, NavTransfers, NavPurchases,
+                     NavRegister, NavCustomers, NavReports, NavPromotions, NavUsers, NavStores, NavSettings
                  })
         {
             button.Style = inactiveStyle;

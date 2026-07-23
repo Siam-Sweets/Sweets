@@ -6,7 +6,7 @@ namespace PosApp.Core.Entities;
 /// A sellable item. Supports fixed-count goods and variable measured amounts
 /// priced by weight, volume, or length.
 /// </summary>
-public class Product
+public class Product : StoreScopedEntity
 {
     public int Id { get; set; }
 

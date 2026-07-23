@@ -20,6 +20,7 @@ env:
   CONFIGURATION: Release
   PROJECT_PATH: src/PosApp.Wpf/PosApp.Wpf.csproj
   APP_NAME: PosApp
+  POSAPP_CLOUD_API_URL: ${{ vars.POSAPP_CLOUD_API_URL }}
 
 # A newer main-branch build supersedes an older rolling dev build. Cancelling
 # the older run also prevents two jobs from replacing dev-build assets at once.
@@ -35,6 +36,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Prepare optional cloud API URL
+        shell: pwsh
+        run: |
+          $value = "$env:POSAPP_CLOUD_API_URL".Trim().TrimEnd('/')
+          if ([string]::IsNullOrWhiteSpace($value)) {
+            Write-Host "POSAPP_CLOUD_API_URL is not configured. Building PosApp with cloud account setup disabled; local POS features remain available."
+            "POSAPP_CLOUD_API_URL_NORMALIZED=" | Out-File -FilePath $env:GITHUB_ENV -Append
+            exit 0
+          }
+          $uri = $null
+          if (-not [Uri]::TryCreate($value, [UriKind]::Absolute, [ref]$uri)) {
+            throw "POSAPP_CLOUD_API_URL is not a valid absolute URL."
+          }
+          if ($uri.Scheme -ne 'https') {
+            throw "POSAPP_CLOUD_API_URL must use HTTPS."
+          }
+          if (-not [string]::IsNullOrEmpty($uri.Query) -or -not [string]::IsNullOrEmpty($uri.Fragment)) {
+            throw "POSAPP_CLOUD_API_URL cannot contain a query string or fragment."
+          }
+          Write-Host "Cloud API URL will be embedded in this build."
+          "POSAPP_CLOUD_API_URL_NORMALIZED=$value" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Validate cloud Worker syntax
+        shell: pwsh
+        run: npm run check --prefix cloud/worker
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -103,6 +130,7 @@ jobs:
           -p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }}
           -p:FileVersion=${{ steps.ver.outputs.numeric_version }}
           -p:InformationalVersion=${{ steps.ver.outputs.version }}
+          -p:PosAppCloudApiUrl="$env:POSAPP_CLOUD_API_URL_NORMALIZED"
 
       - name: Publish single-file self-contained exe
         run: |
@@ -119,6 +147,7 @@ jobs:
             --p:AssemblyVersion=${{ steps.ver.outputs.numeric_version }} `
             --p:FileVersion=${{ steps.ver.outputs.numeric_version }} `
             --p:InformationalVersion=${{ steps.ver.outputs.version }} `
+            --p:PosAppCloudApiUrl="$env:POSAPP_CLOUD_API_URL_NORMALIZED" `
             --output ./publish
 
       - name: Sign application executable

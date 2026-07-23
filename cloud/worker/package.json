@@ -1,0 +1,20 @@
+{
+  "name": "posapp-cloud-worker",
+  "private": true,
+  "version": "1.9.4",
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/index.js && node tests/smoke.mjs",
+    "deploy": "npx wrangler deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "POSAPP_CLOUD_CONFIG": {
+        "description": "Recommended encrypted JSON secret containing Turso URL/token, JWT secret, registration key, and autoInitializeSchema."
+      },
+      "AUTO_INITIALIZE_SCHEMA": {
+        "description": "Set to true to create missing Turso tables automatically on the first request."
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+# Recommended: one JSON secret. Keep this file local and never commit real values.
+POSAPP_CLOUD_CONFIG={"tursoDatabaseUrl":"https://YOUR-DATABASE.turso.io","tursoAuthToken":"YOUR_DATABASE_TOKEN","jwtSecret":"AT_LEAST_32_RANDOM_CHARACTERS","registrationKey":"YOUR_PRIVATE_SIGNUP_KEY","autoInitializeSchema":true}
+
+# Alternative: define these four values separately instead of POSAPP_CLOUD_CONFIG.
+# TURSO_DATABASE_URL=https://YOUR-DATABASE.turso.io
+# TURSO_AUTH_TOKEN=YOUR_DATABASE_TOKEN
+# JWT_SECRET=AT_LEAST_32_RANDOM_CHARACTERS
+# REGISTRATION_KEY=YOUR_PRIVATE_SIGNUP_KEY
+# AUTO_INITIALIZE_SCHEMA=true

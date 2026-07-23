@@ -1,0 +1,122 @@
+name: Deploy PosApp Cloud
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Provision Turso and deploy Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TURSO_DATABASE_URL: ${{ vars.TURSO_DATABASE_URL }}
+      TURSO_DATABASE_AUTH_TOKEN: ${{ secrets.TURSO_DATABASE_AUTH_TOKEN }}
+      TURSO_ORGANIZATION: ${{ vars.TURSO_ORGANIZATION }}
+      TURSO_DATABASE_NAME: ${{ vars.TURSO_DATABASE_NAME || 'posapp-cloud' }}
+      TURSO_GROUP: ${{ vars.TURSO_GROUP || 'default' }}
+      TURSO_PLATFORM_API_TOKEN: ${{ secrets.TURSO_PLATFORM_API_TOKEN }}
+      JWT_SECRET: ${{ secrets.POSAPP_JWT_SECRET }}
+      REGISTRATION_KEY: ${{ secrets.POSAPP_REGISTRATION_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate required configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in JWT_SECRET REGISTRATION_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing GitHub secret: $name" >&2
+              exit 1
+            fi
+          done
+          if { [ -z "${TURSO_DATABASE_URL:-}" ] || [ -z "${TURSO_DATABASE_AUTH_TOKEN:-}" ]; } && \
+             { [ -z "${TURSO_ORGANIZATION:-}" ] || [ -z "${TURSO_PLATFORM_API_TOKEN:-}" ]; }; then
+            echo "Configure either TURSO_DATABASE_URL + TURSO_DATABASE_AUTH_TOKEN, or TURSO_ORGANIZATION + TURSO_PLATFORM_API_TOKEN." >&2
+            exit 1
+          fi
+          if [ "${#JWT_SECRET}" -lt 32 ]; then
+            echo "POSAPP_JWT_SECRET must contain at least 32 characters." >&2
+            exit 1
+          fi
+
+      - name: Resolve Turso database configuration
+        id: turso
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          database_url="${TURSO_DATABASE_URL:-}"
+          database_token="${TURSO_DATABASE_AUTH_TOKEN:-}"
+
+          if [ -z "$database_url" ] || [ -z "$database_token" ]; then
+            api="https://api.turso.tech/v1/organizations/${TURSO_ORGANIZATION}"
+            auth="Authorization: Bearer ${TURSO_PLATFORM_API_TOKEN}"
+
+            status=$(curl --silent --show-error --location --output /tmp/create.json --write-out '%{http_code}' \
+              --request POST "${api}/databases" \
+              --header "$auth" \
+              --header 'Content-Type: application/json' \
+              --data "$(jq -nc --arg name "$TURSO_DATABASE_NAME" --arg group "$TURSO_GROUP" '{name:$name,group:$group}')")
+
+            if [ "$status" != "200" ] && [ "$status" != "409" ]; then
+              cat /tmp/create.json >&2
+              exit 1
+            fi
+
+            curl --fail --silent --show-error --location \
+              "${api}/databases/${TURSO_DATABASE_NAME}" \
+              --header "$auth" > /tmp/database.json
+
+            hostname=$(jq -r '.database.Hostname // .database.hostname // empty' /tmp/database.json)
+            if [ -z "$hostname" ]; then
+              echo "Turso did not return a database hostname." >&2
+              cat /tmp/database.json >&2
+              exit 1
+            fi
+            database_url="https://${hostname}"
+
+            curl --fail --silent --show-error --location --request POST \
+              "${api}/databases/${TURSO_DATABASE_NAME}/auth/tokens?authorization=full-access" \
+              --header "$auth" > /tmp/token.json
+            database_token=$(jq -r '.jwt // empty' /tmp/token.json)
+            if [ -z "$database_token" ]; then
+              echo "Turso did not return a database token." >&2
+              exit 1
+            fi
+          fi
+
+          config=$(jq -nc \
+            --arg url "$database_url" \
+            --arg token "$database_token" \
+            --arg jwt "$JWT_SECRET" \
+            --arg registration "$REGISTRATION_KEY" \
+            '{tursoDatabaseUrl:$url,tursoAuthToken:$token,jwtSecret:$jwt,registrationKey:$registration,autoInitializeSchema:true}')
+
+          echo "::add-mask::$database_token"
+          echo "::add-mask::$config"
+          {
+            echo 'config<<POSAPP_CONFIG_EOF'
+            echo "$config"
+            echo 'POSAPP_CONFIG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate Worker
+        run: npm run check --prefix cloud/worker
+
+      - name: Deploy Worker and encrypted configuration
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloud/worker
+          command: deploy
+          secrets: |
+            POSAPP_CLOUD_CONFIG
+        env:
+          POSAPP_CLOUD_CONFIG: ${{ steps.turso.outputs.config }}

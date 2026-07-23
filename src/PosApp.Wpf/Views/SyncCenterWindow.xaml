@@ -1,0 +1,140 @@
+<Window x:Class="PosApp.Wpf.Views.SyncCenterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource SyncCenter_Title}"
+        Width="1120" Height="760" MinWidth="900" MinHeight="620"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{DynamicResource BackgroundBrush}"
+        Icon="/PosApp;component/Assets/PosApp.ico">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="{DynamicResource SyncCenter_Title}" Style="{StaticResource Heading1}"/>
+                <TextBlock x:Name="StatusText" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,16,0"/>
+            </StackPanel>
+            <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                <Button Content="{DynamicResource Common_Refresh}" Style="{StaticResource OutlineButton}" Click="Refresh_Click" Padding="14,8" Margin="0,0,8,0"/>
+                <Button Content="{DynamicResource Cloud_SyncNow}" Style="{StaticResource PrimaryButton}" Click="SyncNow_Click" Padding="14,8"/>
+            </WrapPanel>
+        </Grid>
+
+        <TabControl Grid.Row="1">
+            <TabItem Header="{DynamicResource SyncCenter_Conflicts}">
+                <Grid Margin="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="390"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <TextBlock Text="{DynamicResource SyncCenter_ConflictHelp}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <DataGrid x:Name="ConflictGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" SelectionMode="Single" SelectionChanged="ConflictGrid_SelectionChanged">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="{DynamicResource Store_Name}" Binding="{Binding StoreName}" Width="120"/>
+                                <DataGridTextColumn Header="{DynamicResource SyncCenter_Record}" Binding="{Binding EntityType}" Width="100"/>
+                                <DataGridTextColumn Header="{DynamicResource SyncCenter_Created}" Binding="{Binding CreatedAt, StringFormat={}{0:g}}" Width="130"/>
+                                <DataGridTextColumn Header="{DynamicResource SyncCenter_Message}" Binding="{Binding Message}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                    <Border Grid.Column="2" Style="{StaticResource Card}" Padding="14">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock x:Name="ConflictDetailText" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                            <DataGrid x:Name="FieldGrid" Grid.Row="1" AutoGenerateColumns="False" CanUserAddRows="False"
+                                      HeadersVisibility="Column" SelectionMode="Single">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="{DynamicResource SyncCenter_Field}" Binding="{Binding Field}" Width="150" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="{DynamicResource SyncCenter_Local}" Binding="{Binding LocalValue}" Width="*" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="{DynamicResource SyncCenter_Cloud}" Binding="{Binding CloudValue}" Width="*" IsReadOnly="True"/>
+                                    <DataGridTemplateColumn Header="{DynamicResource SyncCenter_Use}" Width="110">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Choice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Padding="5,2"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <WrapPanel Grid.Row="2" HorizontalAlignment="Right" Margin="0,12,0,0">
+                                <Button x:Name="KeepLocalButton" Content="{DynamicResource SyncCenter_KeepLocal}" Style="{StaticResource OutlineButton}" Click="KeepLocal_Click" Padding="14,8" Margin="0,0,8,0"/>
+                                <Button x:Name="UseCloudButton" Content="{DynamicResource SyncCenter_UseCloud}" Style="{StaticResource OutlineButton}" Click="UseCloud_Click" Padding="14,8" Margin="0,0,8,0"/>
+                                <Button x:Name="MergeButton" Content="{DynamicResource SyncCenter_ApplyMerge}" Style="{StaticResource PrimaryButton}" Click="Merge_Click" Padding="14,8"/>
+                            </WrapPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource SyncCenter_Stores}">
+                <DataGrid x:Name="StoreGrid" Margin="12" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="{DynamicResource Store_Name}" Binding="{Binding StoreName}" Width="*"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Cursor}" Binding="{Binding PullCursor}" Width="110"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Pending}" Binding="{Binding PendingChanges}" Width="90"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Failed}" Binding="{Binding FailedChanges}" Width="90"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Conflicts}" Binding="{Binding ConflictCount}" Width="90"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_LastSync}" Binding="{Binding LastSuccessfulSyncAt, StringFormat={}{0:g}}" Width="150"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Error}" Binding="{Binding LastError}" Width="2*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource SyncCenter_Queue}">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Button Content="{DynamicResource SyncCenter_RetryFailed}" Style="{StaticResource OutlineButton}" Click="RetryFailed_Click" Padding="14,8" HorizontalAlignment="Left" Margin="0,0,0,10"/>
+                    <DataGrid x:Name="QueueGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="{DynamicResource Store_Name}" Binding="{Binding StoreName}" Width="150"/>
+                            <DataGridTextColumn Header="{DynamicResource SyncCenter_Record}" Binding="{Binding EntityType}" Width="120"/>
+                            <DataGridTextColumn Header="{DynamicResource SyncCenter_Attempts}" Binding="{Binding AttemptCount}" Width="90"/>
+                            <DataGridTextColumn Header="{DynamicResource SyncCenter_LastAttempt}" Binding="{Binding LastAttemptAt, StringFormat={}{0:g}}" Width="150"/>
+                            <DataGridTextColumn Header="{DynamicResource SyncCenter_Error}" Binding="{Binding LastError}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource SyncCenter_Devices}">
+                <DataGrid x:Name="DeviceGrid" Margin="12" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Device}" Binding="{Binding Name}" Width="*"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Platform}" Binding="{Binding Platform}" Width="120"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Version}" Binding="{Binding AppVersion}" Width="100"/>
+                        <DataGridCheckBoxColumn Header="{DynamicResource SyncCenter_Current}" Binding="{Binding IsCurrent}" Width="85"/>
+                        <DataGridCheckBoxColumn Header="{DynamicResource SyncCenter_Revoked}" Binding="{Binding IsRevoked}" Width="85"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_StoreCursors}" Binding="{Binding StoreCursorCount}" Width="110"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_LastSeen}" Binding="{Binding LastSeenAt, StringFormat={}{0:g}}" Width="160"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <TabItem Header="{DynamicResource SyncCenter_History}">
+                <DataGrid x:Name="HistoryGrid" Margin="12" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Started}" Binding="{Binding StartedAt, StringFormat={}{0:g}}" Width="150"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Status}" Binding="{Binding Status}" Width="95"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Stores}" Binding="{Binding StoreCount}" Width="80"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Pushed}" Binding="{Binding PushedChanges}" Width="80"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Pulled}" Binding="{Binding PulledChanges}" Width="80"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Conflicts}" Binding="{Binding ConflictCount}" Width="90"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Pending}" Binding="{Binding PendingAfter}" Width="90"/>
+                        <DataGridTextColumn Header="{DynamicResource SyncCenter_Error}" Binding="{Binding Error}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+        </TabControl>
+
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button Grid.Column="1" Content="{DynamicResource SyncCenter_ClearResolved}" Style="{StaticResource OutlineButton}" Click="ClearResolved_Click" Padding="14,8" Margin="0,0,8,0"/>
+            <Button Grid.Column="2" Content="{DynamicResource Common_Close}" Style="{StaticResource OutlineButton}" IsCancel="True" Padding="18,8"/>
+        </Grid>
+    </Grid>
+</Window>

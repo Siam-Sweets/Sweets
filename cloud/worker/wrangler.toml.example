@@ -1,0 +1,17 @@
+name = "posapp-cloud"
+main = "src/index.js"
+compatibility_date = "2026-07-22"
+workers_dev = true
+
+[vars]
+AUTO_INITIALIZE_SCHEMA = "true"
+
+# Recommended: add one encrypted secret in the Cloudflare dashboard:
+# POSAPP_CLOUD_CONFIG = {"tursoDatabaseUrl":"https://...","tursoAuthToken":"...","jwtSecret":"...","registrationKey":"...","autoInitializeSchema":true}
+#
+# Alternative: add these values separately. TURSO_AUTH_TOKEN, JWT_SECRET,
+# and REGISTRATION_KEY must be Secret type. TURSO_DATABASE_URL may be Text.
+# TURSO_DATABASE_URL
+# TURSO_AUTH_TOKEN
+# JWT_SECRET          (at least 32 random characters)
+# REGISTRATION_KEY    (required by the desktop app only during owner sign-up)

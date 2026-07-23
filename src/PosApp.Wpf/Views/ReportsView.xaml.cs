@@ -12,6 +12,7 @@ public partial class ReportsView : UserControl, IRefreshable
 {
     private readonly IReportService _reports;
     private readonly IHardwareService _hardware;
+    private readonly IStoreService _stores;
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private string _activePeriod = "today";
     private int _loadVersion;
@@ -19,12 +20,15 @@ public partial class ReportsView : UserControl, IRefreshable
     private IReadOnlyList<TopProductRow> _currentTopProducts = Array.Empty<TopProductRow>();
     private IReadOnlyList<SalesByCategoryRow> _currentCategories = Array.Empty<SalesByCategoryRow>();
     private IReadOnlyList<PaymentBreakdownRow> _currentPayments = Array.Empty<PaymentBreakdownRow>();
+    private IReadOnlyList<StorePerformanceRow> _currentStorePerformance = Array.Empty<StorePerformanceRow>();
+    private bool _storeFilterReady;
 
-    public ReportsView(IReportService reports, IHardwareService hardware)
+    public ReportsView(IReportService reports, IHardwareService hardware, IStoreService stores)
     {
         InitializeComponent();
         _reports = reports;
         _hardware = hardware;
+        _stores = stores;
         FromDate.SelectedDate = DateTime.Today.AddDays(-30);
         ToDate.SelectedDate = DateTime.Today;
     }
@@ -43,18 +47,22 @@ public partial class ReportsView : UserControl, IRefreshable
         try
         {
             if (version != _loadVersion) return;
+            await EnsureStoreFilterAsync();
             var (from, to) = GetRange();
+            var storeId = SelectedStoreId();
 
-            var range = await _reports.GetRangeReportAsync(from, to);
-            var top = await _reports.GetTopProductsAsync(from, to, 20);
-            var cats = await _reports.GetSalesByCategoryAsync(from, to);
-            var pay = await _reports.GetPaymentBreakdownAsync(from, to);
+            var range = await _reports.GetRangeReportAsync(from, to, storeId);
+            var top = await _reports.GetTopProductsAsync(from, to, 20, storeId);
+            var cats = await _reports.GetSalesByCategoryAsync(from, to, storeId);
+            var pay = await _reports.GetPaymentBreakdownAsync(from, to, storeId);
+            var performance = await _reports.GetStorePerformanceAsync(from, to, storeId);
             if (version != _loadVersion) return;
 
             _currentRange = range;
             _currentTopProducts = top.ToList();
             _currentCategories = cats.ToList();
             _currentPayments = pay.ToList();
+            _currentStorePerformance = performance.ToList();
 
             KpiGross.Text = FormattingUtilities.Money(range.GrossSales, App.StoreSettings);
             KpiProfit.Text = FormattingUtilities.Money(range.GrossProfit, App.StoreSettings);
@@ -64,6 +72,7 @@ public partial class ReportsView : UserControl, IRefreshable
             TopProductsGrid.ItemsSource = _currentTopProducts;
             CategoryGrid.ItemsSource = _currentCategories;
             PaymentGrid.ItemsSource = _currentPayments;
+            StorePerformanceGrid.ItemsSource = _currentStorePerformance;
         }
         catch (Exception ex)
         {
@@ -73,6 +82,31 @@ public partial class ReportsView : UserControl, IRefreshable
         {
             _loadGate.Release();
         }
+    }
+
+    private async Task EnsureStoreFilterAsync()
+    {
+        if (_storeFilterReady) return;
+        var stores = await _stores.GetStoresAsync(false);
+        var options = new List<StoreFilterOption>();
+        if (App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin)
+            options.Add(new StoreFilterOption(0, FindResource("Transfer_AllStores")?.ToString() ?? "All stores"));
+        options.AddRange(stores.Select(x => new StoreFilterOption(x.Id, x.Name)));
+        StoreFilter.ItemsSource = options;
+        StoreFilter.SelectedValue = App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin ? 0 : App.CurrentStore?.Id ?? 1;
+        StoreFilter.IsEnabled = App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin;
+        _storeFilterReady = true;
+    }
+
+    private int? SelectedStoreId()
+    {
+        var value = StoreFilter.SelectedValue is int id ? id : App.CurrentStore?.Id ?? 1;
+        return value == 0 ? null : value;
+    }
+
+    private async void StoreFilter_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_storeFilterReady) await RefreshAsync();
     }
 
     private (DateTime from, DateTime to) GetRange()
@@ -160,6 +194,13 @@ public partial class ReportsView : UserControl, IRefreshable
             PageReportPrinter.AppendEntry(builder, row.Date.ToString("dd MMM yyyy"),
                 $"Txns {row.TransactionCount} | Items {row.ItemCount:0.###}",
                 $"Net {PageReportPrinter.Money(row.NetSales)} | Profit {PageReportPrinter.Money(row.GrossProfit)}");
+
+        PageReportPrinter.AppendSection(builder, "Store performance");
+        if (_currentStorePerformance.Count == 0) PageReportPrinter.AppendWrapped(builder, "No store sales in this period.");
+        foreach (var row in _currentStorePerformance)
+            PageReportPrinter.AppendEntry(builder, $"{row.StoreCode} - {row.StoreName}",
+                $"Transactions {row.TransactionCount} | Net {PageReportPrinter.Money(row.NetSales)}",
+                $"Gross profit {PageReportPrinter.Money(row.GrossProfit)}");
 
         PageReportPrinter.AppendSection(builder, "Payment breakdown");
         if (_currentPayments.Count == 0) PageReportPrinter.AppendWrapped(builder, "No payments in this period.");
