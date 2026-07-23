@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.6 — Case-insensitive build version normalization
+
+- Fixed manual GitHub Actions builds rejecting uppercase version prefixes such as `V1.9.6`.
+- Normalizes one leading `v` or `V` before validating the semantic version.
+- Added support for both lowercase `v*` and uppercase `V*` release-tag triggers.
+- Passes the workflow-dispatch version through an environment variable instead of embedding it directly in PowerShell.
+- No database schema, synchronization protocol, cloud deployment, desktop UI, or image-handling changes.
+
 ## 1.9.5 — Cloudflare Node 24 and atomic secret deployment fix
 
 - Replaced `cloudflare/wrangler-action@v3` in the cloud deployment workflow with explicit Node.js 24 setup and Wrangler 4.81.0.

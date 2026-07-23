@@ -3,13 +3,13 @@ name: Build PosApp
 on:
   push:
     branches: [ main ]
-    tags: [ 'v*' ]
+    tags: [ 'v*', 'V*' ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v1.0.5) - leave empty for dev build'
+        description: 'Version (e.g. 1.9.6, v1.9.6, or V1.9.6) - leave empty for dev build'
         required: false
         default: ''
 
@@ -74,6 +74,8 @@ jobs:
       - name: Determine version
         id: ver
         shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version }}
         run: |
           $projectText = Get-Content -LiteralPath "${{ env.PROJECT_PATH }}" -Raw
           $projectMatch = [regex]::Match($projectText, '<Version>\s*([^<]+?)\s*</Version>')
@@ -83,11 +85,11 @@ jobs:
           if (-not $projectCoreMatch.Success) { throw "Invalid project version: $projectVersion" }
           $projectCore = "$($projectCoreMatch.Groups[1].Value).$($projectCoreMatch.Groups[2].Value).$($projectCoreMatch.Groups[3].Value)"
 
-          if ($env:GITHUB_REF -match 'refs/tags/v?(.+)$') {
-            $v = $matches[1]
+          if ($env:GITHUB_REF -match '^refs/tags/(.+)$') {
+            $v = [regex]::Replace($matches[1].Trim(), '^[vV]', '')
             $isRelease = 'true'
-          } elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and '${{ github.event.inputs.version }}' -ne '') {
-            $v = '${{ github.event.inputs.version }}'.TrimStart('v')
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and -not [string]::IsNullOrWhiteSpace($env:REQUESTED_VERSION)) {
+            $v = [regex]::Replace($env:REQUESTED_VERSION.Trim(), '^[vV]', '')
             $isRelease = 'true'
           } else {
             $v = "$projectCore-dev.$($env:GITHUB_RUN_NUMBER)"
