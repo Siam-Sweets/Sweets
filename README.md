@@ -1,10 +1,10 @@
 # PosApp - Offline-First Point of Sale (WPF / .NET 8)
 
-A feature-rich, **offline-first** Point of Sale desktop application for Windows, built with C# and WPF on .NET 8. Version 1.9.4 retains multi-store operations, consolidated reporting, and auditable stock transfers while keeping checkout available from local SQLite.
+A feature-rich, **offline-first** Point of Sale desktop application for Windows, built with C# and WPF on .NET 8. Version 1.9.5 retains multi-store operations, consolidated reporting, and auditable stock transfers while keeping checkout available from local SQLite.
 
 ## Offline-First Cloud Boundary
 
-Version 1.9.4 keeps local SQLite authoritative for checkout and retains all-store owner reporting, per-store inventory visibility, and the draft → dispatch → receive/cancel stock-transfer workflow. Transfer movements are append-only ledger records and participate in the existing conflict-safe cloud synchronization model.
+Version 1.9.5 keeps local SQLite authoritative for checkout and retains all-store owner reporting, per-store inventory visibility, and the draft → dispatch → receive/cancel stock-transfer workflow. Transfer movements are append-only ledger records and participate in the existing conflict-safe cloud synchronization model.
 
 A fresh Windows device can restore the latest full snapshots after creating an automatic local backup. Access and refresh tokens are protected with Windows DPAPI; Turso credentials and JWT secrets stay only in Worker secrets. Product and user image paths remain excluded, and no image files are uploaded.
 
@@ -41,7 +41,7 @@ This is an original POS implementation inspired by the publicly known feature se
 4. Cancelling a dispatched transfer restores source stock with compensating ledger entries. Received transfers cannot be cancelled.
 5. If the destination lacks the product, PosApp creates matching catalog/category records without copying any image path or image file.
 
-The v1.9.4 patch contains no database-schema changes; the v1.9.0 local SQLite upgrade remains additive. Existing v1.8.0 cloud databases require only a Worker redeploy; no new Turso schema migration is required.
+The v1.9.5 patch fixes cloud deployment by running Wrangler 4.81.0 on Node.js 24 and uploading Worker code plus the encrypted configuration in one deployment. It contains no database-schema changes; existing cloud databases require only a Worker redeploy.
 
 ## Tech Stack
 
@@ -121,7 +121,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-1.9.4-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-1.9.5-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -147,21 +147,21 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers now retain the real application version in their filename and Windows metadata, for example `PosApp-1.9.4-dev.27-Setup.exe` with resource version `1.9.4.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers now retain the real application version in their filename and Windows metadata, for example `PosApp-1.9.5-dev.27-Setup.exe` with resource version `1.9.5.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v1.9.4`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v1.9.5`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.9.4
-git push origin v1.9.4
+git tag v1.9.5
+git push origin v1.9.5
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.9.4`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.9.5`.
 
 For in-app updates, configure these GitHub Actions repository secrets:
 
@@ -235,6 +235,8 @@ This project is provided as-is for your personal/commercial use. The architectur
 ## Troubleshooting
 
 **Build fails on `dotnet restore`** — make sure you have the .NET 8 SDK installed: `dotnet --version` should report `8.x.x`.
+
+**Cloud deployment fails** — use the v1.9.5 workflow. It runs Node.js 24 directly and does not use `cloudflare/wrangler-action` secret uploading. Ensure `CLOUDFLARE_ACCOUNT_ID` belongs to the same account selected by a token created from the **Edit Cloudflare Workers** template. Do not enable the insecure Node 20 compatibility variable.
 
 **Database upgrade errors** — do not delete the database. Review `%LOCALAPPDATA%\PosApp\posapp.log`; update recovery copies are under `%LOCALAPPDATA%\PosApp\Backups\Updates`. Reinstall the previous PosApp version if necessary, then use **Settings → Database → Restore** with the newest `posapp-before-update-*.db` or `posapp-before-startup-*.db` file.
 

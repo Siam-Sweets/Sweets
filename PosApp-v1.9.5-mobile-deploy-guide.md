@@ -1,4 +1,4 @@
-# PosApp v1.9.4 Phone-Only Cloud Setup
+# PosApp v1.9.5 Phone-Only Cloud Setup
 
 ## Cloud-enabled build
 
@@ -15,3 +15,7 @@
 Leave `POSAPP_CLOUD_API_URL` unset and run **Build PosApp**. The build will complete normally, and all local POS/multi-store features will remain available without cloud sync.
 
 The Worker URL is embedded only when the variable is supplied. PosApp does not display an endpoint field. The Windows device name is detected and registered automatically; no device-name field is shown.
+
+## v1.9.5 deployment fix
+
+The workflow uses Node.js 24 and Wrangler 4.81.0 directly. Worker code and `POSAPP_CLOUD_CONFIG` are deployed together, so the old **Failed to upload secrets** stage is no longer used. Do not enable the insecure Node 20 compatibility setting.

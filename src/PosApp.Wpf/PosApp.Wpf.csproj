@@ -12,12 +12,12 @@
     <ApplicationIcon>Assets\PosApp.ico</ApplicationIcon>
     <AssemblyName>PosApp</AssemblyName>
     <RootNamespace>PosApp.Wpf</RootNamespace>
-    <Version>1.9.4</Version>
+    <Version>1.9.5</Version>
     <Company>PosApp</Company>
     <Product>PosApp - Local POS</Product>
-    <AssemblyVersion>1.9.4.0</AssemblyVersion>
-    <FileVersion>1.9.4.0</FileVersion>
-    <InformationalVersion>1.9.4</InformationalVersion>
+    <AssemblyVersion>1.9.5.0</AssemblyVersion>
+    <FileVersion>1.9.5.0</FileVersion>
+    <InformationalVersion>1.9.5</InformationalVersion>
     <PosAppCloudApiUrl Condition="'$(PosAppCloudApiUrl)' == ''"></PosAppCloudApiUrl>
   </PropertyGroup>
 

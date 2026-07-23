@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.5 — Cloudflare Node 24 and atomic secret deployment fix
+
+- Replaced `cloudflare/wrangler-action@v3` in the cloud deployment workflow with explicit Node.js 24 setup and Wrangler 4.81.0.
+- Deploys Worker code and `POSAPP_CLOUD_CONFIG` together through Wrangler's `--secrets-file` option instead of the action's separate secret-upload phase.
+- Added a Cloudflare authentication preflight and secure temporary-secret-file cleanup.
+- Accepts Turso database creation HTTP 200, 201, or existing-database HTTP 409 responses.
+- No database schema, synchronization protocol, desktop UI, or image-handling changes.
+
 ## 1.9.4 — Optional cloud build configuration
 
 - Made the `POSAPP_CLOUD_API_URL` GitHub Actions repository variable optional.

@@ -38,9 +38,9 @@ Secret:
 ## Deploy
 
 1. Open **Actions → Deploy PosApp Cloud → Run workflow**.
-2. The workflow resolves or provisions Turso, deploys the Worker, and stores one encrypted Worker secret named `POSAPP_CLOUD_CONFIG`.
+2. The workflow resolves or provisions Turso, verifies Cloudflare authentication, then deploys the Worker and encrypted `POSAPP_CLOUD_CONFIG` together with Wrangler 4.81.0 on Node.js 24.
 3. Open the workflow result and copy the deployed `workers.dev` URL.
-4. Test `<worker-url>/v1/health`; it should return `ok: true` and version `1.9.4`.
+4. Test `<worker-url>/v1/health`; it should return `ok: true` and version `1.9.5`.
 5. Optionally add a GitHub Actions **repository variable** named `POSAPP_CLOUD_API_URL` containing that URL. Leave it unset for a local-only build.
 6. Run **Actions → Build PosApp**. The URL is embedded in the Windows build and is not shown as an editable app field.
 
@@ -55,3 +55,9 @@ On the Windows computer running PosApp, open **Settings → Cloud**:
 The device name is detected automatically from Windows and registered without showing a device-name field.
 
 `AUTO_INITIALIZE_SCHEMA=true` creates missing Turso tables on the first Worker request. Existing tables remain unchanged because initialization uses idempotent `CREATE ... IF NOT EXISTS` statements.
+
+## Cloudflare authentication requirements
+
+- Create `CLOUDFLARE_API_TOKEN` from Cloudflare's **Edit Cloudflare Workers** template and scope it to the account identified by `CLOUDFLARE_ACCOUNT_ID`.
+- Do not add `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`; v1.9.5 no longer depends on Node.js 20.
+- If authentication is wrong, the **Verify Cloudflare authentication** step now shows the failure before deployment.
