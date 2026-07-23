@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (e.g. 1.9.6, v1.9.6, or V1.9.6) - leave empty for dev build'
+        description: 'Version (e.g. 1.9.7, v1.9.7, or V1.9.7) - leave empty for dev build'
         required: false
         default: ''
 
@@ -354,6 +354,8 @@ jobs:
       - name: Determine version and tag
         id: ver
         shell: bash
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version }}
         run: |
           project_version="$(sed -n 's:.*<Version>[[:space:]]*\([^<]*\)[[:space:]]*</Version>.*:\1:p' "${{ env.PROJECT_PATH }}" | head -n 1 | xargs)"
           if [[ ! "$project_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
@@ -364,13 +366,13 @@ jobs:
 
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             v="${GITHUB_REF#refs/tags/}"
-            v="${v#v}"
+            v="${v#[vV]}"
             tag="v${v}"
             is_release="true"
             is_prerelease="false"
-          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
-            v="${{ inputs.version }}"
-            v="${v#v}"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "${REQUESTED_VERSION:-}" ]]; then
+            v="$(printf '%s' "$REQUESTED_VERSION" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            v="${v#[vV]}"
             tag="v${v}"
             is_release="true"
             is_prerelease="false"

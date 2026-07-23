@@ -1,4 +1,4 @@
-# PosApp Cloud Worker v1.9.6
+# PosApp Cloud Worker v1.9.7
 
 Self-hosted account, device, snapshot, and incremental-sync API for PosApp. Turso credentials and JWT signing material remain in Worker secrets; Windows devices receive only PosApp access/refresh tokens.
 
@@ -6,7 +6,7 @@ Self-hosted account, device, snapshot, and incremental-sync API for PosApp. Turs
 
 Use `.github/workflows/deploy-cloud-worker.yml` and follow `MOBILE_DEPLOY.md`. The workflow accepts GitHub variables/secrets, uses an existing Turso database or provisions one through the Platform API, and deploys the Worker without a local CLI.
 
-The v1.9.6 workflow explicitly uses Node.js 24 and Wrangler 4.81.0. It passes `POSAPP_CLOUD_CONFIG` through Wrangler `deploy --secrets-file`, so code and secrets are uploaded together and the former `wrangler-action` secret-upload failure is avoided.
+The v1.9.7 workflow explicitly uses Node.js 24 and Wrangler 4.81.0. It passes `POSAPP_CLOUD_CONFIG` through Wrangler `deploy --secrets-file`, so code and secrets are uploaded together and the former `wrangler-action` secret-upload failure is avoided.
 
 The recommended runtime configuration is one encrypted Cloudflare secret named `POSAPP_CLOUD_CONFIG`:
 
@@ -43,8 +43,8 @@ npx wrangler secret put REGISTRATION_KEY
 
 ### Upgrade
 
-- From v1.6.0: apply `migrations/v1.7.0.sql` once, then deploy the v1.9.6 Worker.
-- From v1.7.0 or v1.8.0: deploy the v1.9.6 Worker directly. No Turso schema migration is required.
+- From v1.6.0: apply `migrations/v1.7.0.sql` once, then deploy the v1.9.7 Worker.
+- From v1.7.0 or v1.8.0: deploy the v1.9.7 Worker directly. No Turso schema migration is required.
 
 ## Sync behavior
 

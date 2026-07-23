@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.7 — Linux release version normalization
+
+- Fixed the GitHub Release job rejecting uppercase version prefixes such as `V1.9.7`.
+- Normalizes one leading `v` or `V` in both Windows build and Linux release jobs.
+- Passes the manual release version through an environment variable before Bash validation.
+- Preserves lowercase release tags such as `v1.9.7` regardless of whether the input/tag used `v` or `V`.
+- No database schema, synchronization protocol, cloud Worker behavior, desktop UI, or image-handling changes.
+
 ## 1.9.6 — Case-insensitive build version normalization
 
 - Fixed manual GitHub Actions builds rejecting uppercase version prefixes such as `V1.9.6`.
