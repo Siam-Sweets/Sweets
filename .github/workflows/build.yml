@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (e.g. 1.10.6, v1.10.6, or V1.10.6) - leave empty for dev build'
+        description: 'Version (e.g. 1.10.9, v1.10.9, or V1.10.9) - leave empty for dev build'
         required: false
         default: ''
 
@@ -37,14 +37,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Prepare optional cloud API URL
+      - name: Validate required cloud API URL
         shell: pwsh
         run: |
           $value = "$env:POSAPP_CLOUD_API_URL".Trim().TrimEnd('/')
           if ([string]::IsNullOrWhiteSpace($value)) {
-            Write-Host "POSAPP_CLOUD_API_URL is not configured. Building PosApp with cloud account setup disabled; local POS features remain available."
-            "POSAPP_CLOUD_API_URL_NORMALIZED=" | Out-File -FilePath $env:GITHUB_ENV -Append
-            exit 0
+            throw "POSAPP_CLOUD_API_URL is required because first-run setup is online-only."
           }
           $uri = $null
           if (-not [Uri]::TryCreate($value, [UriKind]::Absolute, [ref]$uri)) {

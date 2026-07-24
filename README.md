@@ -1,12 +1,14 @@
 # PosApp - Offline-First Point of Sale (WPF / .NET 8)
 
-A feature-rich, **offline-first** Point of Sale desktop application for Windows, built with C# and WPF on .NET 8. Version 1.10.6 retains multi-store operations, consolidated reporting, and auditable stock transfers while keeping checkout available from local SQLite.
+A feature-rich, **offline-first** Point of Sale desktop application for Windows, built with C# and WPF on .NET 8. Version 1.10.9 adds online-only first-run onboarding with existing-account sign-in while retaining multi-store operations, consolidated reporting, and auditable stock transfers.
 
 ## Offline-First Cloud Boundary
 
-Version 1.10.6 keeps local SQLite authoritative for checkout and retains all-store owner reporting, per-store inventory visibility, and the draft → dispatch → receive/cancel stock-transfer workflow. Transfer movements are append-only ledger records and participate in the existing conflict-safe cloud synchronization model.
+Version 1.10.9 keeps local SQLite authoritative for checkout and retains all-store owner reporting, per-store inventory visibility, and the draft → dispatch → receive/cancel stock-transfer workflow. Transfer movements are append-only ledger records and participate in the existing conflict-safe cloud synchronization model.
 
 A fresh Windows device can restore the latest full snapshots after creating an automatic local backup. Access and refresh tokens are protected with Windows DPAPI; Turso credentials and JWT secrets stay only in Worker secrets. Product and user image paths remain excluded, and no image files are uploaded.
+
+First run is online-only. The setup window offers **Sign in** for an existing organization and **Create organization** for a new one. Existing-account sign-in accepts email/password and restores the complete cloud snapshot before onboarding completes. New organizations upload their complete initial store snapshot before the device-local completion marker is written. Device-local `app:`, `cloud:`, and `device:` settings never enter cloud snapshots or the incremental outbox.
 
 This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
 
@@ -22,7 +24,7 @@ This is an original POS implementation inspired by the publicly known feature se
 | **Sales / Transactions** | Filter by date and status, print the filtered sales-history page, view and reprint receipts, void (restores stock), repeatable partial refunds by item/quantity/payment method, refund tracking, suspend/recall, CSV export |
 | **Users & Roles**   | PIN-based login, three roles (Cashier, Manager, Admin) with sidebar access gated by role, last-admin protection, PIN reset |
 | **Multiple Stores** | Admin-only store management, create/edit/activate/deactivate/switch workflows, per-store sales, inventory, purchases, users, register sessions, settings, receipt numbers, combined owner reporting, and draft/dispatch/receive/cancel stock transfers with an audit trail |
-| **Offline-First Cloud Sync** | Optional owner account, automatic outbox push/cursor pull, retries, idempotency, tombstones, conflict review/merge, device diagnostics, sync history, manual Sync Now, full snapshots, and fresh-device restore |
+| **Offline-First Cloud Sync** | Required first-run owner sign-in or organization creation, automatic outbox push/cursor pull, retries, idempotency, tombstones, conflict review/merge, device diagnostics, sync history, manual Sync Now, full snapshots, and fresh-device restore |
 | **Reports & Dashboard** | Store or All Stores scope for administrators, inclusive From/To date filter, KPIs, daily sales, store-performance table, top products, hourly activity, payment breakdown, detailed reports, and printable page summaries |
 | **Taxes & Discounts** | Per-product tax rate, reusable offline promotions with codes/dates/use limits, and percentage or fixed line discounts at the register |
 | **Management workspace** | Slide-over terminal menu, role-aware back-office navigation, documents/sales, products, stock, purchases, customers/suppliers, reporting, promotions, users/security, payment/tax/company settings |
@@ -41,21 +43,25 @@ This is an original POS implementation inspired by the publicly known feature se
 4. Cancelling a dispatched transfer restores source stock with compensating ledger entries. Received transfers cannot be cancelled.
 5. If the destination lacks the product, PosApp creates matching catalog/category records without copying any image path or image file.
 
-Version 1.10.6 also fixes Cloudflare owner signup by using the Workers-compatible PBKDF2 limit of 100,000 iterations for cloud passwords. Local desktop user PIN hashing remains at 120,000 iterations. It retains the comprehensive integrity and synchronization hardening release. It makes business operations idempotent and atomic, protects stock and promotion counters with optimistic concurrency, enforces an append-only stock ledger, validates coherent multi-store backup sets before restore, quarantines invalid remote rows, hardens device authentication/logout, and closes store-authorization and historical-reporting gaps. Product/user image paths and image files remain excluded from cloud payloads.
+Version 1.10.9 retains the Stock Transfers Dark-mode fix. Both tabs use theme-aware headers and content surfaces instead of Windows default white tab chrome. The inventory store selector renders the store name rather than the `StoreFilterOption` object representation, while transfer and cross-store inventory data remain unchanged.
 
-Version 1.10.6 fixes category usability on smaller/high-DPI displays. Category Management and the category editor now scroll correctly, the editor includes a live color preview, and saved category colors appear in management, POS category filters, and product-card accents.
+Version 1.10.9 also retains the Cloudflare owner-signup fix by using the Workers-compatible PBKDF2 limit of 100,000 iterations for cloud passwords. Local desktop user PIN hashing remains at 120,000 iterations. It retains the comprehensive integrity and synchronization hardening release. It makes business operations idempotent and atomic, protects stock and promotion counters with optimistic concurrency, enforces an append-only stock ledger, validates coherent multi-store backup sets before restore, quarantines invalid remote rows, hardens device authentication/logout, and closes store-authorization and historical-reporting gaps. Product/user image paths and image files remain excluded from cloud payloads.
 
-Version 1.10.6 cleans up remaining dark-mode light surfaces. Programmatically created dialogs, management popups, and Windows caption bars now follow the active theme so purchases, supplier entry, register dialogs, and similar windows no longer show bright white areas while Dark mode is enabled.
+Version 1.10.9 retains category usability on smaller/high-DPI displays. Category Management and the category editor scroll correctly, the editor includes a live color preview, and saved category colors appear in management, POS category filters, and product-card accents.
 
-Version 1.10.6 also makes the Store Details editor resizable and vertically scrollable, keeping Code, Store Name, Address, Phone, and the action buttons reachable on smaller or display-scaled screens.
+Version 1.10.9 retains the dark-mode surface cleanup. Programmatically created dialogs, management popups, and Windows caption bars follow the active theme so purchases, supplier entry, register dialogs, and similar windows no longer show bright white areas while Dark mode is enabled.
 
-Version 1.10.6 also makes the **Require an open register before selling** option authoritative for cash and non-cash checkout. Stock-tracked checkout and item refunds now insert immutable ledger rows only after final sale/item IDs exist, eliminating the append-only validation failure while retaining all-or-nothing database transactions.
+Version 1.10.9 keeps the Store Details editor resizable and vertically scrollable, keeping Code, Store Name, Address, Phone, and the action buttons reachable on smaller or display-scaled screens.
+
+Version 1.10.9 keeps the **Require an open register before selling** option authoritative for cash and non-cash checkout. Stock-tracked checkout and item refunds insert immutable ledger rows only after final sale/item IDs exist, eliminating the append-only validation failure while retaining all-or-nothing database transactions.
+
+Version 1.10.9 retains the hardened second checkout phase by resolving persisted sale and sale-item rows through permanent sync identifiers before inserting stock-ledger records. This prevents SQLite from receiving stale or temporary numeric references and keeps the reference-integrity triggers enabled. Trigger errors identify the exact invalid product, sale, sale-item, transfer, transfer-item, or user reference.
 
 ## Tech Stack
 
 - **.NET 8 (LTS)** + **WPF** (XAML and code-behind)
 - **EF Core 8** + **SQLite** (single offline database at `%LOCALAPPDATA%\PosApp\posapp.db`, partitioned by store)
-- Optional **Cloudflare Worker** API + **Turso/libSQL** cloud database for accounts, snapshots, and incremental synchronization
+- **Cloudflare Worker** API + **Turso/libSQL** cloud database for first-run accounts, snapshots, and incremental synchronization
 - Windows **DPAPI** for access/refresh-token protection
 - **System.IO.Ports** for serial barcode scanners
 - **System.Drawing.Common** for Windows receipt and report printing
@@ -92,17 +98,23 @@ posapp/
 git clone <your-repo-url>
 cd posapp
 dotnet restore
-dotnet run --project src/PosApp.Wpf/PosApp.Wpf.csproj
+dotnet run --project src/PosApp.Wpf/PosApp.Wpf.csproj `
+  -p:PosAppCloudApiUrl=https://your-worker.example.workers.dev
 ```
 
 On first run, the app creates `%LOCALAPPDATA%\PosApp\posapp.db`.
 
-Before login is shown, a one-time setup wizard asks for the store identity, currency, receipt footer, appearance, backup preference, optional sample products, and administrator username/PIN. The completed state is stored only in the local SQLite database, so setup does not appear again on later starts.
+Before the cashier login is shown, the online setup window requires one of two paths:
+
+1. **Sign in** — enter the email and password for an existing owner account. PosApp registers the device, backs up the unused local cache, and restores the latest complete multi-store snapshot. The app closes after restore so the next launch can initialize the restored store selection safely.
+2. **Create organization** — enter the owner email/password and registration key, store details, local administrator username/PIN, appearance, backup preference, and optional sample-products choice. PosApp uploads the complete initial snapshot and only then marks setup complete.
+
+The setup completion/preparation markers are device-local and excluded from cloud synchronization. After onboarding, users sign in locally with the restored or newly created username/PIN, and normal checkout continues offline when needed.
 
 The database also seeds:
 
 - The administrator account whose name, username, and PIN are finalized by the setup wizard
-- Starter cashier user: `cashier` / PIN `1111` (change or deactivate it from **Users** before production use)
+- No shared starter cashier credential is uploaded; create cashier/manager accounts from **Users** with business-specific PINs
 - 6 default categories (Beverages, Snacks, Groceries, Household, Personal Care, Produce)
 - 15 sample products (mix of fixed-price and weighted) only when the setup toggle is left on
 - Default tax rates and discounts
@@ -116,6 +128,7 @@ dotnet publish src/PosApp.Wpf/PosApp.Wpf.csproj `
   -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -p:EnableCompressionInSingleFile=true `
+  -p:PosAppCloudApiUrl=https://your-worker.example.workers.dev `
   -o ./publish
 ```
 
@@ -129,7 +142,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-1.10.6-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-1.10.9-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -155,21 +168,21 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers now retain the real application version in their filename and Windows metadata, for example `PosApp-1.10.6-dev.27-Setup.exe` with resource version `1.10.6.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers now retain the real application version in their filename and Windows metadata, for example `PosApp-1.10.9-dev.27-Setup.exe` with resource version `1.10.9.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v1.10.6`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v1.10.9`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.10.6
-git push origin v1.10.6
+git tag v1.10.9
+git push origin v1.10.9
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.10.6`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.10.9`.
 
 For in-app updates, configure these GitHub Actions repository secrets:
 
@@ -195,18 +208,18 @@ All settings persist in the SQLite database and are editable from the in-app **S
 
 
 
-## Optional Cloud Account Deployment
+## Required Cloud Account Deployment
 
-The cloud component is self-hosted and is not required for local POS operation.
+The cloud component is self-hosted and is required for first-run onboarding. After setup, the local SQLite cache keeps checkout available during an outage.
 
 1. Create a Turso database and apply `cloud/worker/schema.sql`.
 2. Copy `cloud/worker/wrangler.toml.example` to `wrangler.toml`.
 3. From `cloud/worker`, configure `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `JWT_SECRET`, and `REGISTRATION_KEY` with `wrangler secret put`.
 4. Run `npm run check` and `npm run deploy`.
-5. Optionally add the deployed HTTPS Worker URL as the GitHub Actions repository variable `POSAPP_CLOUD_API_URL`, then run **Build PosApp**. When supplied, the URL is embedded in the app build; when omitted, PosApp builds normally for local-only use.
-6. In PosApp, open **Settings → Cloud**, press **Test**, create or sign in to the owner account, then upload the initial store snapshots. The Windows device name is detected automatically and no endpoint/device-name fields are shown. PosApp will subsequently synchronize changes automatically; **Sync Now** forces an immediate cycle.
+5. Add the deployed HTTPS Worker URL as the GitHub Actions repository variable `POSAPP_CLOUD_API_URL`, then run **Build PosApp**. The URL is embedded in the app build.
+6. On first launch, choose **Sign in** or **Create organization**. Existing accounts restore their complete snapshots automatically; newly created organizations upload their complete initial snapshot automatically. PosApp subsequently synchronizes changes in the background; **Sync Now** forces an immediate cycle.
 
-The registration key is required only when creating the owner account. Keep it private. A full snapshot is limited to 15 MB per store, and the service retains the latest three versions. Existing v1.6.0 deployments must first apply `cloud/worker/migrations/v1.7.0.sql`. v1.10.6 has no new cloud schema migration. Deploy the Worker directly; installations upgrading from before v1.10.0 still need `cloud/worker/migrations/v1.10.0.sql` only when automatic schema initialization is disabled. See `cloud/worker/README.md` for scope.
+The registration key is required only when creating the owner account. Keep it private. A full snapshot is limited to 15 MB per store, and the service retains the latest three versions. Existing v1.6.0 deployments must first apply `cloud/worker/migrations/v1.7.0.sql`. v1.10.9 has no new cloud schema migration. Deploy the Worker directly; installations upgrading from before v1.10.0 still need `cloud/worker/migrations/v1.10.0.sql` only when automatic schema initialization is disabled. See `cloud/worker/README.md` for scope.
 
 ## Hardware Wiring Notes
 
@@ -242,22 +255,24 @@ This project is provided as-is for your personal/commercial use. The architectur
 
 **Build fails on `dotnet restore`** — make sure you have the .NET 8 SDK installed: `dotnet --version` should report `8.x.x`.
 
-**Build or release reports `Invalid ... version: V...`** — use the v1.10.6 workflow. Manual versions may be entered as `1.10.6`, `v1.10.6`, or `V1.10.6`; both Windows and Linux jobs remove one leading `v`/`V` before validation.
+**Build or release reports `Invalid ... version: V...`** — use the v1.10.9 workflow. Manual versions may be entered as `1.10.9`, `v1.10.9`, or `V1.10.9`; both Windows and Linux jobs remove one leading `v`/`V` before validation.
 
-**Cloud deployment fails** — use the v1.10.6 workflow. It runs Node.js 24 directly and does not use `cloudflare/wrangler-action` secret uploading. Ensure `CLOUDFLARE_ACCOUNT_ID` belongs to the same account selected by a token created from the **Edit Cloudflare Workers** template. Do not enable the insecure Node 20 compatibility variable.
+**Cloud deployment fails** — use the v1.10.9 workflow. It runs Node.js 24 directly and does not use `cloudflare/wrangler-action` secret uploading. Ensure `CLOUDFLARE_ACCOUNT_ID` belongs to the same account selected by a token created from the **Edit Cloudflare Workers** template. Do not enable the insecure Node 20 compatibility variable.
 
 
-**Category editor does not scroll or its color is not visible** — install v1.10.6 or later. Category windows now expose scrollbars and saved `#RRGGBB` colors are rendered as live previews and POS accents.
+**Category editor does not scroll or its color is not visible** — install v1.10.9 or later. Category windows expose scrollbars and saved `#RRGGBB` colors are rendered as live previews and POS accents.
 
-**Checkout says an open register is required while the setting is disabled, or reports `Stock ledger rows are append-only and cannot be edited`** — install v1.10.6 or later. The checkout service now respects the stored register option and inserts sale/refund ledger rows once with final links. Keep the existing database; no reset or migration is required.
+**Checkout says an open register is required while the setting is disabled, or reports `Stock ledger rows are append-only and cannot be edited`** — install v1.10.9 or later. The checkout service respects the stored register option and inserts sale/refund ledger rows once with final links. Keep the existing database; no reset or migration is required.
 
-**Create Account returns `Internal server error` with `Pbkdf2 ... above 100000` in Worker logs** — deploy v1.10.6 or later. Cloud account passwords use 100,000 PBKDF2 iterations; local user PIN hashing remains unchanged.
+**Checkout fails with `SQLite Error 19: Stock transaction contains an invalid reference`** — install v1.10.9 or later. Checkout and item refunds re-read the persisted sale/item identifiers before writing the append-only stock ledger. The existing database is repaired at startup by recreating the reference guards; no reset or migration is required.
 
-**Dark mode still shows white dialog/title-bar areas** — install v1.10.6 or later. Window surfaces, programmatically created dialogs, and Windows 10/11 caption bars are now re-themed when Dark mode is active.
+**Create Account returns `Internal server error` with `Pbkdf2 ... above 100000` in Worker logs** — deploy v1.10.9 or later. Cloud account passwords use 100,000 PBKDF2 iterations; local user PIN hashing remains unchanged.
 
-**Store Details fields are clipped and the form does not scroll** — install v1.10.6 or later. The editor is resizable, the form body scrolls vertically, and Save/Cancel remain fixed.
+**Dark mode still shows white dialog/title-bar areas** — install v1.10.9 or later. Window surfaces, programmatically created dialogs, and Windows 10/11 caption bars are re-themed when Dark mode is active.
 
-**Startup reports `No active store is available`** — install v1.10.6 or later. The app retains the v1.9.8 startup repair that creates the first `MAIN` store automatically and reactivates a valid store when necessary.
+**Store Details fields are clipped and the form does not scroll** — install v1.10.9 or later. The editor is resizable, the form body scrolls vertically, and Save/Cancel remain fixed.
+
+**Startup reports `No active store is available`** — install v1.10.9 or later. The app retains the v1.9.8 startup repair that creates the first `MAIN` store automatically and reactivates a valid store when necessary.
 
 **Database upgrade errors** — do not delete the database. Review `%LOCALAPPDATA%\PosApp\posapp.log`; update recovery copies are under `%LOCALAPPDATA%\PosApp\Backups\Updates`. Reinstall the previous PosApp version if necessary, then use **Settings → Database → Restore** with the newest `posapp-before-update-*.db` or `posapp-before-startup-*.db` file.
 
@@ -267,5 +282,4 @@ This project is provided as-is for your personal/commercial use. The architectur
 
 ## Phone-only cloud deployment
 
-The repository includes **Actions → Deploy PosApp Cloud**, which provisions/reuses Turso and deploys the Cloudflare Worker from GitHub variables and secrets. After deployment, optionally save the Worker URL in the repository variable `POSAPP_CLOUD_API_URL` and run **Build PosApp**. A configured build uses that embedded URL and the automatically detected Windows device name; an unconfigured build remains local-only. No local PC, Turso CLI, Node.js, or Wrangler installation is required. See `cloud/worker/MOBILE_DEPLOY.md`.
-
+The repository includes **Actions → Deploy PosApp Cloud**, which provisions/reuses Turso and deploys the Cloudflare Worker from GitHub variables and secrets. After deployment, save the Worker URL in the required repository variable `POSAPP_CLOUD_API_URL` and run **Build PosApp**. The build embeds that URL and uses the automatically detected Windows device name. Release builds fail clearly when the variable is missing so an unusable online-only installer cannot be published. No local PC, Turso CLI, Node.js, or Wrangler installation is required. See `cloud/worker/MOBILE_DEPLOY.md`.

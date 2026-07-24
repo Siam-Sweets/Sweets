@@ -199,4 +199,7 @@ public sealed class TransferListRow
     public DateTime? LastActionAt { get; set; }
 }
 
-public sealed record StoreFilterOption(int Id, string Name);
+public sealed record StoreFilterOption(int Id, string Name)
+{
+    public override string ToString() => Name;
+}

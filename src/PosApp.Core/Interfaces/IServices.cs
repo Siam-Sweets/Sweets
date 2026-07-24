@@ -153,6 +153,9 @@ public interface ISetupService
 {
     Task<bool> IsSetupCompleteAsync();
     Task<InitialSetupRequest> GetSetupDefaultsAsync();
+    Task<string?> GetPreparedOnlineAccountEmailAsync();
+    Task PrepareOnlineSetupAsync(InitialSetupRequest request, string accountEmail);
+    Task FinalizeOnlineSetupAsync();
     Task CompleteSetupAsync(InitialSetupRequest request);
 }
 

@@ -810,24 +810,50 @@ public static class DbSchemaUpgrader
             """
             CREATE TRIGGER "TR_StockTransactions_References_Insert"
             BEFORE INSERT ON "StockTransactions"
-            WHEN NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId")
-              OR (NEW."SaleId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Sales" WHERE "Id" = NEW."SaleId"))
-              OR (NEW."SaleItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "SaleItems" WHERE "Id" = NEW."SaleItemId"))
-              OR (NEW."StockTransferId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId"))
-              OR (NEW."StockTransferItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransferItems" WHERE "Id" = NEW."StockTransferItemId"))
-              OR (NEW."UserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId"))
-            BEGIN SELECT RAISE(ABORT, 'Stock transaction contains an invalid reference'); END;
+            BEGIN
+                SELECT CASE WHEN NOT EXISTS (
+                    SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId"
+                ) THEN RAISE(ABORT, 'Stock transaction product reference is invalid') END;
+                SELECT CASE WHEN NEW."SaleId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "Sales" WHERE "Id" = NEW."SaleId"
+                ) THEN RAISE(ABORT, 'Stock transaction sale reference is invalid') END;
+                SELECT CASE WHEN NEW."SaleItemId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "SaleItems" WHERE "Id" = NEW."SaleItemId"
+                ) THEN RAISE(ABORT, 'Stock transaction sale-item reference is invalid') END;
+                SELECT CASE WHEN NEW."StockTransferId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId"
+                ) THEN RAISE(ABORT, 'Stock transaction transfer reference is invalid') END;
+                SELECT CASE WHEN NEW."StockTransferItemId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "StockTransferItems" WHERE "Id" = NEW."StockTransferItemId"
+                ) THEN RAISE(ABORT, 'Stock transaction transfer-item reference is invalid') END;
+                SELECT CASE WHEN NEW."UserId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId"
+                ) THEN RAISE(ABORT, 'Stock transaction user reference is invalid') END;
+            END;
             """,
             """
             CREATE TRIGGER "TR_StockTransactions_References_Update"
             BEFORE UPDATE ON "StockTransactions"
-            WHEN NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId")
-              OR (NEW."SaleId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Sales" WHERE "Id" = NEW."SaleId"))
-              OR (NEW."SaleItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "SaleItems" WHERE "Id" = NEW."SaleItemId"))
-              OR (NEW."StockTransferId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId"))
-              OR (NEW."StockTransferItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransferItems" WHERE "Id" = NEW."StockTransferItemId"))
-              OR (NEW."UserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId"))
-            BEGIN SELECT RAISE(ABORT, 'Stock transaction contains an invalid reference'); END;
+            BEGIN
+                SELECT CASE WHEN NOT EXISTS (
+                    SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId"
+                ) THEN RAISE(ABORT, 'Stock transaction product reference is invalid') END;
+                SELECT CASE WHEN NEW."SaleId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "Sales" WHERE "Id" = NEW."SaleId"
+                ) THEN RAISE(ABORT, 'Stock transaction sale reference is invalid') END;
+                SELECT CASE WHEN NEW."SaleItemId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "SaleItems" WHERE "Id" = NEW."SaleItemId"
+                ) THEN RAISE(ABORT, 'Stock transaction sale-item reference is invalid') END;
+                SELECT CASE WHEN NEW."StockTransferId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId"
+                ) THEN RAISE(ABORT, 'Stock transaction transfer reference is invalid') END;
+                SELECT CASE WHEN NEW."StockTransferItemId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "StockTransferItems" WHERE "Id" = NEW."StockTransferItemId"
+                ) THEN RAISE(ABORT, 'Stock transaction transfer-item reference is invalid') END;
+                SELECT CASE WHEN NEW."UserId" IS NOT NULL AND NOT EXISTS (
+                    SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId"
+                ) THEN RAISE(ABORT, 'Stock transaction user reference is invalid') END;
+            END;
             """
         };
         foreach (var command in commands)

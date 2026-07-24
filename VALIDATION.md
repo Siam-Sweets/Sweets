@@ -1,18 +1,23 @@
-# PosApp v1.10.6 Validation Notes
+# PosApp v1.10.9 Validation Notes
 
 ## Completed in this environment
 
-- Replaced the fixed Store Details content region with a vertically scrollable form.
-- Made the Store Details window resizable and added minimum dimensions for small/high-DPI displays.
-- Kept Save and Cancel outside the scrolling region so they remain visible.
-- Added vertical scrolling to the multiline Address field.
-- Retained the v1.10.5 global dark-window and dark-title-bar fixes.
-- Updated project, installer, Worker, workflow, README, changelog, fix note, and handoff version markers to 1.10.6.
-- Parsed all WPF XAML/XML files successfully.
-- Ran the cloud Worker syntax and smoke test suite successfully.
+- Added theme-aware **Sign in** and **Create organization** tabs to first-run setup.
+- Added existing-owner email/password authentication followed by complete cloud snapshot restore.
+- Added two-phase new-organization setup: local preparation, cloud owner creation, full snapshot upload, then device-local completion.
+- Added safe resume behavior for an interrupted initial snapshot upload.
+- Excluded `app:`, `cloud:`, and `device:` settings from outbox capture, snapshot upload, and snapshot restore.
+- Added a device-local completion marker after successful existing-account restore.
+- Removed the seeded shared cashier credential before a new organization snapshot is uploaded.
+- Made `POSAPP_CLOUD_API_URL` mandatory for Release/GitHub Actions builds so an unusable online-only installer cannot be published.
+- Confirmed every setup XAML event references a matching code-behind handler.
+- Parsed all project XAML/XML files successfully.
+- Confirmed English and Bengali localization keys are unique and remain in parity.
+- Ran the Cloud Worker JavaScript syntax check and smoke suite successfully.
+- Updated application, installer, Worker, workflow, README, changelog, fix note, deployment guide, and handoff markers to 1.10.9.
 - Confirmed no SQLite or Turso schema migration is required.
-- Confirmed cloud image exclusion was not changed.
 
 ## Not available in this environment
 
-- The Windows WPF runtime is unavailable, so live mouse-wheel/touchpad scrolling and the compiled installer still require GitHub Actions and a Windows test run.
+- The .NET SDK is not installed in this Linux workspace, so the WPF solution could not be compiled locally.
+- Live WPF rendering, GitHub Actions compilation, and Windows installer execution still require the Windows CI/test run.

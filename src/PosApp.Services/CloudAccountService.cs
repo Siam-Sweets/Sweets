@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Core.Utilities;
 using PosApp.Data;
 
 namespace PosApp.Services;
@@ -46,8 +47,8 @@ public sealed class CloudAccountService : ICloudAccountService
             {
                 DeviceName = identity.DeviceName,
                 Message = CloudDeploymentConfiguration.TryGetEndpoint() == null
-                    ? "Cloud sync is disabled in this build. Local checkout remains available. Add the optional POSAPP_CLOUD_API_URL GitHub Actions variable and rebuild to enable cloud setup."
-                    : "Cloud account is not connected. Local checkout remains available."
+                    ? "Online setup is not configured in this build. Add the required POSAPP_CLOUD_API_URL GitHub Actions variable and rebuild PosApp."
+                    : "Online account is not connected."
             };
         }
 
@@ -269,12 +270,13 @@ public sealed class CloudAccountService : ICloudAccountService
         var rows = await _db.Settings
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(x => x.StoreId == storeId &&
-                        !x.Key.StartsWith("cloud:") &&
-                        !x.Key.StartsWith("device:"))
+            .Where(x => x.StoreId == storeId)
             .OrderBy(x => x.SyncId)
             .ToListAsync(cancellationToken);
-        return rows.Select(x => SyncPayloadSerializer.CreateValuesForSync(x, _db)).ToList();
+        return rows
+            .Where(x => !SettingSyncPolicy.IsDeviceLocal(x.Key))
+            .Select(x => SyncPayloadSerializer.CreateValuesForSync(x, _db))
+            .ToList();
     }
 
     private async Task RecordSnapshotSuccessAsync(
@@ -452,7 +454,7 @@ public sealed class CloudAccountService : ICloudAccountService
     }
 
     private static string CurrentVersion()
-        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.10.6";
+        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.10.9";
 
     private sealed class StoreSnapshot
     {
@@ -526,7 +528,7 @@ internal static class CloudDeploymentConfiguration
     public static string GetRequiredEndpoint()
         => TryGetEndpoint()
            ?? throw new InvalidOperationException(
-               "Cloud sync is disabled in this build. Add the optional POSAPP_CLOUD_API_URL GitHub Actions variable and rebuild PosApp to enable it.");
+               "Online setup is not configured in this build. Add the required POSAPP_CLOUD_API_URL GitHub Actions variable and rebuild PosApp.");
 }
 
 internal sealed class CloudCredentialStore

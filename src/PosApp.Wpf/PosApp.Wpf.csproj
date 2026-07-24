@@ -12,18 +12,24 @@
     <ApplicationIcon>Assets\PosApp.ico</ApplicationIcon>
     <AssemblyName>PosApp</AssemblyName>
     <RootNamespace>PosApp.Wpf</RootNamespace>
-    <Version>1.10.6</Version>
+    <Version>1.10.9</Version>
     <Company>PosApp</Company>
     <Product>PosApp - Local POS</Product>
-    <AssemblyVersion>1.10.6.0</AssemblyVersion>
-    <FileVersion>1.10.6.0</FileVersion>
-    <InformationalVersion>1.10.6</InformationalVersion>
+    <AssemblyVersion>1.10.9.0</AssemblyVersion>
+    <FileVersion>1.10.9.0</FileVersion>
+    <InformationalVersion>1.10.9</InformationalVersion>
     <PosAppCloudApiUrl Condition="'$(PosAppCloudApiUrl)' == ''"></PosAppCloudApiUrl>
   </PropertyGroup>
 
   <ItemGroup>
     <AssemblyMetadata Include="PosAppCloudApiUrl" Value="$(PosAppCloudApiUrl)" />
   </ItemGroup>
+
+  <Target Name="ValidateOnlineSetupConfiguration"
+          BeforeTargets="Build"
+          Condition="'$(Configuration)' == 'Release' and '$(DesignTimeBuild)' != 'true' and '$(PosAppCloudApiUrl)' == ''">
+    <Error Text="PosAppCloudApiUrl is required for online-only first-run setup." />
+  </Target>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

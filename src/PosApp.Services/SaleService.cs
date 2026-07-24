@@ -240,6 +240,14 @@ public class SaleService : ISaleService
             // Ledger rows are then inserted once with final foreign keys; an
             // append-only row is never updated after insertion.
             await _db.SaveChangesAsync();
+            var ledgerReferences = pendingStockMovements.Count == 0
+                ? null
+                : await ResolvePersistedLedgerReferencesAsync(
+                    sale,
+                    pendingStockMovements.Select(movement => movement.Item),
+                    pendingStockMovements.Select(movement => movement.ProductId),
+                    draft.UserId);
+            var persistedSaleId = ledgerReferences?.SaleId ?? sale.Id;
             foreach (var movement in pendingStockMovements)
             {
                 _db.StockTransactions.Add(new StockTransaction
@@ -250,17 +258,16 @@ public class SaleService : ISaleService
                     Quantity = movement.Quantity,
                     BalanceAfter = movement.BalanceAfter,
                     UnitCost = movement.UnitCost,
-                    SaleId = sale.Id,
-                    SaleItemId = movement.Item.Id,
+                    SaleId = ledgerReferences!.SaleId,
+                    SaleItemId = ledgerReferences!.SaleItemIds[movement.Item.SyncId],
                     UserId = draft.UserId,
                     Note = movement.Note
                 });
             }
             if (pendingStockMovements.Count > 0) await _db.SaveChangesAsync();
             await _db.CommitExternalTransactionAsync(transaction);
-            var id = sale.Id;
             _db.ChangeTracker.Clear();
-            return await GetSaleByIdAsync(id) ?? sale;
+            return await GetSaleByIdAsync(persistedSaleId) ?? sale;
         }
         catch (DbUpdateConcurrencyException ex)
         {
@@ -588,6 +595,14 @@ public class SaleService : ISaleService
             // Persist the refund and refund items before creating immutable
             // ledger rows, so every ledger row is inserted with final links.
             await _db.SaveChangesAsync();
+            var ledgerReferences = pendingStockMovements.Count == 0
+                ? null
+                : await ResolvePersistedLedgerReferencesAsync(
+                    refund,
+                    pendingStockMovements.Select(movement => movement.Item),
+                    pendingStockMovements.Select(movement => movement.ProductId),
+                    draft.UserId);
+            var persistedRefundId = ledgerReferences?.SaleId ?? refund.Id;
             foreach (var movement in pendingStockMovements)
             {
                 _db.StockTransactions.Add(new StockTransaction
@@ -598,17 +613,16 @@ public class SaleService : ISaleService
                     Quantity = movement.Quantity,
                     BalanceAfter = movement.BalanceAfter,
                     UnitCost = movement.UnitCost,
-                    SaleId = refund.Id,
-                    SaleItemId = movement.Item.Id,
+                    SaleId = ledgerReferences!.SaleId,
+                    SaleItemId = ledgerReferences!.SaleItemIds[movement.Item.SyncId],
                     UserId = draft.UserId,
                     Note = movement.Note
                 });
             }
             if (pendingStockMovements.Count > 0) await _db.SaveChangesAsync();
             await _db.CommitExternalTransactionAsync(transaction);
-            var id = refund.Id;
             _db.ChangeTracker.Clear();
-            return await GetSaleByIdAsync(id) ?? refund;
+            return await GetSaleByIdAsync(persistedRefundId) ?? refund;
         }
         catch (DbUpdateConcurrencyException ex)
         {
@@ -631,6 +645,70 @@ public class SaleService : ISaleService
             throw;
         }
     }
+
+    private async Task<PersistedLedgerReferences> ResolvePersistedLedgerReferencesAsync(
+        Sale sale,
+        IEnumerable<SaleItem> saleItems,
+        IEnumerable<int> productIds,
+        int userId)
+    {
+        var storeId = sale.StoreId > 0 ? sale.StoreId : _db.CurrentStoreId;
+        if (string.IsNullOrWhiteSpace(sale.SyncId))
+            throw new InvalidOperationException(
+                "The completed sale does not have a persistent synchronization identifier.");
+
+        var persistedSale = await _db.Sales.IgnoreQueryFilters().AsNoTracking()
+            .Where(candidate => candidate.StoreId == storeId && candidate.SyncId == sale.SyncId)
+            .Select(candidate => new { candidate.Id, candidate.UserId })
+            .SingleOrDefaultAsync()
+            ?? throw new InvalidOperationException(
+                "The completed sale could not be resolved before its stock ledger was written.");
+        if (persistedSale.UserId != userId)
+            throw new InvalidOperationException(
+                "The completed sale is linked to a different user than its stock ledger.");
+
+        var items = saleItems.Distinct().ToList();
+        if (items.Any(item => string.IsNullOrWhiteSpace(item.SyncId)))
+            throw new InvalidOperationException(
+                "A completed sale line does not have a persistent synchronization identifier.");
+        var itemSyncIds = items.Select(item => item.SyncId).Distinct(StringComparer.Ordinal).ToList();
+        if (itemSyncIds.Count != items.Count)
+            throw new InvalidOperationException(
+                "The completed sale contains duplicate sale-line synchronization identifiers.");
+
+        var persistedItems = await _db.SaleItems.IgnoreQueryFilters().AsNoTracking()
+            .Where(item => item.StoreId == storeId &&
+                           item.SaleId == persistedSale.Id &&
+                           itemSyncIds.Contains(item.SyncId))
+            .Select(item => new { item.Id, item.SyncId })
+            .ToListAsync();
+        if (persistedItems.Count != itemSyncIds.Count)
+            throw new InvalidOperationException(
+                "One or more completed sale lines could not be resolved before the stock ledger was written.");
+
+        var expectedProductIds = productIds.Distinct().ToList();
+        var persistedProductIds = await _db.Products.IgnoreQueryFilters().AsNoTracking()
+            .Where(product => product.StoreId == storeId && expectedProductIds.Contains(product.Id))
+            .Select(product => product.Id)
+            .ToListAsync();
+        if (persistedProductIds.Count != expectedProductIds.Count)
+            throw new InvalidOperationException(
+                "One or more products could not be resolved before the stock ledger was written.");
+
+        var userExists = await _db.Users.IgnoreQueryFilters().AsNoTracking()
+            .AnyAsync(user => user.StoreId == storeId && user.Id == userId);
+        if (!userExists)
+            throw new InvalidOperationException(
+                "The signed-in user could not be resolved before the stock ledger was written.");
+
+        return new PersistedLedgerReferences(
+            persistedSale.Id,
+            persistedItems.ToDictionary(item => item.SyncId, item => item.Id, StringComparer.Ordinal));
+    }
+
+    private sealed record PersistedLedgerReferences(
+        int SaleId,
+        IReadOnlyDictionary<string, int> SaleItemIds);
 
     private async Task ValidateAndConsumePromotionsAsync(SaleDraft draft)
     {

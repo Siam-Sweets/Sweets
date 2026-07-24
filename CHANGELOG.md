@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.10.9 — Online first-run sign-in and organization setup
+
+- Replaced the obsolete local-only first-run path with two explicit online choices: **Sign in** and **Create organization**.
+- Added email/password sign-in for existing owners directly in the setup window.
+- Existing-account onboarding now registers the Windows device, creates a local safety backup, and restores the latest complete multi-store cloud snapshot before setup completes.
+- New-organization onboarding now creates the owner account, prepares the store and administrator login, uploads the complete initial snapshot, and writes the completion marker only after upload success.
+- Added resumable creation behavior when authentication succeeds but the initial snapshot upload is interrupted.
+- Excluded `app:`, `cloud:`, and `device:` settings from incremental outbox capture, full snapshot upload, and cloud restore.
+- Removed the public seeded `cashier` / `1111` credential before a new organization is uploaded.
+- Required `POSAPP_CLOUD_API_URL` for Release builds so online-only onboarding is never shipped without a server endpoint.
+- Added matching English and Bengali setup text and theme-aware setup tabs.
+- No SQLite or Turso schema migration is required.
+
+## 1.10.8 — Stock Transfer tabs and store-filter display fix
+
+- Replaced the default Windows `TabControl`/`TabItem` chrome on Stock Transfers with theme-aware PosApp templates.
+- Removed the bright white tab headers and content surfaces that appeared in Dark mode.
+- Kept transfer and inventory grids on consistent card, border, foreground, hover, and selected-tab brushes in both Light and Dark modes.
+- Fixed the inventory store selector showing `StoreFilterOption { ... }` instead of the selected store name.
+- No database schema, cloud protocol, stock-transfer behavior, localization, or image-handling changes are required.
+
+## 1.10.7 — Checkout ledger reference resolution fix
+
+- Fixed stock-tracked checkout failing with `SQLite Error 19: Stock transaction contains an invalid reference`.
+- After persisting the sale and its lines, checkout and item refunds now resolve the committed local sale/item IDs through permanent `SyncId` values before inserting append-only stock-ledger rows.
+- Added store, product, user, sale, and sale-line validation immediately before ledger insertion.
+- Kept the database reference guards enabled and changed them to report the exact invalid reference type instead of one generic message.
+- Existing databases recreate the corrected triggers during normal startup; no SQLite or Turso migration is required.
+- No cloud protocol, UI layout, localization, or image-handling changes are required.
+
 ## 1.10.6 — Store dialog scrolling fix
 
 - Replaced the fixed Store Details form area with a vertical `ScrollViewer` so every field remains reachable under Windows display scaling and on smaller screens.

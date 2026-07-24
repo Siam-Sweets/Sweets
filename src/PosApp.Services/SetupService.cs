@@ -2,30 +2,34 @@ using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Core.Utilities;
 using PosApp.Data;
 
 namespace PosApp.Services;
 
 /// <summary>
-/// Persists the one-time, entirely local setup state and replaces the seeded
-/// administrator credentials with values chosen by the store owner.
+/// Prepares the local offline cache for an online organization and writes the
+/// device-only completion marker only after the initial cloud upload succeeds.
 /// </summary>
 public sealed class SetupService : ISetupService
 {
-    public const string SetupCompleteKey = "app:setup-complete";
-
     private readonly AppDbContext _db;
     private readonly ISettingsService _settings;
+    private readonly IStoreContext _storeContext;
 
-    public SetupService(AppDbContext db, ISettingsService settings)
+    public SetupService(
+        AppDbContext db,
+        ISettingsService settings,
+        IStoreContext storeContext)
     {
         _db = db;
         _settings = settings;
+        _storeContext = storeContext;
     }
 
     public async Task<bool> IsSetupCompleteAsync()
     {
-        var value = await _settings.GetAsync(SetupCompleteKey);
+        var value = await _settings.GetAsync(SettingSyncPolicy.SetupCompleteKey);
         return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -44,7 +48,44 @@ public sealed class SetupService : ISetupService
         };
     }
 
+    public Task<string?> GetPreparedOnlineAccountEmailAsync()
+        => _settings.GetAsync(SettingSyncPolicy.SetupAccountEmailKey);
+
+    public async Task PrepareOnlineSetupAsync(
+        InitialSetupRequest request,
+        string accountEmail)
+    {
+        var normalizedEmail = accountEmail?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (normalizedEmail.Length is < 3 or > 254 || !normalizedEmail.Contains('@'))
+            throw new InvalidOperationException("Enter a valid email address.");
+
+        await PrepareSetupCoreAsync(request);
+        using (_storeContext.SuppressCloudCapture())
+        {
+            await _settings.SetAsync(SettingSyncPolicy.SetupAccountEmailKey, normalizedEmail);
+            await _settings.SetAsync(SettingSyncPolicy.SetupPreparedKey, "true");
+        }
+    }
+
+    public async Task FinalizeOnlineSetupAsync()
+    {
+        using (_storeContext.SuppressCloudCapture())
+        {
+            // Completion is deliberately written only after authentication and
+            // the full initial cloud snapshot have succeeded.
+            await _settings.SetAsync(SettingSyncPolicy.SetupCompleteKey, "true");
+            await _settings.SetAsync(SettingSyncPolicy.SetupPreparedKey, "false");
+        }
+    }
+
     public async Task CompleteSetupAsync(InitialSetupRequest request)
+    {
+        // Kept for callers upgrading from the older local wizard contract.
+        await PrepareSetupCoreAsync(request);
+        await FinalizeOnlineSetupAsync();
+    }
+
+    private async Task PrepareSetupCoreAsync(InitialSetupRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.StoreSettings);
@@ -74,69 +115,86 @@ public sealed class SetupService : ISetupService
         request.StoreSettings.CurrencySymbol = request.StoreSettings.CurrencySymbol?.Trim() ?? string.Empty;
         request.StoreSettings.FooterNote = request.StoreSettings.FooterNote?.Trim() ?? string.Empty;
 
-        await using var transaction = await _db.Database.BeginTransactionAsync();
-        try
+        using (_storeContext.SuppressCloudCapture())
         {
-            var administrator = await _db.Users
-                .Where(user => user.Role == UserRole.Admin)
-                .OrderBy(user => user.Id)
-                .FirstOrDefaultAsync();
-
-            var normalizedUsername = username.ToLower();
-            var administratorId = administrator?.Id ?? 0;
-            var usernameInUse = await _db.Users.AnyAsync(user =>
-                user.Id != administratorId && user.Username.ToLower() == normalizedUsername);
-            if (usernameInUse)
-                throw new InvalidOperationException("That username is already used by another account.");
-
-            var (hash, salt) = DbSeeder.HashPin(pin);
-            if (administrator == null)
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+            try
             {
-                administrator = new User
+                var administrator = await _db.Users
+                    .Where(user => user.Role == UserRole.Admin)
+                    .OrderBy(user => user.Id)
+                    .FirstOrDefaultAsync();
+
+                var normalizedUsername = username.ToLower();
+                var administratorId = administrator?.Id ?? 0;
+                var usernameInUse = await _db.Users.AnyAsync(user =>
+                    user.Id != administratorId && user.Username.ToLower() == normalizedUsername);
+                if (usernameInUse)
+                    throw new InvalidOperationException("That username is already used by another account.");
+
+                var (hash, salt) = DbSeeder.HashPin(pin);
+                if (administrator == null)
                 {
-                    Username = username,
-                    FullName = fullName,
-                    PasswordHash = hash,
-                    PasswordSalt = salt,
-                    Role = UserRole.Admin,
-                    IsActive = true
-                };
-                _db.Users.Add(administrator);
+                    administrator = new User
+                    {
+                        Username = username,
+                        FullName = fullName,
+                        PasswordHash = hash,
+                        PasswordSalt = salt,
+                        Role = UserRole.Admin,
+                        IsActive = true
+                    };
+                    _db.Users.Add(administrator);
+                }
+                else
+                {
+                    administrator.Username = username;
+                    administrator.FullName = fullName;
+                    administrator.PasswordHash = hash;
+                    administrator.PasswordSalt = salt;
+                    administrator.IsActive = true;
+                    administrator.UpdatedAt = DateTime.UtcNow;
+                }
+
+                // The old offline wizard seeded a public cashier/1111 account.
+                // Online-first onboarding must never upload that shared default
+                // credential into a newly created organization.
+                var starterCashier = await _db.Users.FirstOrDefaultAsync(user =>
+                    user.Username == "cashier" &&
+                    user.FullName == "Default Cashier" &&
+                    user.Role == UserRole.Cashier &&
+                    user.LastLoginAt == null);
+                if (starterCashier != null &&
+                    !await _db.Sales.AnyAsync(sale => sale.UserId == starterCashier.Id) &&
+                    !await _db.PurchaseDocuments.AnyAsync(
+                        purchase => purchase.UserId == starterCashier.Id))
+                {
+                    _db.Users.Remove(starterCashier);
+                }
+
+                var currentStore = await _db.Stores.FirstOrDefaultAsync(
+                    store => store.Id == _db.CurrentStoreId);
+                if (currentStore != null)
+                {
+                    currentStore.Name = storeName;
+                    currentStore.Address = request.StoreSettings.Address;
+                    currentStore.Phone = request.StoreSettings.Phone;
+                    currentStore.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await _db.SaveChangesAsync();
+                if (request.IncludeSampleProducts)
+                    await DbSeeder.SeedSampleProductsAsync(_db);
+
+                await _db.CommitExternalTransactionAsync(transaction);
             }
-            else
+            catch
             {
-                administrator.Username = username;
-                administrator.FullName = fullName;
-                administrator.PasswordHash = hash;
-                administrator.PasswordSalt = salt;
-                administrator.IsActive = true;
-                administrator.UpdatedAt = DateTime.UtcNow;
+                await _db.RollbackExternalTransactionAsync(transaction);
+                throw;
             }
 
-            var currentStore = await _db.Stores.FirstOrDefaultAsync(store => store.Id == _db.CurrentStoreId);
-            if (currentStore != null)
-            {
-                currentStore.Name = storeName;
-                currentStore.Address = request.StoreSettings.Address;
-                currentStore.Phone = request.StoreSettings.Phone;
-                currentStore.UpdatedAt = DateTime.UtcNow;
-            }
-
-            await _db.SaveChangesAsync();
-            if (request.IncludeSampleProducts)
-                await DbSeeder.SeedSampleProductsAsync(_db);
-
-            await _db.CommitExternalTransactionAsync(transaction);
+            await _settings.SetStoreSettingsAsync(request.StoreSettings);
         }
-        catch
-        {
-            await _db.RollbackExternalTransactionAsync(transaction);
-            throw;
-        }
-
-        // The completion flag is deliberately written last. If saving either
-        // configuration step fails, the wizard safely opens again next start.
-        await _settings.SetStoreSettingsAsync(request.StoreSettings);
-        await _settings.SetAsync(SetupCompleteKey, "true");
     }
 }

@@ -113,8 +113,28 @@
 
     <!-- First-run setup -->
     <sys:String x:Key="Setup_WindowTitle">PosApp Setup</sys:String>
-    <sys:String x:Key="Setup_Title">Set up PosApp</sys:String>
-    <sys:String x:Key="Setup_Subtitle">Configure this PC before the first sale</sys:String>
+    <sys:String x:Key="Setup_Title">Connect PosApp Online</sys:String>
+    <sys:String x:Key="Setup_Subtitle">Sign in to an existing organization or create a new one. Full synchronization completes before the register opens.</sys:String>
+    <sys:String x:Key="Setup_SignInTab">Sign in</sys:String>
+    <sys:String x:Key="Setup_CreateAccountTab">Create organization</sys:String>
+    <sys:String x:Key="Setup_ExistingAccountSection">Existing organization</sys:String>
+    <sys:String x:Key="Setup_SignInHelp">Enter the email and password for your existing PosApp Online account. This computer will restore all stores, users, inventory, settings, and transaction history before setup completes.</sys:String>
+    <sys:String x:Key="Setup_SignInAndSync">Sign in and sync everything</sys:String>
+    <sys:String x:Key="Setup_CreateAccountHelp">Create the organization owner account, first store, and administrator login. PosApp uploads the complete starting data before setup is marked complete.</sys:String>
+    <sys:String x:Key="Setup_OnlineOwnerSection">Online owner account</sys:String>
+    <sys:String x:Key="Setup_ConfirmCloudPassword">Confirm cloud password</sys:String>
+    <sys:String x:Key="Setup_OnlineRequiredNote">An internet connection is required for first-run sign-in or organization creation. After setup, the register remains usable offline and synchronizes when the connection returns.</sys:String>
+    <sys:String x:Key="Setup_SignInProgress">Signing in securely...</sys:String>
+    <sys:String x:Key="Setup_DownloadProgress">Downloading all stores, users, inventory, settings, and transactions...</sys:String>
+    <sys:String x:Key="Setup_RestoreComplete">Signed in and restored {0} store(s) with {1:N0} rows. PosApp will close now. Reopen it and use your existing local username and PIN.</sys:String>
+    <sys:String x:Key="Setup_RestoreCompleteTitle">Existing account restored</sys:String>
+    <sys:String x:Key="Setup_CreateProgress">Preparing the new online organization...</sys:String>
+    <sys:String x:Key="Setup_UploadProgress">Uploading the complete store to the online organization...</sys:String>
+    <sys:String x:Key="Setup_CreateAndSync">Create organization and sync everything</sys:String>
+    <sys:String x:Key="Setup_CreateComplete">The organization was created and the complete store was synchronized.</sys:String>
+    <sys:String x:Key="Setup_CreateCompleteTitle">Online setup complete</sys:String>
+    <sys:String x:Key="Setup_CloudPasswordMismatch">The online account passwords do not match.</sys:String>
+    <sys:String x:Key="Setup_PreparedAccountMismatch">This device is already connected to another online account. Use Sign in to restore that account.</sys:String>
     <sys:String x:Key="Setup_StoreSection">Store information</sys:String>
     <sys:String x:Key="Setup_StoreHelp">These details appear throughout the app and on printed receipts.</sys:String>
     <sys:String x:Key="Setup_StoreName">Store name</sys:String>
@@ -134,7 +154,7 @@
     <sys:String x:Key="Setup_SampleProductsHelp">Add 15 example products, including fixed-price and weighted items. Turn this off to start with an empty product catalog.</sys:String>
     <sys:String x:Key="Setup_On">ON</sys:String>
     <sys:String x:Key="Setup_Off">OFF</sys:String>
-    <sys:String x:Key="Setup_OfflineNote">Setup and all saved information remain on this computer.</sys:String>
+    <sys:String x:Key="Setup_OfflineNote">After online setup, a synchronized offline cache remains on this computer.</sys:String>
     <sys:String x:Key="Setup_Exit">Exit</sys:String>
     <sys:String x:Key="Setup_Finish">Finish Setup</sys:String>
     <sys:String x:Key="Setup_PinMismatch">The administrator PINs do not match.</sys:String>
@@ -561,7 +581,7 @@
     <sys:String x:Key="Cloud_Title">Online Sync Account</sys:String>
     <sys:String x:Key="Cloud_Help">Connect this installation to your private Cloudflare Worker and Turso database. Checkout continues locally when the internet is unavailable.</sys:String>
     <sys:String x:Key="Cloud_Endpoint">Cloud API URL</sys:String>
-    <sys:String x:Key="Cloud_EndpointHelp">Cloud sync is optional. When POSAPP_CLOUD_API_URL is set in GitHub Actions, the server is configured automatically. Without it, PosApp remains local-only. The Windows device name is detected automatically.</sys:String>
+    <sys:String x:Key="Cloud_EndpointHelp">The required POSAPP_CLOUD_API_URL GitHub Actions variable configures the server automatically for online-only first-run setup. The Windows device name is detected automatically.</sys:String>
     <sys:String x:Key="Cloud_Email">Owner Email</sys:String>
     <sys:String x:Key="Cloud_Password">Cloud Password</sys:String>
     <sys:String x:Key="Cloud_DisplayName">Owner Name</sys:String>

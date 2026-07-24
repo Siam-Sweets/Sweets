@@ -2,6 +2,87 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{DynamicResource BackgroundBrush}">
+    <UserControl.Resources>
+        <Style x:Key="TransferTabControlStyle" TargetType="{x:Type TabControl}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabControl}">
+                        <Grid KeyboardNavigation.TabNavigation="Local" SnapsToDevicePixels="True">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TabPanel x:Name="HeaderPanel"
+                                      Grid.Row="0"
+                                      Panel.ZIndex="1"
+                                      IsItemsHost="True"
+                                      Background="Transparent"
+                                      KeyboardNavigation.TabIndex="1"/>
+                            <Border Grid.Row="1"
+                                    Background="{DynamicResource CardBrush}"
+                                    BorderBrush="{DynamicResource StrongBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="0,8,8,8"
+                                    Padding="12">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent"
+                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TransferTabItemStyle" TargetType="{x:Type TabItem}">
+            <Setter Property="Background" Value="{DynamicResource SurfaceMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="18,10"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Border x:Name="TabBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8,8,0,0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource SurfaceHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource CardBrush}"/>
+                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource StrongBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid Margin="24">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <Grid Grid.Row="0" Margin="0,0,0,16">
@@ -14,9 +95,10 @@
                     Click="Refresh_Click" Padding="18,9"/>
         </Grid>
 
-        <TabControl Grid.Row="1">
+        <TabControl Grid.Row="1" Style="{StaticResource TransferTabControlStyle}"
+                    ItemContainerStyle="{StaticResource TransferTabItemStyle}">
             <TabItem Header="{DynamicResource Transfer_Transfers}">
-                <Grid Margin="12">
+                <Grid Background="Transparent">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="2*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <WrapPanel Grid.Row="0" Margin="0,0,0,12">
                         <Button Content="{DynamicResource Transfer_New}" Style="{StaticResource PrimaryButton}" Click="New_Click" Margin="0,0,8,0"/>
@@ -49,12 +131,19 @@
                 </Grid>
             </TabItem>
             <TabItem Header="{DynamicResource Transfer_InventoryByStore}">
-                <Grid Margin="12">
+                <Grid Background="Transparent">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <WrapPanel Margin="0,0,0,12">
                         <TextBlock Text="{DynamicResource Transfer_Store}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox x:Name="InventoryStoreFilter" Width="220" DisplayMemberPath="Name" SelectedValuePath="Id"
-                                  SelectionChanged="InventoryFilter_Changed"/>
+                        <ComboBox x:Name="InventoryStoreFilter" Width="220"
+                                  SelectedValuePath="Id" TextSearch.TextPath="Name"
+                                  SelectionChanged="InventoryFilter_Changed">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextDarkBrush}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <TextBox x:Name="InventorySearch" Width="240" Margin="12,0,8,0" TextChanged="InventorySearch_TextChanged"/>
                         <Button Content="{DynamicResource Common_Refresh}" Style="{StaticResource OutlineButton}" Click="InventoryRefresh_Click"/>
                     </WrapPanel>

@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Core.Utilities;
 using PosApp.Data;
 
 namespace PosApp.Services;
@@ -579,7 +580,11 @@ public sealed partial class CloudSyncService : ICloudSyncService
             case nameof(User): await UpsertAsync<User>(storeId, change, cancellationToken); break;
             case nameof(CashSession): await UpsertAsync<CashSession>(storeId, change, cancellationToken); break;
             case nameof(CashMovement): await UpsertAsync<CashMovement>(storeId, change, cancellationToken); break;
-            case nameof(Setting): await UpsertAsync<Setting>(storeId, change, cancellationToken); break;
+            case nameof(Setting):
+                if (!SettingSyncPolicy.IsDeviceLocal(
+                        GetString(change.Payload, nameof(Setting.Key))))
+                    await UpsertAsync<Setting>(storeId, change, cancellationToken);
+                break;
             default: throw new InvalidOperationException($"Unsupported cloud entity type: {change.EntityType}.");
         }
     }
@@ -1072,8 +1077,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
                                 if (entityName == nameof(Setting))
                                 {
                                     var key = GetString(row, nameof(Setting.Key)) ?? string.Empty;
-                                    if (key.StartsWith("cloud:", StringComparison.OrdinalIgnoreCase) ||
-                                        key.StartsWith("device:", StringComparison.OrdinalIgnoreCase))
+                                    if (SettingSyncPolicy.IsDeviceLocal(key))
                                         continue;
                                 }
                                 var syncId = GetString(row, nameof(StoreScopedEntity.SyncId))
@@ -1099,9 +1103,24 @@ public sealed partial class CloudSyncService : ICloudSyncService
                     {
                         var storeElement = RequireProperty(snapshot.Payload, "store");
                         var storeSyncId = GetString(storeElement, nameof(Store.SyncId))!;
+                        var restoredStoreId = storeIds[storeSyncId];
+                        _db.Settings.Add(new Setting
+                        {
+                            StoreId = restoredStoreId,
+                            Key = SettingSyncPolicy.SetupCompleteKey,
+                            Value = "true",
+                            Description = "Device-local online onboarding state"
+                        });
+                        _db.Settings.Add(new Setting
+                        {
+                            StoreId = restoredStoreId,
+                            Key = SettingSyncPolicy.SetupPreparedKey,
+                            Value = "false",
+                            Description = "Device-local online onboarding state"
+                        });
                         _db.SyncStates.Add(new SyncState
                         {
-                            StoreId = storeIds[storeSyncId],
+                            StoreId = restoredStoreId,
                             PullCursor = snapshot.SyncCursor,
                             LastSyncAt = DateTime.UtcNow,
                             LastSuccessfulSyncAt = DateTime.UtcNow,

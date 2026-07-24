@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
+using PosApp.Core.Utilities;
 
 namespace PosApp.Data;
 
@@ -298,9 +299,7 @@ public class AppDbContext : DbContext
     private bool ShouldQueue(StoreScopedEntity entity)
     {
         if (!_storeContext.IsCloudSyncEnabled) return false;
-        if (entity is Setting setting &&
-            (setting.Key.StartsWith("cloud:", StringComparison.OrdinalIgnoreCase) ||
-             setting.Key.StartsWith("device:", StringComparison.OrdinalIgnoreCase)))
+        if (entity is Setting setting && SettingSyncPolicy.IsDeviceLocal(setting.Key))
             return false;
         return true;
     }

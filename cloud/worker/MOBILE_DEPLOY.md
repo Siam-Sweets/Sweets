@@ -40,8 +40,8 @@ Secret:
 1. Open **Actions → Deploy PosApp Cloud → Run workflow**.
 2. The workflow resolves or provisions Turso, verifies Cloudflare authentication, then deploys the Worker and encrypted `POSAPP_CLOUD_CONFIG` together with Wrangler 4.81.0 on Node.js 24.
 3. Open the workflow result and copy the deployed `workers.dev` URL.
-4. Test `<worker-url>/v1/health`; it should return `ok: true` and version `1.10.6`.
-5. Optionally add a GitHub Actions **repository variable** named `POSAPP_CLOUD_API_URL` containing that URL. Leave it unset for a local-only build.
+4. Test `<worker-url>/v1/health`; it should return `ok: true` and version `1.10.9`.
+5. Add a required GitHub Actions **repository variable** named `POSAPP_CLOUD_API_URL` containing that URL. Release builds reject a missing URL because first-run setup is online-only.
 6. Run **Actions → Build PosApp**. The URL is embedded in the Windows build and is not shown as an editable app field.
 
 ## Connect PosApp
@@ -59,9 +59,9 @@ The device name is detected automatically from Windows and registered without sh
 ## Cloudflare authentication requirements
 
 - Create `CLOUDFLARE_API_TOKEN` from Cloudflare's **Edit Cloudflare Workers** template and scope it to the account identified by `CLOUDFLARE_ACCOUNT_ID`.
-- Do not add `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`; v1.10.6 no longer depends on Node.js 20.
+- Do not add `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION`; v1.10.9 no longer depends on Node.js 20.
 - If authentication is wrong, the **Verify Cloudflare authentication** step now shows the failure before deployment.
 
 ## Account creation compatibility
 
-v1.10.6 uses 100,000 PBKDF2-HMAC-SHA256 iterations for cloud owner passwords so signup works in the Cloudflare Workers runtime.
+v1.10.9 uses 100,000 PBKDF2-HMAC-SHA256 iterations for cloud owner passwords so signup works in the Cloudflare Workers runtime.

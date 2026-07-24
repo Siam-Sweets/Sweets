@@ -113,8 +113,28 @@
 
     <!-- First-run setup -->
     <sys:String x:Key="Setup_WindowTitle">পসঅ্যাপ সেটআপ</sys:String>
-    <sys:String x:Key="Setup_Title">পসঅ্যাপ সেটআপ করুন</sys:String>
-    <sys:String x:Key="Setup_Subtitle">প্রথম বিক্রয়ের আগে এই পিসি কনফিগার করুন</sys:String>
+    <sys:String x:Key="Setup_Title">PosApp Online সংযুক্ত করুন</sys:String>
+    <sys:String x:Key="Setup_Subtitle">বিদ্যমান প্রতিষ্ঠানে সাইন ইন করুন অথবা নতুন প্রতিষ্ঠান তৈরি করুন। রেজিস্টার খোলার আগে সম্পূর্ণ সিঙ্ক শেষ হবে।</sys:String>
+    <sys:String x:Key="Setup_SignInTab">সাইন ইন</sys:String>
+    <sys:String x:Key="Setup_CreateAccountTab">প্রতিষ্ঠান তৈরি</sys:String>
+    <sys:String x:Key="Setup_ExistingAccountSection">বিদ্যমান প্রতিষ্ঠান</sys:String>
+    <sys:String x:Key="Setup_SignInHelp">আপনার বিদ্যমান PosApp Online অ্যাকাউন্টের ইমেইল ও পাসওয়ার্ড লিখুন। সেটআপ শেষ হওয়ার আগে এই কম্পিউটারে সব স্টোর, ব্যবহারকারী, ইনভেন্টরি, সেটিংস ও লেনদেনের ইতিহাস পুনরুদ্ধার হবে।</sys:String>
+    <sys:String x:Key="Setup_SignInAndSync">সাইন ইন করে সবকিছু সিঙ্ক করুন</sys:String>
+    <sys:String x:Key="Setup_CreateAccountHelp">প্রতিষ্ঠানের মালিক অ্যাকাউন্ট, প্রথম স্টোর ও অ্যাডমিনিস্ট্রেটর লগইন তৈরি করুন। সেটআপ সম্পূর্ণ হিসেবে চিহ্নিত হওয়ার আগে PosApp সব প্রাথমিক ডেটা আপলোড করবে।</sys:String>
+    <sys:String x:Key="Setup_OnlineOwnerSection">অনলাইন মালিক অ্যাকাউন্ট</sys:String>
+    <sys:String x:Key="Setup_ConfirmCloudPassword">ক্লাউড পাসওয়ার্ড নিশ্চিত করুন</sys:String>
+    <sys:String x:Key="Setup_OnlineRequiredNote">প্রথমবার সাইন ইন বা প্রতিষ্ঠান তৈরির জন্য ইন্টারনেট সংযোগ প্রয়োজন। সেটআপের পরে রেজিস্টার অফলাইনে চলবে এবং সংযোগ ফিরলে সিঙ্ক হবে।</sys:String>
+    <sys:String x:Key="Setup_SignInProgress">নিরাপদভাবে সাইন ইন করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Setup_DownloadProgress">সব স্টোর, ব্যবহারকারী, ইনভেন্টরি, সেটিংস ও লেনদেন ডাউনলোড করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Setup_RestoreComplete">সাইন ইন সম্পন্ন হয়েছে এবং {0}টি স্টোরের {1:N0}টি সারি পুনরুদ্ধার করা হয়েছে। PosApp এখন বন্ধ হবে। আবার খুলে আপনার বিদ্যমান স্থানীয় ব্যবহারকারী নাম ও পিন ব্যবহার করুন।</sys:String>
+    <sys:String x:Key="Setup_RestoreCompleteTitle">বিদ্যমান অ্যাকাউন্ট পুনরুদ্ধার হয়েছে</sys:String>
+    <sys:String x:Key="Setup_CreateProgress">নতুন অনলাইন প্রতিষ্ঠান প্রস্তুত করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Setup_UploadProgress">সম্পূর্ণ স্টোর অনলাইন প্রতিষ্ঠানে আপলোড করা হচ্ছে...</sys:String>
+    <sys:String x:Key="Setup_CreateAndSync">প্রতিষ্ঠান তৈরি করে সবকিছু সিঙ্ক করুন</sys:String>
+    <sys:String x:Key="Setup_CreateComplete">প্রতিষ্ঠান তৈরি হয়েছে এবং সম্পূর্ণ স্টোর সিঙ্ক হয়েছে।</sys:String>
+    <sys:String x:Key="Setup_CreateCompleteTitle">অনলাইন সেটআপ সম্পূর্ণ</sys:String>
+    <sys:String x:Key="Setup_CloudPasswordMismatch">অনলাইন অ্যাকাউন্টের পাসওয়ার্ড দুটি মিলছে না।</sys:String>
+    <sys:String x:Key="Setup_PreparedAccountMismatch">এই ডিভাইসটি ইতিমধ্যে অন্য একটি অনলাইন অ্যাকাউন্টের সঙ্গে সংযুক্ত। সেই অ্যাকাউন্ট পুনরুদ্ধার করতে সাইন ইন ব্যবহার করুন।</sys:String>
     <sys:String x:Key="Setup_StoreSection">দোকানের তথ্য</sys:String>
     <sys:String x:Key="Setup_StoreHelp">এই তথ্য অ্যাপের বিভিন্ন স্থানে ও মুদ্রিত রসিদে দেখা যাবে।</sys:String>
     <sys:String x:Key="Setup_StoreName">দোকানের নাম</sys:String>
@@ -134,7 +154,7 @@
     <sys:String x:Key="Setup_SampleProductsHelp">নির্দিষ্ট-মূল্য ও ওজনভিত্তিক পণ্যসহ ১৫টি উদাহরণ পণ্য যোগ করুন। খালি পণ্য তালিকা দিয়ে শুরু করতে এটি বন্ধ করুন।</sys:String>
     <sys:String x:Key="Setup_On">চালু</sys:String>
     <sys:String x:Key="Setup_Off">বন্ধ</sys:String>
-    <sys:String x:Key="Setup_OfflineNote">সেটআপ ও সংরক্ষিত সব তথ্য এই কম্পিউটারেই থাকবে।</sys:String>
+    <sys:String x:Key="Setup_OfflineNote">অনলাইন সেটআপের পরে এই কম্পিউটারে একটি সিঙ্ক করা অফলাইন ক্যাশ থাকবে।</sys:String>
     <sys:String x:Key="Setup_Exit">প্রস্থান</sys:String>
     <sys:String x:Key="Setup_Finish">সেটআপ শেষ করুন</sys:String>
     <sys:String x:Key="Setup_PinMismatch">অ্যাডমিনিস্ট্রেটর পিন দুটি মিলছে না।</sys:String>
@@ -561,7 +581,7 @@
     <sys:String x:Key="Cloud_Title">অনলাইন সিঙ্ক অ্যাকাউন্ট</sys:String>
     <sys:String x:Key="Cloud_Help">এই ইনস্টলেশনটি আপনার ব্যক্তিগত Cloudflare Worker এবং Turso ডেটাবেসের সাথে যুক্ত করুন। ইন্টারনেট না থাকলেও বিক্রয় স্থানীয়ভাবে চলবে।</sys:String>
     <sys:String x:Key="Cloud_Endpoint">ক্লাউড API URL</sys:String>
-    <sys:String x:Key="Cloud_EndpointHelp">ক্লাউড সিঙ্ক ঐচ্ছিক। GitHub Actions-এ POSAPP_CLOUD_API_URL সেট করলে সার্ভার স্বয়ংক্রিয়ভাবে কনফিগার হবে। এটি না থাকলে PosApp শুধু লোকালভাবে চলবে। Windows ডিভাইসের নাম স্বয়ংক্রিয়ভাবে শনাক্ত হবে।</sys:String>
+    <sys:String x:Key="Cloud_EndpointHelp">অনলাইন-নির্ভর প্রথম সেটআপের জন্য প্রয়োজনীয় POSAPP_CLOUD_API_URL GitHub Actions ভেরিয়েবল সার্ভার স্বয়ংক্রিয়ভাবে কনফিগার করে। Windows ডিভাইসের নাম স্বয়ংক্রিয়ভাবে শনাক্ত হবে।</sys:String>
     <sys:String x:Key="Cloud_Email">মালিকের ইমেইল</sys:String>
     <sys:String x:Key="Cloud_Password">ক্লাউড পাসওয়ার্ড</sys:String>
     <sys:String x:Key="Cloud_DisplayName">মালিকের নাম</sys:String>

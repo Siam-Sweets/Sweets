@@ -3,13 +3,95 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{DynamicResource Setup_WindowTitle}"
         Icon="/PosApp;component/Assets/PosApp.ico"
-        Width="820" Height="720" MinWidth="700" MinHeight="600"
+        Width="900" Height="760" MinWidth="720" MinHeight="620"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
         Background="{DynamicResource BackgroundBrush}"
         Loaded="SetupView_Loaded">
 
     <Window.Resources>
+        <Style x:Key="SetupTabControlStyle" TargetType="{x:Type TabControl}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabControl}">
+                        <Grid KeyboardNavigation.TabNavigation="Local" SnapsToDevicePixels="True">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TabPanel x:Name="HeaderPanel"
+                                      Grid.Row="0"
+                                      Panel.ZIndex="1"
+                                      IsItemsHost="True"
+                                      Background="Transparent"
+                                      KeyboardNavigation.TabIndex="1"/>
+                            <Border Grid.Row="1"
+                                    Background="{DynamicResource CardBrush}"
+                                    BorderBrush="{DynamicResource StrongBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="0,8,8,8"
+                                    Padding="12">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent"
+                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SetupTabItemStyle" TargetType="{x:Type TabItem}">
+            <Setter Property="Background" Value="{DynamicResource SurfaceMutedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="22,11"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TabItem}">
+                        <Border x:Name="TabBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8,8,0,0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              RecognizesAccessKey="True"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background"
+                                        Value="{DynamicResource SurfaceHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background"
+                                        Value="{DynamicResource CardBrush}"/>
+                                <Setter TargetName="TabBorder" Property="BorderBrush"
+                                        Value="{DynamicResource StrongBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="SetupSwitch" TargetType="{x:Type ToggleButton}">
             <Setter Property="Width" Value="88"/>
             <Setter Property="Height" Value="34"/>
@@ -51,8 +133,10 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Track" Property="Background" Value="{StaticResource PrimaryBrush}"/>
-                                <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="Track" Property="Background"
+                                        Value="{StaticResource PrimaryBrush}"/>
+                                <Setter TargetName="Track" Property="BorderBrush"
+                                        Value="{StaticResource PrimaryBrush}"/>
                                 <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/>
                                 <Setter TargetName="Thumb" Property="Margin" Value="0,0,4,0"/>
                                 <Setter TargetName="OnText" Property="Visibility" Value="Visible"/>
@@ -73,6 +157,7 @@
             </Setter>
         </Style>
     </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -91,159 +176,313 @@
                     <Image Source="/PosApp;component/Assets/PosAppLogo.png" Stretch="Uniform"/>
                 </Border>
                 <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Text="{DynamicResource Setup_Title}" FontSize="25" FontWeight="SemiBold" Foreground="White"/>
-                    <TextBlock Text="{DynamicResource Setup_Subtitle}" FontSize="13" Foreground="#DBEAFE" Margin="0,4,0,0"/>
+                    <TextBlock Text="{DynamicResource Setup_Title}"
+                               FontSize="25" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Text="{DynamicResource Setup_Subtitle}"
+                               FontSize="13" Foreground="#DBEAFE" Margin="0,4,0,0"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="28,22">
-                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                    <StackPanel>
-                        <TextBlock Text="{DynamicResource Setup_StoreSection}" Style="{StaticResource Heading2}"/>
-                        <TextBlock Text="{DynamicResource Setup_StoreHelp}" Style="{StaticResource Muted}" Margin="0,0,0,14"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
+        <TabControl Grid.Row="1"
+                    x:Name="SetupTabs"
+                    Margin="28,22"
+                    Style="{StaticResource SetupTabControlStyle}"
+                    ItemContainerStyle="{StaticResource SetupTabItemStyle}">
+            <TabItem Header="{DynamicResource Setup_SignInTab}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="18">
+                        <TextBlock Text="{DynamicResource Setup_SignInHelp}"
+                                   Style="{StaticResource Muted}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,18"/>
 
-                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,7,12">
-                                <TextBlock Text="{DynamicResource Setup_StoreName}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <TextBox x:Name="StoreNameBox" MaxLength="100"/>
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Setup_ExistingAccountSection}"
+                                           Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Cloud_Email}"
+                                           Style="{StaticResource Muted}"
+                                           Margin="0,14,0,4"/>
+                                <TextBox x:Name="SignInEmailBox"
+                                         MaxLength="254"
+                                         FontSize="15"/>
+                                <TextBlock Text="{DynamicResource Cloud_Password}"
+                                           Style="{StaticResource Muted}"
+                                           Margin="0,14,0,4"/>
+                                <PasswordBox x:Name="SignInPasswordBox"
+                                             MaxLength="128"
+                                             FontSize="15"
+                                             KeyDown="SignInPasswordBox_KeyDown"/>
+
+                                <TextBlock x:Name="SignInStatusText"
+                                           TextWrapping="Wrap"
+                                           Visibility="Collapsed"
+                                           Margin="0,14,0,0"/>
+                                <ProgressBar x:Name="SignInProgress"
+                                             Height="4"
+                                             IsIndeterminate="True"
+                                             Visibility="Collapsed"
+                                             Margin="0,12,0,0"/>
+
+                                <Button x:Name="SignInButton"
+                                        Content="{DynamicResource Setup_SignInAndSync}"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Padding="22,12"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,18,0,0"
+                                        Click="SignIn_Click"/>
                             </StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="7,0,0,12">
-                                <TextBlock Text="{DynamicResource Setup_Phone}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <TextBox x:Name="PhoneBox" MaxLength="50"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,12">
-                                <TextBlock Text="{DynamicResource Setup_Address}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <TextBox x:Name="AddressBox" MaxLength="300"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,7,0">
-                                <TextBlock Text="{DynamicResource Setup_Currency}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <TextBox x:Name="CurrencyBox" MaxLength="8"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="7,0,0,0">
-                                <TextBlock Text="{DynamicResource Setup_ReceiptFooter}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <TextBox x:Name="FooterBox" MaxLength="200"/>
-                            </StackPanel>
-                        </Grid>
+                        </Border>
                     </StackPanel>
-                </Border>
+                </ScrollViewer>
+            </TabItem>
 
-                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                    <StackPanel>
-                        <TextBlock Text="{DynamicResource Setup_AdminSection}" Style="{StaticResource Heading2}"/>
-                        <TextBlock Text="{DynamicResource Setup_AdminHelp}" Style="{StaticResource Muted}" Margin="0,0,0,14"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,7,12">
-                                <TextBlock Text="{DynamicResource Setup_AdminName}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <TextBox x:Name="AdminNameBox" MaxLength="100"/>
+            <TabItem Header="{DynamicResource Setup_CreateAccountTab}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="18">
+                        <TextBlock Text="{DynamicResource Setup_CreateAccountHelp}"
+                                   Style="{StaticResource Muted}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,18"/>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Setup_OnlineOwnerSection}"
+                                           Style="{StaticResource Heading2}"/>
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,7,12">
+                                        <TextBlock Text="{DynamicResource Cloud_Email}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="CreateAccountEmailBox" MaxLength="254"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="7,0,0,12">
+                                        <TextBlock Text="{DynamicResource Cloud_RegistrationKey}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <PasswordBox x:Name="RegistrationKeyBox" MaxLength="256"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,7,0">
+                                        <TextBlock Text="{DynamicResource Cloud_Password}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <PasswordBox x:Name="CreateAccountPasswordBox" MaxLength="128"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="7,0,0,0">
+                                        <TextBlock Text="{DynamicResource Setup_ConfirmCloudPassword}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <PasswordBox x:Name="ConfirmAccountPasswordBox" MaxLength="128"/>
+                                    </StackPanel>
+                                </Grid>
                             </StackPanel>
-                            <StackPanel Grid.Row="0" Grid.Column="1" Margin="7,0,0,12">
-                                <TextBlock Text="{DynamicResource Setup_Username}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <TextBox x:Name="UsernameBox" MaxLength="60"/>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Setup_StoreSection}"
+                                           Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Setup_StoreHelp}"
+                                           Style="{StaticResource Muted}" Margin="0,0,0,14"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,7,12">
+                                        <TextBlock Text="{DynamicResource Setup_StoreName}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="StoreNameBox" MaxLength="100"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="7,0,0,12">
+                                        <TextBlock Text="{DynamicResource Setup_Phone}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="PhoneBox" MaxLength="50"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,12">
+                                        <TextBlock Text="{DynamicResource Setup_Address}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="AddressBox" MaxLength="300"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,7,0">
+                                        <TextBlock Text="{DynamicResource Setup_Currency}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="CurrencyBox" MaxLength="8"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="1" Margin="7,0,0,0">
+                                        <TextBlock Text="{DynamicResource Setup_ReceiptFooter}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="FooterBox" MaxLength="200"/>
+                                    </StackPanel>
+                                </Grid>
                             </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,7,0">
-                                <TextBlock Text="{DynamicResource Setup_Pin}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <PasswordBox x:Name="PinBox" MaxLength="12" PreviewTextInput="PinBox_PreviewTextInput"/>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{DynamicResource Setup_AdminSection}"
+                                           Style="{StaticResource Heading2}"/>
+                                <TextBlock Text="{DynamicResource Setup_AdminHelp}"
+                                           Style="{StaticResource Muted}" Margin="0,0,0,14"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,7,12">
+                                        <TextBlock Text="{DynamicResource Setup_AdminName}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="AdminNameBox" MaxLength="100"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="7,0,0,12">
+                                        <TextBlock Text="{DynamicResource Setup_Username}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <TextBox x:Name="UsernameBox" MaxLength="60"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,7,0">
+                                        <TextBlock Text="{DynamicResource Setup_Pin}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <PasswordBox x:Name="PinBox" MaxLength="12"
+                                                     PreviewTextInput="PinBox_PreviewTextInput"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="7,0,0,0">
+                                        <TextBlock Text="{DynamicResource Setup_ConfirmPin}"
+                                                   Style="{StaticResource Muted}" Margin="0,0,0,4"/>
+                                        <PasswordBox x:Name="ConfirmPinBox" MaxLength="12"
+                                                     PreviewTextInput="PinBox_PreviewTextInput"/>
+                                    </StackPanel>
+                                </Grid>
                             </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.Column="1" Margin="7,0,0,0">
-                                <TextBlock Text="{DynamicResource Setup_ConfirmPin}" Style="{StaticResource Muted}" Margin="0,0,0,4"/>
-                                <PasswordBox x:Name="ConfirmPinBox" MaxLength="12" PreviewTextInput="PinBox_PreviewTextInput"/>
-                            </StackPanel>
-                        </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                    <TextBlock Text="{DynamicResource Set_Language}"
+                                               Style="{StaticResource Muted}" Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="LangEn" Content="English"
+                                                     GroupName="SetupLanguage"
+                                                     Margin="0,0,16,0"
+                                                     Checked="Language_Checked"/>
+                                        <RadioButton x:Name="LangBn" Content="বাংলা"
+                                                     GroupName="SetupLanguage"
+                                                     Checked="Language_Checked"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="12,0">
+                                    <TextBlock Text="{DynamicResource Set_Theme}"
+                                               Style="{StaticResource Muted}" Margin="0,0,0,8"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="ThemeLight"
+                                                     Content="{DynamicResource Set_Light}"
+                                                     GroupName="SetupTheme"
+                                                     Margin="0,0,16,0"
+                                                     Checked="Theme_Checked"/>
+                                        <RadioButton x:Name="ThemeDark"
+                                                     Content="{DynamicResource Set_Dark}"
+                                                     GroupName="SetupTheme"
+                                                     Checked="Theme_Checked"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Margin="12,0,0,0">
+                                    <TextBlock Text="{DynamicResource Setup_DataSafety}"
+                                               Style="{StaticResource Muted}" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="BackupCheck"
+                                              Content="{DynamicResource Setup_EnableBackup}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                                    <TextBlock Text="{DynamicResource Setup_SampleProducts}"
+                                               FontSize="15" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{DynamicResource Setup_SampleProductsHelp}"
+                                               Style="{StaticResource Muted}"
+                                               TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              x:Name="SampleProductsToggle"
+                                              Style="{StaticResource SetupSwitch}"
+                                              IsChecked="True"
+                                              VerticalAlignment="Center"
+                                              ToolTip="{DynamicResource Setup_SampleProducts}"/>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock x:Name="CreateStatusText"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="4,14,4,0"/>
+                        <ProgressBar x:Name="CreateProgress"
+                                     Height="4"
+                                     IsIndeterminate="True"
+                                     Visibility="Collapsed"
+                                     Margin="4,12,4,0"/>
+                        <Button x:Name="CreateAccountButton"
+                                Content="{DynamicResource Setup_CreateAndSync}"
+                                Style="{StaticResource PrimaryButton}"
+                                Padding="24,12"
+                                HorizontalAlignment="Left"
+                                Margin="0,18,0,4"
+                                Click="CreateAccount_Click"/>
                     </StackPanel>
-                </Border>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
 
-                <Border Style="{StaticResource Card}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                            <TextBlock Text="{DynamicResource Set_Language}" Style="{StaticResource Muted}" Margin="0,0,0,8"/>
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="LangEn" Content="English" Margin="0,0,16,0" Checked="Language_Checked"/>
-                                <RadioButton x:Name="LangBn" Content="বাংলা" Checked="Language_Checked"/>
-                            </StackPanel>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Margin="12,0">
-                            <TextBlock Text="{DynamicResource Set_Theme}" Style="{StaticResource Muted}" Margin="0,0,0,8"/>
-                            <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="ThemeLight" Content="{DynamicResource Set_Light}" Margin="0,0,16,0" Checked="Theme_Checked"/>
-                                <RadioButton x:Name="ThemeDark" Content="{DynamicResource Set_Dark}" Checked="Theme_Checked"/>
-                            </StackPanel>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Margin="12,0,0,0">
-                            <TextBlock Text="{DynamicResource Setup_DataSafety}" Style="{StaticResource Muted}" Margin="0,0,0,8"/>
-                            <CheckBox x:Name="BackupCheck" Content="{DynamicResource Setup_EnableBackup}"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,18,0">
-                            <TextBlock Text="{DynamicResource Setup_SampleProducts}"
-                                       FontSize="15" FontWeight="SemiBold"/>
-                            <TextBlock Text="{DynamicResource Setup_SampleProductsHelp}"
-                                       Style="{StaticResource Muted}"
-                                       TextWrapping="Wrap" Margin="0,5,0,0"/>
-                        </StackPanel>
-                        <ToggleButton Grid.Column="1"
-                                      x:Name="SampleProductsToggle"
-                                      Style="{StaticResource SetupSwitch}"
-                                      IsChecked="True"
-                                      VerticalAlignment="Center"
-                                      ToolTip="{DynamicResource Setup_SampleProducts}"/>
-                    </Grid>
-                </Border>
-
-                <TextBlock x:Name="ErrorText" Foreground="{StaticResource DangerBrush}"
-                           TextWrapping="Wrap" Visibility="Collapsed" Margin="4,14,4,0"/>
-            </StackPanel>
-        </ScrollViewer>
-
-        <Border Grid.Row="2" Background="{DynamicResource CardBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0"
                 Padding="28,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{DynamicResource Setup_OfflineNote}"
-                           Style="{StaticResource Muted}" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Content="{DynamicResource Setup_Exit}"
-                        Style="{StaticResource OutlineButton}" Padding="22,10" Margin="8,0"
+                <TextBlock Grid.Column="0"
+                           Text="{DynamicResource Setup_OnlineRequiredNote}"
+                           Style="{StaticResource Muted}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"
+                           Margin="0,0,18,0"/>
+                <Button Grid.Column="1"
+                        x:Name="ExitButton"
+                        Content="{DynamicResource Setup_Exit}"
+                        Style="{StaticResource OutlineButton}"
+                        Padding="22,10"
                         Click="Exit_Click"/>
-                <Button Grid.Column="2" x:Name="FinishButton" Content="{DynamicResource Setup_Finish}"
-                        Style="{StaticResource PrimaryButton}" Padding="24,10" Margin="8,0,0,0"
-                        Click="Finish_Click"/>
             </Grid>
         </Border>
     </Grid>
