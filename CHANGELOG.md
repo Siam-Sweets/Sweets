@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.1 — Read-only DataGrid checkbox binding fix
+
+- Fixed the Stores page throwing dispatcher exceptions when displaying the read-only `IsActive` and `IsCurrent` checkbox columns.
+- Explicitly changed display-only checkbox bindings to `Mode=OneWay` and marked those columns read-only.
+- Applied the same preventive correction to Sync Center device status and cross-store low-stock checkbox columns.
+- No database schema, cloud synchronization protocol, Worker endpoint, or image-handling changes.
+- Bumped application, assembly, file, informational, installer, Worker, README, and changelog versions to 1.10.1.
+
 ## 1.10.0 — Comprehensive integrity, synchronization, and authorization fixes
 
 - Reworked EF Core save/outbox transactions so rollbacks clear invalid tracked state and cloud notifications occur only after commit.

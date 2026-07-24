@@ -107,8 +107,8 @@
                         <DataGridTextColumn Header="{DynamicResource SyncCenter_Device}" Binding="{Binding Name}" Width="*"/>
                         <DataGridTextColumn Header="{DynamicResource SyncCenter_Platform}" Binding="{Binding Platform}" Width="120"/>
                         <DataGridTextColumn Header="{DynamicResource SyncCenter_Version}" Binding="{Binding AppVersion}" Width="100"/>
-                        <DataGridCheckBoxColumn Header="{DynamicResource SyncCenter_Current}" Binding="{Binding IsCurrent}" Width="85"/>
-                        <DataGridCheckBoxColumn Header="{DynamicResource SyncCenter_Revoked}" Binding="{Binding IsRevoked}" Width="85"/>
+                        <DataGridCheckBoxColumn Header="{DynamicResource SyncCenter_Current}" Binding="{Binding IsCurrent, Mode=OneWay}" IsReadOnly="True" Width="85"/>
+                        <DataGridCheckBoxColumn Header="{DynamicResource SyncCenter_Revoked}" Binding="{Binding IsRevoked, Mode=OneWay}" IsReadOnly="True" Width="85"/>
                         <DataGridTextColumn Header="{DynamicResource SyncCenter_StoreCursors}" Binding="{Binding StoreCursorCount}" Width="110"/>
                         <DataGridTextColumn Header="{DynamicResource SyncCenter_LastSeen}" Binding="{Binding LastSeenAt, StringFormat={}{0:g}}" Width="160"/>
                     </DataGrid.Columns>

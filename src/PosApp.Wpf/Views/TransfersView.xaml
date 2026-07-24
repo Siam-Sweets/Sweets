@@ -67,7 +67,7 @@
                             <DataGridTextColumn Header="{DynamicResource Transfer_Stock}" Binding="{Binding StockQuantity}" Width="100"/>
                             <DataGridTextColumn Header="{DynamicResource Prod_Unit}" Binding="{Binding Unit}" Width="90"/>
                             <DataGridTextColumn Header="{DynamicResource Prod_LowStock}" Binding="{Binding LowStockThreshold}" Width="110"/>
-                            <DataGridCheckBoxColumn Header="{DynamicResource Transfer_Low}" Binding="{Binding IsLowStock}" Width="70"/>
+                            <DataGridCheckBoxColumn Header="{DynamicResource Transfer_Low}" Binding="{Binding IsLowStock, Mode=OneWay}" IsReadOnly="True" Width="70"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>

@@ -1,4 +1,4 @@
-# PosApp v1.10.0 Phone-Only Cloud Setup
+# PosApp v1.10.1 Phone-Only Cloud Setup
 
 ## Cloud-enabled build
 
@@ -18,9 +18,9 @@ The Worker URL is embedded only when the variable is supplied. PosApp does not d
 
 ## Current workflow fixes
 
-Cloud deployment uses Node.js 24 and Wrangler 4.81.0 directly. Worker code and `POSAPP_CLOUD_CONFIG` are deployed together, so the old **Failed to upload secrets** stage is not used. The v1.10.0 build/release workflow also accepts `1.10.0`, `v1.10.0`, or `V1.10.0`. Do not enable the insecure Node 20 compatibility setting.
+Cloud deployment uses Node.js 24 and Wrangler 4.81.0 directly. Worker code and `POSAPP_CLOUD_CONFIG` are deployed together, so the old **Failed to upload secrets** stage is not used. The v1.10.1 build/release workflow also accepts `1.10.1`, `v1.10.1`, or `V1.10.1`. Do not enable the insecure Node 20 compatibility setting.
 
 
-## v1.10.0 upgrade note
+## v1.10.1 upgrade note
 
-When `autoInitializeSchema` is enabled, the Worker adds the v1.10.0 snapshot and operation columns automatically. When automatic initialization is disabled, apply `cloud/worker/migrations/v1.10.0.sql` once before deploying the v1.10.0 Worker.
+When `autoInitializeSchema` is enabled, the Worker adds the v1.10.1 snapshot and operation columns automatically. When automatic initialization is disabled, apply `cloud/worker/migrations/v1.10.1.sql` once before deploying the v1.10.1 Worker.

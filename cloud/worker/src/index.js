@@ -57,7 +57,7 @@ async function route(request, env) {
 
   if (request.method === "GET" && path === "/v1/health") {
     await query(env, "SELECT 1 AS ok");
-    return json({ ok: true, service: "posapp-cloud", version: "1.10.0" });
+    return json({ ok: true, service: "posapp-cloud", version: "1.10.1" });
   }
   if (request.method === "POST" && path === "/v1/auth/signup") return signup(request, env);
   if (request.method === "POST" && path === "/v1/auth/login") return login(request, env);
