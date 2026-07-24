@@ -18,6 +18,7 @@ const idempotency = new Map();
 const changes = [];
 const stores = new Set();
 const snapshots = [];
+let capturedOwnerPasswordIterations = null;
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (_url, options) => {
   const body = JSON.parse(options.body);
@@ -70,8 +71,8 @@ globalThis.fetch = async (_url, options) => {
       return executeResult(
         ["id", "name", "platform", "app_version", "created_at", "last_seen_at", "revoked_at", "store_cursor_count"],
         [
-          [textCell("device-one"), textCell("Front POS"), textCell("Windows"), textCell("1.10.1"), textCell("2026-07-24T00:00:00.000Z"), textCell("2026-07-24T01:00:00.000Z"), nullCell(), integerCell(1)],
-          [textCell("device-two"), textCell("Back POS"), textCell("Windows"), textCell("1.10.1"), textCell("2026-07-24T00:10:00.000Z"), textCell("2026-07-24T01:05:00.000Z"), nullCell(), integerCell(1)],
+          [textCell("device-one"), textCell("Front POS"), textCell("Windows"), textCell("1.10.2"), textCell("2026-07-24T00:00:00.000Z"), textCell("2026-07-24T01:00:00.000Z"), nullCell(), integerCell(1)],
+          [textCell("device-two"), textCell("Back POS"), textCell("Windows"), textCell("1.10.2"), textCell("2026-07-24T00:10:00.000Z"), textCell("2026-07-24T01:05:00.000Z"), nullCell(), integerCell(1)],
         ]);
     }
     if (sql.startsWith("SELECT cloud_version, cursor, operation_id FROM sync_idempotency")) {
@@ -88,6 +89,10 @@ globalThis.fetch = async (_url, options) => {
       const rec = records.get(recordKey(args[1], args[2], args[3]));
       return rec ? executeResult(["cloud_version", "entity_version", "operation", "payload_json", "origin_device_id", "updated_at"],
         [[integerCell(rec.cloudVersion), integerCell(rec.entityVersion), textCell(rec.operation), textCell(rec.payloadJson), textCell(rec.originDeviceId), textCell(rec.updatedAt)]]) : executeResult([], []);
+    }
+    if (sql.startsWith("INSERT INTO owners")) {
+      capturedOwnerPasswordIterations = Number(args[5]);
+      return executeResult([], [], 1);
     }
     if (sql.startsWith("INSERT INTO stores")) {
       stores.add(args[0]);
@@ -136,7 +141,7 @@ globalThis.fetch = async (_url, options) => {
 try {
   const health = await worker.fetch(new Request("https://worker.test/v1/health"), env);
   assert.equal(health.status, 200);
-  assert.equal((await health.json()).version, "1.10.1");
+  assert.equal((await health.json()).version, "1.10.2");
   const unknown = await worker.fetch(new Request("https://worker.test/"), env);
   assert.equal(unknown.status, 404);
   const malformed = await worker.fetch(new Request("https://worker.test/v1/account", { headers: { Authorization: "Bearer broken" } }), env);
@@ -145,20 +150,21 @@ try {
   const signup = await worker.fetch(new Request("https://worker.test/v1/auth/signup", {
     method: "POST", headers: { "Content-Type": "application/json", "CF-Connecting-IP": "127.0.0.1" },
     body: JSON.stringify({ email: "owner@example.com", password: "correct-horse-battery", displayName: "Owner",
-      registrationKey, deviceKey: "device-key-1234567890", deviceName: "Test POS", platform: "Windows", appVersion: "1.10.1" }),
+      registrationKey, deviceKey: "device-key-1234567890", deviceName: "Test POS", platform: "Windows", appVersion: "1.10.2" }),
   }), env);
   assert.equal(signup.status, 200);
+  assert.equal(capturedOwnerPasswordIterations, 100000);
   const auth = await signup.json();
   const claims = JSON.parse(Buffer.from(auth.tokens.accessToken.split(".")[1], "base64url").toString("utf8"));
   const deviceOneAuth = { Authorization: `Bearer ${await createTestToken({ ...claims, did: "device-one" })}` };
   const deviceTwoAuth = { Authorization: `Bearer ${await createTestToken({ ...claims, did: "device-two" })}` };
 
-  const payload = { schemaVersion: 5, appVersion: "1.10.1", store: { SyncId: "store-sync-id" }, entities: {} };
+  const payload = { schemaVersion: 5, appVersion: "1.10.2", store: { SyncId: "store-sync-id" }, entities: {} };
   const upload = await worker.fetch(new Request("https://worker.test/v1/sync/snapshot/upload", {
     method: "POST", headers: { "Content-Type": "application/json", ...deviceOneAuth }, body: JSON.stringify({
       backupSetId: "backup-set-1", capturedAt: "2026-07-24T01:00:00Z",
       store: { syncId: "store-sync-id", code: "MAIN", name: "Main Store", isActive: true },
-      schemaVersion: 5, appVersion: "1.10.1", syncCursor: 0, rowCount: 1, payload,
+      schemaVersion: 5, appVersion: "1.10.2", syncCursor: 0, rowCount: 1, payload,
     }),
   }), env);
   assert.equal(upload.status, 201);
@@ -211,7 +217,7 @@ try {
   }), env);
   assert.equal(logout.status, 200);
 
-  console.log("PosApp cloud Worker v1.10.1 atomic-sync smoke test passed.");
+  console.log("PosApp cloud Worker v1.10.2 atomic-sync smoke test passed.");
 } finally {
   globalThis.fetch = originalFetch;
 }

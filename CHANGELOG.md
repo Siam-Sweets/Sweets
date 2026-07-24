@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.2 — Cloudflare PBKDF2 runtime compatibility fix
+
+- Fixed owner-account signup failing with `NotSupportedError` because Cloudflare Workers rejects PBKDF2 iteration counts above 100,000.
+- Changed cloud-account password hashing from 120,000 to 100,000 PBKDF2-HMAC-SHA256 iterations while retaining a unique random salt per owner.
+- Added an explicit Worker-side iteration guard so unsupported stored parameters return a controlled service error instead of an unhandled runtime exception.
+- Added a Worker smoke-test assertion that signup persists exactly 100,000 iterations.
+- Local PosApp user PIN hashing remains unchanged at 120,000 iterations.
+- No SQLite, Turso schema, synchronization protocol, desktop UI, or image-handling changes.
+- Bumped application, assembly, file, informational, installer, Worker, README, and changelog versions to 1.10.2.
+
 ## 1.10.1 — Read-only DataGrid checkbox binding fix
 
 - Fixed the Stores page throwing dispatcher exceptions when displaying the read-only `IsActive` and `IsCurrent` checkbox columns.

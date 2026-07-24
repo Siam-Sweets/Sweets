@@ -24,7 +24,8 @@ let lastCleanupAt = 0;
 
 const ACCESS_TOKEN_SECONDS = 15 * 60;
 const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
-const PASSWORD_ITERATIONS = 120_000;
+const MAX_PASSWORD_ITERATIONS = 100_000;
+const PASSWORD_ITERATIONS = 100_000;
 const MAX_SNAPSHOT_BYTES = 15_000_000;
 const AUTH_WINDOW_SECONDS = 15 * 60;
 const AUTH_ATTEMPT_LIMIT = 10;
@@ -57,7 +58,7 @@ async function route(request, env) {
 
   if (request.method === "GET" && path === "/v1/health") {
     await query(env, "SELECT 1 AS ok");
-    return json({ ok: true, service: "posapp-cloud", version: "1.10.1" });
+    return json({ ok: true, service: "posapp-cloud", version: "1.10.2" });
   }
   if (request.method === "POST" && path === "/v1/auth/signup") return signup(request, env);
   if (request.method === "POST" && path === "/v1/auth/login") return login(request, env);
@@ -685,6 +686,11 @@ async function verifyAccessToken(env, token) {
 }
 
 async function hashPassword(password, salt, iterations) {
+  const normalizedIterations = Number(iterations);
+  if (!Number.isInteger(normalizedIterations) ||
+      normalizedIterations < 1 || normalizedIterations > MAX_PASSWORD_ITERATIONS) {
+    throw new HttpError(503, "Stored password parameters are not supported by this Worker runtime.");
+  }
   const material = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"],
   );
@@ -692,7 +698,7 @@ async function hashPassword(password, salt, iterations) {
     name: "PBKDF2",
     hash: "SHA-256",
     salt: base64UrlToBytes(salt),
-    iterations,
+    iterations: normalizedIterations,
   }, material, 256);
   return base64UrlBytes(new Uint8Array(bits));
 }

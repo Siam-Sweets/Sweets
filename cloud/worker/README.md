@@ -1,4 +1,4 @@
-# PosApp Cloud Worker v1.10.1
+# PosApp Cloud Worker v1.10.2
 
 Self-hosted account, device, snapshot, and incremental-sync API for PosApp. Turso credentials and JWT signing material remain in Worker secrets; Windows devices receive only PosApp access/refresh tokens.
 
@@ -6,7 +6,7 @@ Self-hosted account, device, snapshot, and incremental-sync API for PosApp. Turs
 
 Use `.github/workflows/deploy-cloud-worker.yml` and follow `MOBILE_DEPLOY.md`. The workflow accepts GitHub variables/secrets, uses an existing Turso database or provisions one through the Platform API, and deploys the Worker without a local CLI.
 
-The v1.10.1 workflow explicitly uses Node.js 24 and Wrangler 4.81.0. It passes `POSAPP_CLOUD_CONFIG` through Wrangler `deploy --secrets-file`, so code and secrets are uploaded together and the former `wrangler-action` secret-upload failure is avoided.
+The v1.10.2 workflow explicitly uses Node.js 24 and Wrangler 4.81.0. It passes `POSAPP_CLOUD_CONFIG` through Wrangler `deploy --secrets-file`, so code and secrets are uploaded together and the former `wrangler-action` secret-upload failure is avoided.
 
 The recommended runtime configuration is one encrypted Cloudflare secret named `POSAPP_CLOUD_CONFIG`:
 
@@ -43,8 +43,8 @@ npx wrangler secret put REGISTRATION_KEY
 
 ### Upgrade
 
-- With `autoInitializeSchema: true`, deploy the v1.10.1 Worker; it creates missing tables and adds the v1.10.1 columns idempotently.
-- With automatic initialization disabled, apply `migrations/v1.10.1.sql` once before deployment.
+- v1.10.2 has no new Turso schema migration. Deploy it directly.
+- When upgrading from before v1.10.0 with automatic initialization disabled, apply `migrations/v1.10.0.sql` once before deployment.
 - Deployments still on v1.6.0 must also apply `migrations/v1.7.0.sql` first.
 
 ## Sync behavior
@@ -60,7 +60,7 @@ npx wrangler secret put REGISTRATION_KEY
 
 ## Security and limits
 
-- Passwords use PBKDF2-HMAC-SHA256 with a unique salt.
+- Cloud owner passwords use PBKDF2-HMAC-SHA256 with a unique salt and 100,000 iterations, matching the Cloudflare Workers runtime limit.
 - Access tokens expire after 15 minutes; refresh tokens rotate and are stored only as hashes.
 - Owner sign-up requires the private registration key.
 - Repeated sign-in attempts are rate-limited per email/IP window.
