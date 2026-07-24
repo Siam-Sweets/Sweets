@@ -201,7 +201,7 @@ public class RegisterService : IRegisterService
                     ? normalizedNote
                     : CombineNotes(session.Note, normalizedNote);
             await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
 
             summary.ClosedAt = closedAt;
             summary.CountedCash = countedCash;
@@ -211,8 +211,7 @@ public class RegisterService : IRegisterService
         }
         catch
         {
-            await transaction.RollbackAsync();
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
     }

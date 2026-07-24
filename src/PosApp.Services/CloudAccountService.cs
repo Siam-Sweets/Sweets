@@ -117,56 +117,90 @@ public sealed class CloudAccountService : ICloudAccountService
         return ToStatus(credential, "Signed in and this device was registered.");
     }
 
-    public Task DisconnectAsync(CancellationToken cancellationToken = default)
-        => _credentials.ClearAsync(cancellationToken);
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
+    {
+        var credential = await _credentials.LoadAsync(cancellationToken);
+        if (credential == null)
+        {
+            await _credentials.ClearAsync(cancellationToken);
+            return;
+        }
+
+        // A disconnect is a security operation, not merely deletion of a local file.
+        // Keep the credential when the server cannot be reached so the owner can retry
+        // and the refresh token is never left active without an available revoke path.
+        credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
+        var response = await PostAsync<CloudLogoutResponse>(credential.Endpoint, "/v1/auth/logout", new
+        {
+            refreshToken = credential.RefreshToken,
+            deviceKey = credential.DeviceKey
+        }, credential.AccessToken, cancellationToken);
+        if (!response.Ok)
+            throw new InvalidOperationException("The cloud server did not confirm device logout.");
+
+        await _credentials.ClearAsync(cancellationToken);
+    }
 
     public async Task<CloudSnapshotUploadSummary> UploadInitialSnapshotsAsync(
         CancellationToken cancellationToken = default)
     {
         var credential = await RequireCredentialAsync(cancellationToken);
-        var stores = await _db.Stores.AsNoTracking().OrderBy(x => x.Id).ToListAsync(cancellationToken);
-        if (stores.Count == 0) throw new InvalidOperationException("No local stores are available to upload.");
+        var backupSetId = Guid.NewGuid().ToString("N");
+        var capturedAt = DateTimeOffset.UtcNow;
+        List<(Store Store, StoreSnapshot Snapshot, long Cursor)> snapshots;
+
+        // Capture every store under one SQLite read transaction so the backup set
+        // represents one coherent local point in time. Network upload happens only
+        // after the read transaction is released.
+        await using (var readTransaction = await _db.Database.BeginTransactionAsync(cancellationToken))
+        {
+            var stores = await _db.Stores.AsNoTracking().OrderBy(x => x.Id)
+                .ToListAsync(cancellationToken);
+            if (stores.Count == 0)
+                throw new InvalidOperationException("No local stores are available to upload.");
+            snapshots = new List<(Store, StoreSnapshot, long)>();
+            foreach (var store in stores)
+            {
+                var state = await _db.SyncStates.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.StoreId == store.Id, cancellationToken);
+                snapshots.Add((store, await BuildSnapshotAsync(store, capturedAt, cancellationToken),
+                    state?.PullCursor ?? 0));
+            }
+            await readTransaction.CommitAsync(cancellationToken);
+        }
 
         long totalRows = 0;
-        foreach (var store in stores)
+        foreach (var entry in snapshots)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var snapshot = await BuildSnapshotAsync(store, cancellationToken);
-            var snapshotJson = JsonSerializer.Serialize(snapshot, JsonOptions);
+            var snapshotJson = JsonSerializer.Serialize(entry.Snapshot, JsonOptions);
             var byteCount = Encoding.UTF8.GetByteCount(snapshotJson);
             if (byteCount > MaximumSnapshotBytes)
-            {
                 throw new InvalidOperationException(
-                    $"The initial snapshot for {store.Name} is {byteCount / 1_000_000d:0.0} MB. " +
+                    $"The initial snapshot for {entry.Store.Name} is {byteCount / 1_000_000d:0.0} MB. " +
                     "Snapshots are limited to 15 MB per store. Reduce archived data before uploading a new full snapshot.");
-            }
 
             credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
-            var state = await _db.SyncStates.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.StoreId == store.Id, cancellationToken);
-            var uploaded = await PostAsync<CloudSnapshotResponse>(credential.Endpoint, "/v1/sync/snapshot/upload", new
-            {
-                store = new
+            var uploaded = await PostAsync<CloudSnapshotResponse>(credential.Endpoint,
+                "/v1/sync/snapshot/upload", new
                 {
-                    syncId = store.SyncId,
-                    store.Code,
-                    store.Name,
-                    store.Address,
-                    store.Phone,
-                    store.IsActive,
-                    store.CreatedAt,
-                    store.UpdatedAt
-                },
-                schemaVersion = 2,
-                appVersion = CurrentVersion(),
-                syncCursor = state?.PullCursor ?? 0,
-                rowCount = snapshot.RowCount,
-                payload = snapshot
-            }, credential.AccessToken, cancellationToken);
-
-            totalRows += snapshot.RowCount;
+                    backupSetId,
+                    capturedAt,
+                    store = new
+                    {
+                        syncId = entry.Store.SyncId,
+                        entry.Store.Code, entry.Store.Name, entry.Store.Address, entry.Store.Phone,
+                        entry.Store.IsActive, entry.Store.CreatedAt, entry.Store.UpdatedAt
+                    },
+                    schemaVersion = 5,
+                    appVersion = CurrentVersion(),
+                    syncCursor = entry.Cursor,
+                    rowCount = entry.Snapshot.RowCount,
+                    payload = entry.Snapshot
+                }, credential.AccessToken, cancellationToken);
+            totalRows += entry.Snapshot.RowCount;
             await RecordSnapshotSuccessAsync(
-                store.Id, credential.DeviceId, uploaded.SyncCursor, cancellationToken);
+                entry.Store.Id, credential.DeviceId, uploaded.SyncCursor, cancellationToken);
         }
 
         var uploadedAt = DateTimeOffset.UtcNow;
@@ -174,13 +208,12 @@ public sealed class CloudAccountService : ICloudAccountService
         await _credentials.SaveAsync(credential, cancellationToken);
         return new CloudSnapshotUploadSummary
         {
-            StoreCount = stores.Count,
-            TotalRows = totalRows,
-            UploadedAt = uploadedAt
+            StoreCount = snapshots.Count, TotalRows = totalRows, UploadedAt = uploadedAt
         };
     }
 
-    private async Task<StoreSnapshot> BuildSnapshotAsync(Store store, CancellationToken cancellationToken)
+    private async Task<StoreSnapshot> BuildSnapshotAsync(
+        Store store, DateTimeOffset capturedAt, CancellationToken cancellationToken)
     {
         var entities = new SortedDictionary<string, IReadOnlyList<SortedDictionary<string, object?>>>(StringComparer.Ordinal)
         {
@@ -206,9 +239,9 @@ public sealed class CloudAccountService : ICloudAccountService
         var rowCount = 1L + entities.Values.Sum(x => (long)x.Count);
         return new StoreSnapshot
         {
-            SchemaVersion = 4,
+            SchemaVersion = 5,
             AppVersion = CurrentVersion(),
-            ExportedAtUtc = DateTimeOffset.UtcNow,
+            ExportedAtUtc = capturedAt,
             Store = SyncPayloadSerializer.CreateValues(store),
             Entities = entities,
             RowCount = rowCount
@@ -419,7 +452,7 @@ public sealed class CloudAccountService : ICloudAccountService
     }
 
     private static string CurrentVersion()
-        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.9.8";
+        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.10.0";
 
     private sealed class StoreSnapshot
     {
@@ -434,6 +467,11 @@ public sealed class CloudAccountService : ICloudAccountService
     private sealed class CloudApiError
     {
         public string Error { get; set; } = string.Empty;
+    }
+
+    private sealed class CloudLogoutResponse
+    {
+        public bool Ok { get; set; }
     }
 
     private sealed class CloudSnapshotResponse
@@ -506,6 +544,24 @@ internal sealed class CloudCredentialStore
             "PosApp");
         _credentialPath = Path.Combine(_folder, "cloud-credentials.dat");
         _identityPath = Path.Combine(_folder, "cloud-device.json");
+    }
+
+    public static bool HasUsableCredential()
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PosApp", "cloud-credentials.dat");
+            if (!File.Exists(path) || new FileInfo(path).Length == 0) return false;
+            var clearBytes = ProtectedData.Unprotect(File.ReadAllBytes(path), Entropy, DataProtectionScope.CurrentUser);
+            var credential = JsonSerializer.Deserialize<CloudCredential>(clearBytes, JsonOptions);
+            return credential != null &&
+                   !string.IsNullOrWhiteSpace(credential.RefreshToken) &&
+                   !string.IsNullOrWhiteSpace(credential.DeviceId) &&
+                   CloudDeploymentConfiguration.TryGetEndpoint() != null;
+        }
+        catch { return false; }
     }
 
     public async Task<CloudCredential?> LoadAsync(CancellationToken cancellationToken)

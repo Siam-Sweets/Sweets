@@ -10,6 +10,7 @@ namespace PosApp.Core.Models;
 /// </summary>
 public class SaleDraft
 {
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
     public int? CustomerId { get; set; }
     public int UserId { get; set; }
     public List<SaleDraftLine> Lines { get; set; } = new();
@@ -34,6 +35,7 @@ public class SaleDraftLine : INotifyPropertyChanged
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string? Sku { get; set; }
+    public string CategoryName { get; set; } = "Uncategorized";
     public decimal Quantity
     {
         get => _quantity;
@@ -83,9 +85,11 @@ public class SaleDraftLine : INotifyPropertyChanged
 /// </summary>
 public sealed class RefundDraft
 {
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
     public int SaleId { get; set; }
     public int UserId { get; set; }
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.Cash;
+    public List<SalePayment> Payments { get; set; } = new();
     public string? Reason { get; set; }
     public List<RefundDraftLine> Lines { get; set; } = new();
 }
@@ -190,6 +194,7 @@ public class InitialSetupRequest
 
 public class PurchaseDraft
 {
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
     public int? SupplierId { get; set; }
     public int UserId { get; set; }
     public string? ExternalReference { get; set; }
@@ -290,6 +295,8 @@ public class DateRangeReport
 
 public class TopProductRow
 {
+    public int StoreId { get; set; }
+    public string StoreName { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
     public string? Sku { get; set; }
@@ -322,6 +329,7 @@ public class PaymentBreakdownRow
 
 public sealed class StockTransferDraft
 {
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
     public int DestinationStoreId { get; set; }
     public string? Note { get; set; }
     public List<StockTransferDraftItem> Items { get; set; } = new();

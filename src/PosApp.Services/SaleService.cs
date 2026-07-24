@@ -7,12 +7,21 @@ using PosApp.Data;
 
 namespace PosApp.Services;
 
-/// <summary>Atomic sale, suspension, void, refund, payment, promotion, and stock processing.</summary>
+/// <summary>
+/// Atomic, idempotent sale, suspension, void, refund, payment, promotion, and
+/// stock processing. All inventory movements are protected by optimistic
+/// concurrency and deterministic append-only ledger keys.
+/// </summary>
 public class SaleService : ISaleService
 {
     private readonly AppDbContext _db;
+    private readonly ISettingsService _settings;
 
-    public SaleService(AppDbContext db) => _db = db;
+    public SaleService(AppDbContext db, ISettingsService settings)
+    {
+        _db = db;
+        _settings = settings;
+    }
 
     public Task<string> GenerateReceiptNumberAsync()
     {
@@ -24,31 +33,48 @@ public class SaleService : ISaleService
     public async Task<Sale> SuspendAsync(SaleDraft draft)
     {
         ValidateDraftLines(draft);
+        draft.OperationId = NormalizeOperationId(draft.OperationId, "sale");
         if (draft.UserId <= 0) throw new InvalidOperationException("A signed-in user is required.");
+
         _db.ChangeTracker.Clear();
         await EnsureActiveUserAsync(draft.UserId);
         await EnsureActiveCustomerAsync(draft.CustomerId);
+        using var operation = SyncOperationScope.Begin(draft.OperationId);
+
         Sale? sale = null;
         if (draft.SuspendedSaleId.HasValue)
         {
             if (draft.SuspendedSaleId.Value <= 0)
                 throw new InvalidOperationException("The saved sale reference is invalid.");
-            sale = await _db.Sales.Include(s => s.Items)
-                .FirstOrDefaultAsync(s => s.Id == draft.SuspendedSaleId.Value && s.Status == SaleStatus.Suspended);
+            sale = await _db.Sales.Include(s => s.Items).Include(s => s.Payments)
+                .FirstOrDefaultAsync(s => s.Id == draft.SuspendedSaleId.Value &&
+                                          s.Status == SaleStatus.Suspended);
             if (sale == null)
-                throw new InvalidOperationException("The saved sale is no longer available. Refresh the open-sales list.");
+                throw new InvalidOperationException(
+                    "The saved sale is no longer available. Refresh the open-sales list.");
         }
+        sale ??= await _db.Sales.Include(s => s.Items).Include(s => s.Payments)
+            .FirstOrDefaultAsync(s => s.OperationId == draft.OperationId);
+        if (sale is { Status: not SaleStatus.Suspended }) return sale;
 
         if (sale == null)
         {
-            sale = new Sale { ReceiptNumber = await GenerateReceiptNumberAsync(), Status = SaleStatus.Suspended };
+            sale = new Sale
+            {
+                OperationId = draft.OperationId,
+                ReceiptNumber = await GenerateReceiptNumberAsync(),
+                Status = SaleStatus.Suspended
+            };
             _db.Sales.Add(sale);
         }
         else
         {
             _db.SaleItems.RemoveRange(sale.Items.ToList());
+            _db.SalePayments.RemoveRange(sale.Payments.ToList());
             sale.Items.Clear();
+            sale.Payments.Clear();
             sale.UpdatedAt = DateTime.UtcNow;
+            sale.OperationId = draft.OperationId;
         }
 
         sale.CustomerId = draft.CustomerId;
@@ -57,13 +83,17 @@ public class SaleService : ISaleService
         sale.Subtotal = draft.Subtotal;
         sale.DiscountTotal = draft.DiscountTotal;
         sale.TaxTotal = draft.TaxTotal;
+        sale.Rounding = 0m;
+        sale.AmountPaid = 0m;
+        sale.Change = 0m;
         sale.Note = Clean(draft.Note, 500, "Sale note");
         sale.ServiceType = NormalizeServiceType(draft.ServiceType);
         foreach (var line in draft.Lines) sale.Items.Add(BuildSaleItem(line, sale));
 
         await _db.SaveChangesAsync();
+        var id = sale.Id;
         _db.ChangeTracker.Clear();
-        return sale;
+        return await GetSaleByIdAsync(id) ?? sale;
     }
 
     public async Task<Sale> RecallSuspendedAsync(int saleId)
@@ -81,75 +111,79 @@ public class SaleService : ISaleService
     public async Task<Sale> CheckoutAsync(SaleDraft draft)
     {
         ValidateDraftLines(draft);
+        draft.OperationId = NormalizeOperationId(draft.OperationId, "sale");
         if (draft.UserId <= 0) throw new InvalidOperationException("A signed-in user is required.");
+        ValidatePayments(draft);
+
+        var existing = await _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Payments)
+            .FirstOrDefaultAsync(s => s.OperationId == draft.OperationId &&
+                                      s.Status != SaleStatus.Suspended);
+        if (existing != null) return existing;
 
         var total = draft.Total;
-        if (total < -0.0001m) throw new InvalidOperationException("The sale total cannot be negative.");
-        if (total > 0.0001m && draft.Payments.Count == 0)
-            throw new InvalidOperationException("A payment is required to complete the sale.");
-        if (draft.Payments.Any(p => p.Amount <= 0m || !Enum.IsDefined(p.Method)))
-            throw new InvalidOperationException("Payments must use a valid method and an amount greater than zero.");
-
         var appliedPayment = draft.Payments.Sum(p => p.Amount);
-        if (Math.Abs(appliedPayment - total) > 0.0001m)
-            throw new InvalidOperationException("Applied payments must equal the sale total.");
-
         var amountTendered = draft.AmountTendered > 0m ? draft.AmountTendered : appliedPayment;
-        if (amountTendered + 0.0001m < appliedPayment)
-            throw new InvalidOperationException("The received amount is less than the applied payments.");
-        if (amountTendered - appliedPayment > 0.0001m &&
-            !draft.Payments.Any(p => p.Method == PaymentMethod.Cash))
-            throw new InvalidOperationException("Only cash payments can produce change.");
+        var settings = await _settings.GetStoreSettingsAsync();
 
-        // SaleService lives for the whole signed-in window. Discard entities from
-        // earlier operations before reading stock so an inventory count performed
-        // by another view cannot be overwritten by a stale tracked Product.
+        using var operation = SyncOperationScope.Begin(draft.OperationId);
         _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
             await EnsureActiveUserAsync(draft.UserId);
             await EnsureActiveCustomerAsync(draft.CustomerId);
-            var openSessionId = await _db.CashSessions.AsNoTracking()
-                .Where(session => session.ClosedAt == null)
-                .Select(session => (int?)session.Id)
-                .SingleOrDefaultAsync();
-            Sale? suspended = null;
+            var openSessionId = await GetOpenSessionIdAsync();
+            var requiresRegister = settings.RequireOpenRegisterForSales ||
+                                   draft.Payments.Any(x => x.Method == PaymentMethod.Cash);
+            if (requiresRegister && !openSessionId.HasValue)
+                throw new InvalidOperationException("Open the cash register before completing this sale.");
+
+            Sale? sale = null;
             if (draft.SuspendedSaleId.HasValue)
             {
                 if (draft.SuspendedSaleId.Value <= 0)
                     throw new InvalidOperationException("The saved sale reference is invalid.");
-                suspended = await _db.Sales.Include(s => s.Items)
-                    .FirstOrDefaultAsync(s => s.Id == draft.SuspendedSaleId.Value && s.Status == SaleStatus.Suspended);
-                if (suspended == null)
+                sale = await _db.Sales.Include(s => s.Items).Include(s => s.Payments)
+                    .FirstOrDefaultAsync(s => s.Id == draft.SuspendedSaleId.Value &&
+                                              s.Status == SaleStatus.Suspended);
+                if (sale == null)
                     throw new InvalidOperationException(
                         "The saved sale is no longer available. Refresh the open-sales list before checkout.");
             }
-            var receiptNo = suspended?.ReceiptNumber ?? await GenerateReceiptNumberAsync();
-            if (suspended != null)
+            sale ??= await _db.Sales.Include(s => s.Items).Include(s => s.Payments)
+                .FirstOrDefaultAsync(s => s.OperationId == draft.OperationId &&
+                                          s.Status == SaleStatus.Suspended);
+
+            var receiptNo = sale?.ReceiptNumber ?? await GenerateReceiptNumberAsync();
+            if (sale == null)
             {
-                _db.SaleItems.RemoveRange(suspended.Items);
-                _db.Sales.Remove(suspended);
+                sale = new Sale { OperationId = draft.OperationId, ReceiptNumber = receiptNo };
+                _db.Sales.Add(sale);
+            }
+            else
+            {
+                _db.SaleItems.RemoveRange(sale.Items.ToList());
+                _db.SalePayments.RemoveRange(sale.Payments.ToList());
+                sale.Items.Clear();
+                sale.Payments.Clear();
+                sale.OperationId = draft.OperationId;
             }
 
             await ValidateAndConsumePromotionsAsync(draft);
-
-            var sale = new Sale
-            {
-                ReceiptNumber = receiptNo,
-                CustomerId = draft.CustomerId,
-                UserId = draft.UserId,
-                CashSessionId = openSessionId,
-                Status = SaleStatus.Completed,
-                SaleDate = DateTime.UtcNow,
-                Subtotal = draft.Subtotal,
-                DiscountTotal = draft.DiscountTotal,
-                TaxTotal = draft.TaxTotal,
-                AmountPaid = amountTendered,
-                Change = Math.Max(0m, amountTendered - total),
-                Note = Clean(draft.Note, 500, "Sale note"),
-                ServiceType = NormalizeServiceType(draft.ServiceType)
-            };
+            sale.CustomerId = draft.CustomerId;
+            sale.UserId = draft.UserId;
+            sale.CashSessionId = openSessionId;
+            sale.Status = SaleStatus.Completed;
+            sale.SaleDate = DateTime.UtcNow;
+            sale.Subtotal = draft.Subtotal;
+            sale.DiscountTotal = draft.DiscountTotal;
+            sale.TaxTotal = draft.TaxTotal;
+            sale.Rounding = 0m;
+            sale.AmountPaid = amountTendered;
+            sale.Change = Math.Max(0m, amountTendered - total);
+            sale.Note = Clean(draft.Note, 500, "Sale note");
+            sale.ServiceType = NormalizeServiceType(draft.ServiceType);
+            sale.UpdatedAt = DateTime.UtcNow;
 
             foreach (var payment in draft.Payments)
             {
@@ -163,42 +197,45 @@ public class SaleService : ISaleService
             }
 
             var stockLinks = new List<(StockTransaction Transaction, SaleItem Item)>();
+            var lineNumber = 0;
             foreach (var line in draft.Lines)
             {
-                var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == line.ProductId && p.IsActive)
-                    ?? throw new InvalidOperationException($"Product not found or inactive: {line.ProductName}");
+                var product = await _db.Products.Include(x => x.Category)
+                    .FirstOrDefaultAsync(p => p.Id == line.ProductId && p.IsActive)
+                    ?? throw new InvalidOperationException(
+                        $"Product not found or inactive: {line.ProductName}");
+                if (line.DiscountAmount > 0m && !product.AllowDiscount)
+                    throw new InvalidOperationException($"Discounts are disabled for {product.Name}.");
 
                 var item = BuildSaleItem(line, sale);
-                // Always use the current catalog cost and discount permission at checkout.
+                item.ProductName = product.Name;
+                item.Sku = product.Sku;
+                item.CategoryName = product.Category?.Name ?? "Uncategorized";
                 item.CostPrice = product.CostPrice;
                 item.Unit = product.EffectiveUnit;
                 sale.Items.Add(item);
 
-                if (line.DiscountAmount > 0m && !product.AllowDiscount)
-                    throw new InvalidOperationException($"Discounts are disabled for {product.Name}.");
-
-                if (product.StockQuantity.HasValue)
+                if (!product.StockQuantity.HasValue) continue;
+                var balance = product.StockQuantity.Value - line.Quantity;
+                if (balance < 0m)
+                    throw new InvalidOperationException($"Insufficient stock for {product.Name}.");
+                product.StockQuantity = balance;
+                product.UpdatedAt = DateTime.UtcNow;
+                var ledger = new StockTransaction
                 {
-                    var balance = product.StockQuantity.Value - line.Quantity;
-                    if (balance < 0m) throw new InvalidOperationException($"Insufficient stock for {line.ProductName}.");
-                    product.StockQuantity = balance;
-                    product.UpdatedAt = DateTime.UtcNow;
-                    var ledger = new StockTransaction
-                    {
-                        ProductId = product.Id,
-                        Type = StockTransactionType.Sale,
-                        Quantity = -line.Quantity,
-                        BalanceAfter = balance,
-                        UnitCost = product.CostPrice,
-                        UserId = draft.UserId,
-                        Note = $"Sale {receiptNo}"
-                    };
-                    _db.StockTransactions.Add(ledger);
-                    stockLinks.Add((ledger, item));
-                }
+                    ProductId = product.Id,
+                    OperationKey = $"{draft.OperationId}:sale:{++lineNumber}",
+                    Type = StockTransactionType.Sale,
+                    Quantity = -line.Quantity,
+                    BalanceAfter = balance,
+                    UnitCost = product.CostPrice,
+                    UserId = draft.UserId,
+                    Note = $"Sale {receiptNo}"
+                };
+                _db.StockTransactions.Add(ledger);
+                stockLinks.Add((ledger, item));
             }
 
-            _db.Sales.Add(sale);
             await _db.SaveChangesAsync();
             foreach (var link in stockLinks)
             {
@@ -206,15 +243,29 @@ public class SaleService : ISaleService
                 link.Transaction.SaleItemId = link.Item.Id;
             }
             if (stockLinks.Count > 0) await _db.SaveChangesAsync();
-
-            await transaction.CommitAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
+            var id = sale.Id;
             _db.ChangeTracker.Clear();
-            return sale;
+            return await GetSaleByIdAsync(id) ?? sale;
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "Stock or promotion availability changed while checkout was processing. Reload the cart and try again.", ex);
+        }
+        catch (DbUpdateException)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            var duplicate = await _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Payments)
+                .FirstOrDefaultAsync(s => s.OperationId == draft.OperationId &&
+                                          s.Status != SaleStatus.Suspended);
+            if (duplicate != null) return duplicate;
+            throw;
         }
         catch
         {
-            await transaction.RollbackAsync();
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
     }
@@ -223,47 +274,41 @@ public class SaleService : ISaleService
         => id <= 0
             ? null
             : await _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Payments)
-            .Include(s => s.Customer).Include(s => s.User).FirstOrDefaultAsync(s => s.Id == id);
+                .Include(s => s.Customer).Include(s => s.User).FirstOrDefaultAsync(s => s.Id == id);
 
     public async Task<IReadOnlyList<Sale>> GetSalesAsync(DateTime from, DateTime to, SaleStatus? status = null)
     {
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
-        var query = _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Customer).Include(s => s.User)
+        var query = _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Customer)
+            .Include(s => s.User)
             .Where(s => s.SaleDate >= range.FromUtc && s.SaleDate < range.ToUtcExclusive);
         if (status.HasValue) query = query.Where(s => s.Status == status.Value);
 
         var sales = await query.OrderByDescending(s => s.SaleDate).ToListAsync();
         var completedIds = sales.Where(s => s.Status == SaleStatus.Completed).Select(s => s.Id).ToList();
-        if (completedIds.Count > 0)
-        {
-            var refunds = await _db.Sales.AsNoTracking()
-                .Where(s => s.Status == SaleStatus.Refunded &&
-                            s.RefundedSaleId.HasValue && completedIds.Contains(s.RefundedSaleId.Value))
-                .Select(s => new
-                {
-                    OriginalSaleId = s.RefundedSaleId!.Value,
-                    s.Subtotal,
-                    s.DiscountTotal,
-                    s.TaxTotal,
-                    s.Rounding
-                })
-                .ToListAsync();
-            var refundedBySale = refunds
-                .GroupBy(refund => refund.OriginalSaleId)
-                .ToDictionary(
-                    group => group.Key,
-                    group => new
-                    {
-                        Count = group.Count(),
-                        Total = group.Sum(refund => Math.Abs(
-                            refund.Subtotal - refund.DiscountTotal + refund.TaxTotal + refund.Rounding))
-                    });
-            foreach (var sale in sales.Where(sale => sale.Status == SaleStatus.Completed))
+        if (completedIds.Count == 0) return sales;
+
+        var refunds = await _db.Sales.AsNoTracking()
+            .Where(s => s.Status == SaleStatus.Refunded && s.RefundedSaleId.HasValue &&
+                        completedIds.Contains(s.RefundedSaleId.Value))
+            .Select(s => new
             {
-                if (!refundedBySale.TryGetValue(sale.Id, out var refundState)) continue;
-                sale.HasRefund = refundState.Count > 0;
-                sale.IsFullyRefunded = refundState.Total + 0.0001m >= Math.Abs(sale.Total);
-            }
+                OriginalSaleId = s.RefundedSaleId!.Value,
+                s.Subtotal, s.DiscountTotal, s.TaxTotal, s.Rounding
+            }).ToListAsync();
+        var refundedBySale = refunds.GroupBy(x => x.OriginalSaleId).ToDictionary(
+            group => group.Key,
+            group => new
+            {
+                Count = group.Count(),
+                Total = group.Sum(refund => Math.Abs(
+                    refund.Subtotal - refund.DiscountTotal + refund.TaxTotal + refund.Rounding))
+            });
+        foreach (var sale in sales.Where(x => x.Status == SaleStatus.Completed))
+        {
+            if (!refundedBySale.TryGetValue(sale.Id, out var state)) continue;
+            sale.HasRefund = state.Count > 0;
+            sale.IsFullyRefunded = state.Total + 0.0001m >= Math.Abs(sale.Total);
         }
         return sales;
     }
@@ -273,12 +318,22 @@ public class SaleService : ISaleService
         if (saleId <= 0) throw new InvalidOperationException("Select a completed sale to void.");
         if (userId <= 0) throw new InvalidOperationException("A signed-in user is required.");
         _db.ChangeTracker.Clear();
+        var preview = await _db.Sales.AsNoTracking().FirstOrDefaultAsync(x => x.Id == saleId)
+                      ?? throw new InvalidOperationException("Sale not found.");
+        if (preview.Status == SaleStatus.Voided)
+            return await GetSaleByIdAsync(saleId) ?? preview;
+        var operationId = $"{preview.SyncId}:void";
+        using var operation = SyncOperationScope.Begin(operationId);
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
             await EnsureActiveUserAsync(userId);
-            var sale = await _db.Sales.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == saleId)
-                ?? throw new InvalidOperationException("Sale not found.");
+            var sale = await _db.Sales.Include(s => s.Items).FirstAsync(s => s.Id == saleId);
+            if (sale.Status == SaleStatus.Voided)
+            {
+                await _db.CommitExternalTransactionAsync(transaction);
+                return sale;
+            }
             if (sale.Status != SaleStatus.Completed)
                 throw new InvalidOperationException("Only completed sales can be voided.");
             if (await _db.Sales.AnyAsync(s => s.RefundedSaleId == saleId))
@@ -291,18 +346,20 @@ public class SaleService : ISaleService
                     ?? throw new InvalidOperationException("The sale's register session could not be found.");
                 if (ownerSession.ClosedAt.HasValue)
                     throw new InvalidOperationException(
-                        "This sale belongs to a closed register. Process a refund in an open register instead of voiding it.");
+                        "This sale belongs to a closed register. Process a refund in an open register instead.");
             }
 
+            var lineNumber = 0;
             foreach (var item in sale.Items)
             {
-                var product = await _db.Products.FindAsync(item.ProductId);
+                var product = await _db.Products.FirstOrDefaultAsync(x => x.Id == item.ProductId);
                 if (product?.StockQuantity is not decimal current) continue;
                 product.StockQuantity = current + item.Quantity;
                 product.UpdatedAt = DateTime.UtcNow;
                 _db.StockTransactions.Add(new StockTransaction
                 {
                     ProductId = product.Id,
+                    OperationKey = $"{operationId}:{++lineNumber}",
                     Type = StockTransactionType.Return,
                     Quantity = item.Quantity,
                     BalanceAfter = product.StockQuantity.Value,
@@ -318,14 +375,25 @@ public class SaleService : ISaleService
             sale.Status = SaleStatus.Voided;
             sale.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
+            var id = sale.Id;
             _db.ChangeTracker.Clear();
-            return sale;
+            return await GetSaleByIdAsync(id) ?? sale;
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "The sale or inventory changed while the void was processing. Reload and try again.", ex);
+        }
+        catch (DbUpdateException ex) when (IsOperationKeyDuplicate(ex))
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            return await GetSaleByIdAsync(saleId) ?? preview;
         }
         catch
         {
-            await transaction.RollbackAsync();
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
     }
@@ -335,49 +403,40 @@ public class SaleService : ISaleService
         if (saleId <= 0) throw new InvalidOperationException("Select a completed sale to refund.");
         if (userId <= 0) throw new InvalidOperationException("A signed-in user is required.");
         _db.ChangeTracker.Clear();
-        var original = await _db.Sales.AsNoTracking()
-            .Include(sale => sale.Items)
-            .Include(sale => sale.Payments)
-            .FirstOrDefaultAsync(sale => sale.Id == saleId)
+        var original = await _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Payments)
+            .FirstOrDefaultAsync(s => s.Id == saleId)
             ?? throw new InvalidOperationException("Sale not found.");
-        var priorItems = await _db.Sales.AsNoTracking()
-            .Where(sale => sale.RefundedSaleId == saleId && sale.Status == SaleStatus.Refunded)
-            .SelectMany(sale => sale.Items)
-            .ToListAsync();
-        var returnedByLine = RefundQuantityUtilities.BuildReturnedByLine(original.Items, priorItems);
         var lines = original.Items
             .Select(item => new RefundDraftLine
             {
                 SaleItemId = item.Id,
-                Quantity = Math.Max(0m, item.Quantity - returnedByLine.GetValueOrDefault(item.Id))
+                Quantity = Math.Max(0m, item.Quantity - item.RefundedQuantity)
             })
-            .Where(line => line.Quantity > 0.0001m)
-            .ToList();
+            .Where(line => line.Quantity > 0.0001m).ToList();
         if (lines.Count == 0)
             throw new InvalidOperationException("This sale has already been fully refunded.");
 
+        var refundable = Math.Abs(original.Total) - await GetPriorRefundTotalAsync(original.Id);
         return await RefundSaleAsync(new RefundDraft
         {
             SaleId = saleId,
             UserId = userId,
-            PaymentMethod = original.Payments.FirstOrDefault()?.Method ?? PaymentMethod.Cash,
             Reason = reason,
-            Lines = lines
+            Lines = lines,
+            Payments = AllocateRefundPayments(original.Payments, refundable)
         });
     }
 
     public async Task<Sale> RefundSaleAsync(RefundDraft draft)
     {
-        ArgumentNullException.ThrowIfNull(draft);
-        if (draft.SaleId <= 0) throw new InvalidOperationException("Select a completed sale to refund.");
-        if (draft.UserId <= 0) throw new InvalidOperationException("A signed-in user is required.");
-        if (draft.Lines == null || draft.Lines.Count == 0)
-            throw new InvalidOperationException("Select at least one item to refund.");
-        if (!Enum.IsDefined(draft.PaymentMethod))
-            throw new InvalidOperationException("Select a valid refund payment method.");
-        if (draft.Lines.Any(line => line.SaleItemId <= 0 || line.Quantity <= 0m))
-            throw new InvalidOperationException("Refund quantities must be greater than zero.");
+        ValidateRefundDraft(draft);
+        draft.OperationId = NormalizeOperationId(draft.OperationId, "refund");
+        var existing = await _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Payments)
+            .FirstOrDefaultAsync(s => s.OperationId == draft.OperationId &&
+                                      s.Status == SaleStatus.Refunded);
+        if (existing != null) return existing;
 
+        using var operation = SyncOperationScope.Begin(draft.OperationId);
         _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
@@ -389,16 +448,7 @@ public class SaleService : ISaleService
             if (original.Status != SaleStatus.Completed)
                 throw new InvalidOperationException("Only completed sales can be refunded.");
 
-            var priorRefunds = await _db.Sales
-                .Include(sale => sale.Items)
-                .Where(sale => sale.RefundedSaleId == original.Id && sale.Status == SaleStatus.Refunded)
-                .ToListAsync();
-            var returnedByLine = RefundQuantityUtilities.BuildReturnedByLine(
-                original.Items,
-                priorRefunds.SelectMany(refund => refund.Items));
-
-            var requestedByLine = draft.Lines
-                .GroupBy(line => line.SaleItemId)
+            var requestedByLine = draft.Lines.GroupBy(line => line.SaleItemId)
                 .ToDictionary(group => group.Key, group => group.Sum(line => line.Quantity));
             var originalById = original.Items.ToDictionary(item => item.Id);
             var selections = new List<(SaleItem Item, decimal Quantity, decimal Discount, decimal Tax)>();
@@ -406,11 +456,10 @@ public class SaleService : ISaleService
             {
                 if (!originalById.TryGetValue(request.Key, out var item))
                     throw new InvalidOperationException("A selected refund line does not belong to this sale.");
-                var remaining = item.Quantity - returnedByLine.GetValueOrDefault(item.Id);
+                var remaining = item.Quantity - item.RefundedQuantity;
                 if (request.Value > remaining + 0.0001m)
                     throw new InvalidOperationException(
                         $"Only {remaining:0.###} of {item.ProductName} remains refundable.");
-
                 var ratio = item.Quantity == 0m ? 0m : request.Value / item.Quantity;
                 var discount = Math.Round(item.DiscountAmount * ratio, 4, MidpointRounding.AwayFromZero);
                 var gross = item.UnitPrice * request.Value;
@@ -420,12 +469,12 @@ public class SaleService : ISaleService
             }
 
             var allRemainingSelected = original.Items.All(item =>
-                item.Quantity - returnedByLine.GetValueOrDefault(item.Id) -
+                item.Quantity - item.RefundedQuantity -
                 requestedByLine.GetValueOrDefault(item.Id) <= 0.0001m);
-            var subtotal = -selections.Sum(selection => selection.Item.UnitPrice * selection.Quantity);
-            var discountTotal = -selections.Sum(selection => selection.Discount);
-            var taxTotal = -selections.Sum(selection => selection.Tax);
-            var priorRefundTotal = priorRefunds.Sum(refund => Math.Abs(refund.Total));
+            var subtotal = -selections.Sum(x => x.Item.UnitPrice * x.Quantity);
+            var discountTotal = -selections.Sum(x => x.Discount);
+            var taxTotal = -selections.Sum(x => x.Tax);
+            var priorRefundTotal = await GetPriorRefundTotalAsync(original.Id);
             var remainingFinancialTotal = Math.Max(0m, Math.Abs(original.Total) - priorRefundTotal);
             var beforeRounding = subtotal - discountTotal + taxTotal;
             var rounding = allRemainingSelected ? -remainingFinancialTotal - beforeRounding : 0m;
@@ -433,18 +482,15 @@ public class SaleService : ISaleService
             if (refundTotal >= -0.0001m)
                 throw new InvalidOperationException("The selected items do not have a refundable value.");
 
-            var openSessionId = await _db.CashSessions.AsNoTracking()
-                .Where(session => session.ClosedAt == null)
-                .Select(session => (int?)session.Id)
-                .SingleOrDefaultAsync();
-            if (draft.PaymentMethod == PaymentMethod.Cash && !openSessionId.HasValue)
-            {
+            var refundPayments = NormalizeRefundPayments(draft, refundTotal, original.Payments);
+            var openSessionId = await GetOpenSessionIdAsync();
+            if (refundPayments.Any(x => x.Method == PaymentMethod.Cash) && !openSessionId.HasValue)
                 throw new InvalidOperationException(
                     "Open the cash register before processing a refund that returns cash.");
-            }
 
             var refund = new Sale
             {
+                OperationId = draft.OperationId,
                 ReceiptNumber = await GenerateReceiptNumberAsync(),
                 UserId = draft.UserId,
                 CustomerId = original.CustomerId,
@@ -459,27 +505,35 @@ public class SaleService : ISaleService
                 Change = 0m,
                 RefundedSaleId = original.Id,
                 ServiceType = original.ServiceType,
-                Note = Clean(draft.Reason, 500, "Refund reason") ?? $"Refund of {original.ReceiptNumber}"
+                Note = Clean(draft.Reason, 500, "Refund reason") ??
+                       $"Refund of {original.ReceiptNumber}"
             };
-
-            refund.Payments.Add(new SalePayment
+            foreach (var payment in refundPayments)
             {
-                Sale = refund,
-                Method = draft.PaymentMethod,
-                Amount = refundTotal,
-                Reference = $"Refund {original.ReceiptNumber}"
-            });
+                refund.Payments.Add(new SalePayment
+                {
+                    Sale = refund,
+                    Method = payment.Method,
+                    Amount = payment.Amount,
+                    Reference = Clean(payment.Reference, 64, "Payment reference") ??
+                                $"Refund {original.ReceiptNumber}"
+                });
+            }
 
             var stockLinks = new List<(StockTransaction Transaction, SaleItem Item)>();
+            var lineNumber = 0;
             foreach (var selection in selections)
             {
                 var item = selection.Item;
+                item.RefundedQuantity += selection.Quantity;
+                item.IsRefunded = item.RefundedQuantity + 0.0001m >= item.Quantity;
                 var refundItem = new SaleItem
                 {
                     Sale = refund,
                     ProductId = item.ProductId,
                     ProductName = item.ProductName,
                     Sku = item.Sku,
+                    CategoryName = item.CategoryName,
                     Quantity = -selection.Quantity,
                     Unit = item.Unit,
                     UnitPrice = item.UnitPrice,
@@ -493,13 +547,14 @@ public class SaleService : ISaleService
                 };
                 refund.Items.Add(refundItem);
 
-                var product = await _db.Products.FindAsync(item.ProductId);
+                var product = await _db.Products.FirstOrDefaultAsync(x => x.Id == item.ProductId);
                 if (product?.StockQuantity is not decimal current) continue;
                 product.StockQuantity = current + selection.Quantity;
                 product.UpdatedAt = DateTime.UtcNow;
                 var ledger = new StockTransaction
                 {
                     ProductId = product.Id,
+                    OperationKey = $"{draft.OperationId}:refund:{++lineNumber}",
                     Type = StockTransactionType.Return,
                     Quantity = selection.Quantity,
                     BalanceAfter = product.StockQuantity.Value,
@@ -521,32 +576,47 @@ public class SaleService : ISaleService
                 link.Transaction.SaleItemId = link.Item.Id;
             }
             if (stockLinks.Count > 0) await _db.SaveChangesAsync();
-
-            await transaction.CommitAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
+            var id = refund.Id;
             _db.ChangeTracker.Clear();
-            return refund;
+            return await GetSaleByIdAsync(id) ?? refund;
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "The sale, refundable quantity, or inventory changed on another device. Reload and try again.", ex);
+        }
+        catch (DbUpdateException)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            var duplicate = await _db.Sales.AsNoTracking().Include(s => s.Items).Include(s => s.Payments)
+                .FirstOrDefaultAsync(s => s.OperationId == draft.OperationId &&
+                                          s.Status == SaleStatus.Refunded);
+            if (duplicate != null) return duplicate;
+            throw;
         }
         catch
         {
-            await transaction.RollbackAsync();
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
     }
 
     private async Task ValidateAndConsumePromotionsAsync(SaleDraft draft)
     {
-        var ids = draft.Lines.Where(l => l.PromotionId.HasValue).Select(l => l.PromotionId!.Value).Distinct().ToList();
+        var ids = draft.Lines.Where(l => l.PromotionId.HasValue)
+            .Select(l => l.PromotionId!.Value).Distinct().ToList();
         if (ids.Count == 0) return;
         var now = DateTime.Now;
         var promotions = await _db.Discounts.Where(d => ids.Contains(d.Id)).ToListAsync();
-        if (promotions.Count != ids.Count) throw new InvalidOperationException("A selected promotion no longer exists.");
+        if (promotions.Count != ids.Count)
+            throw new InvalidOperationException("A selected promotion no longer exists.");
         foreach (var promotion in promotions)
         {
             if (!promotion.IsActive || promotion.ValidFrom > now || promotion.ValidTo < now ||
                 promotion.MaxUses.HasValue && promotion.UsedCount >= promotion.MaxUses.Value)
                 throw new InvalidOperationException($"Promotion '{promotion.Name}' is no longer available.");
-
             foreach (var line in draft.Lines.Where(line => line.PromotionId == promotion.Id))
             {
                 var gross = line.UnitPrice * line.Quantity;
@@ -555,19 +625,20 @@ public class SaleService : ISaleService
                     : Math.Min(promotion.Value, gross);
                 if (Math.Abs(line.DiscountAmount - expected) > 0.0001m)
                     throw new InvalidOperationException(
-                        $"The discount for promotion '{promotion.Name}' was changed. Reapply the promotion before checkout.");
+                        $"The discount for promotion '{promotion.Name}' changed. Reapply it before checkout.");
             }
-
             promotion.UsedCount++;
         }
     }
 
     private async Task ReleasePromotionsAsync(IEnumerable<SaleItem> items)
     {
-        var ids = items.Where(i => i.PromotionId.HasValue).Select(i => i.PromotionId!.Value).Distinct().ToList();
+        var ids = items.Where(i => i.PromotionId.HasValue)
+            .Select(i => i.PromotionId!.Value).Distinct().ToList();
         if (ids.Count == 0) return;
         var promotions = await _db.Discounts.Where(d => ids.Contains(d.Id)).ToListAsync();
-        foreach (var promotion in promotions) promotion.UsedCount = Math.Max(0, promotion.UsedCount - 1);
+        foreach (var promotion in promotions)
+            promotion.UsedCount = Math.Max(0, promotion.UsedCount - 1);
     }
 
     private static SaleItem BuildSaleItem(SaleDraftLine line, Sale sale) => new()
@@ -576,6 +647,8 @@ public class SaleService : ISaleService
         ProductId = line.ProductId,
         ProductName = line.ProductName,
         Sku = line.Sku,
+        CategoryName = string.IsNullOrWhiteSpace(line.CategoryName)
+            ? "Uncategorized" : line.CategoryName.Trim(),
         Quantity = line.Quantity,
         Unit = line.Unit,
         UnitPrice = line.UnitPrice,
@@ -595,16 +668,125 @@ public class SaleService : ISaleService
         if (draft.Lines.Any(l => l.ProductId <= 0 || l.Quantity <= 0m || l.UnitPrice < 0m ||
                                  l.CostPrice < 0m || l.TaxRate is < 0m or > 100m ||
                                  l.DiscountAmount < 0m || l.DiscountAmount > l.UnitPrice * l.Quantity))
-            throw new InvalidOperationException("The cart contains an invalid product, quantity, price, tax, or discount.");
-        if (draft.Lines.Any(line => string.IsNullOrWhiteSpace(line.ProductName) || line.ProductName.Length > 100 ||
-                                    line.Sku?.Length > 64))
-            throw new InvalidOperationException("The cart contains an invalid product name or code.");
+            throw new InvalidOperationException(
+                "The cart contains an invalid product, quantity, price, tax, or discount.");
+        if (draft.Lines.Any(line => string.IsNullOrWhiteSpace(line.ProductName) ||
+                                    line.ProductName.Length > 100 || line.Sku?.Length > 64 ||
+                                    line.CategoryName?.Length > 100))
+            throw new InvalidOperationException("The cart contains invalid product snapshot data.");
     }
+
+    private static void ValidatePayments(SaleDraft draft)
+    {
+        var total = draft.Total;
+        if (total < -0.0001m) throw new InvalidOperationException("The sale total cannot be negative.");
+        if (total > 0.0001m && draft.Payments.Count == 0)
+            throw new InvalidOperationException("A payment is required to complete the sale.");
+        if (draft.Payments.Any(p => p.Amount <= 0m || !Enum.IsDefined(p.Method)))
+            throw new InvalidOperationException(
+                "Payments must use a valid method and an amount greater than zero.");
+        var appliedPayment = draft.Payments.Sum(p => p.Amount);
+        if (Math.Abs(appliedPayment - total) > 0.0001m)
+            throw new InvalidOperationException("Applied payments must equal the sale total.");
+        var amountTendered = draft.AmountTendered > 0m ? draft.AmountTendered : appliedPayment;
+        if (amountTendered + 0.0001m < appliedPayment)
+            throw new InvalidOperationException("The received amount is less than the applied payments.");
+        if (amountTendered - appliedPayment > 0.0001m &&
+            !draft.Payments.Any(p => p.Method == PaymentMethod.Cash))
+            throw new InvalidOperationException("Only cash payments can produce change.");
+    }
+
+    private static void ValidateRefundDraft(RefundDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (draft.SaleId <= 0) throw new InvalidOperationException("Select a completed sale to refund.");
+        if (draft.UserId <= 0) throw new InvalidOperationException("A signed-in user is required.");
+        if (draft.Lines == null || draft.Lines.Count == 0)
+            throw new InvalidOperationException("Select at least one item to refund.");
+        if (!Enum.IsDefined(draft.PaymentMethod))
+            throw new InvalidOperationException("Select a valid refund payment method.");
+        if (draft.Lines.Any(line => line.SaleItemId <= 0 || line.Quantity <= 0m))
+            throw new InvalidOperationException("Refund quantities must be greater than zero.");
+    }
+
+    private static List<SalePayment> NormalizeRefundPayments(
+        RefundDraft draft,
+        decimal refundTotal,
+        IEnumerable<SalePayment> originalPayments)
+    {
+        var magnitude = Math.Abs(refundTotal);
+        var supplied = draft.Payments?.Where(x => x.Amount != 0m).ToList() ?? new List<SalePayment>();
+        if (supplied.Count == 0)
+        {
+            supplied = new List<SalePayment>
+            {
+                new() { Method = draft.PaymentMethod, Amount = -magnitude }
+            };
+        }
+        if (supplied.Any(x => !Enum.IsDefined(x.Method)))
+            throw new InvalidOperationException("A refund payment method is invalid.");
+        var normalized = supplied.Select(x => new SalePayment
+        {
+            Method = x.Method,
+            Amount = -Math.Abs(x.Amount),
+            Reference = x.Reference
+        }).ToList();
+        if (Math.Abs(normalized.Sum(x => x.Amount) - refundTotal) > 0.0001m)
+            throw new InvalidOperationException("Refund payments must equal the refund total.");
+        return normalized;
+    }
+
+    private static List<SalePayment> AllocateRefundPayments(
+        IEnumerable<SalePayment> originalPayments,
+        decimal magnitude)
+    {
+        var payments = originalPayments.Where(x => x.Amount > 0m).ToList();
+        if (payments.Count == 0)
+            return new List<SalePayment>
+            {
+                new() { Method = PaymentMethod.Cash, Amount = -magnitude }
+            };
+        var total = payments.Sum(x => x.Amount);
+        var allocated = new List<SalePayment>();
+        decimal used = 0m;
+        for (var i = 0; i < payments.Count; i++)
+        {
+            var amount = i == payments.Count - 1
+                ? magnitude - used
+                : Math.Round(magnitude * payments[i].Amount / total, 4,
+                    MidpointRounding.AwayFromZero);
+            used += amount;
+            allocated.Add(new SalePayment
+            {
+                Method = payments[i].Method,
+                Amount = -amount,
+                Reference = payments[i].Reference
+            });
+        }
+        return allocated;
+    }
+
+    private async Task<decimal> GetPriorRefundTotalAsync(int saleId)
+    {
+        var values = await _db.Sales.AsNoTracking()
+            .Where(x => x.Status == SaleStatus.Refunded && x.RefundedSaleId == saleId)
+            .Select(x => new { x.Subtotal, x.DiscountTotal, x.TaxTotal, x.Rounding })
+            .ToListAsync();
+        return values.Sum(x => Math.Abs(x.Subtotal - x.DiscountTotal + x.TaxTotal + x.Rounding));
+    }
+
+    private async Task<int?> GetOpenSessionIdAsync()
+        => await _db.CashSessions.AsNoTracking()
+            .Where(session => session.ClosedAt == null)
+            .OrderByDescending(session => session.OpenedAt)
+            .Select(session => (int?)session.Id)
+            .FirstOrDefaultAsync();
 
     private async Task EnsureActiveUserAsync(int userId)
     {
         if (!await _db.Users.AsNoTracking().AnyAsync(user => user.Id == userId && user.IsActive))
-            throw new InvalidOperationException("The signed-in user no longer exists or is inactive. Sign in again.");
+            throw new InvalidOperationException(
+                "The signed-in user no longer exists or is inactive. Sign in again.");
     }
 
     private async Task EnsureActiveCustomerAsync(int? customerId)
@@ -613,11 +795,27 @@ public class SaleService : ISaleService
         if (customerId.Value <= 0 ||
             !await _db.Customers.AsNoTracking().AnyAsync(customer =>
                 customer.Id == customerId.Value && customer.IsActive))
-            throw new InvalidOperationException("The selected customer no longer exists or is inactive.");
+            throw new InvalidOperationException(
+                "The selected customer no longer exists or is inactive.");
     }
 
+    private static string NormalizeOperationId(string? value, string label)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (normalized.Length is < 8 or > 64 || normalized.Any(char.IsWhiteSpace))
+            throw new InvalidOperationException($"The {label} operation ID is invalid.");
+        return normalized;
+    }
+
+    private static bool IsOperationKeyDuplicate(DbUpdateException exception)
+        => exception.InnerException?.Message.Contains("OperationKey", StringComparison.OrdinalIgnoreCase) == true ||
+           exception.Message.Contains("OperationKey", StringComparison.OrdinalIgnoreCase);
+
     private static string NormalizeServiceType(string? value)
-        => string.IsNullOrWhiteSpace(value) ? "Retail" : value.Trim()[..Math.Min(value.Trim().Length, 32)];
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? "Retail" : value.Trim();
+        return normalized[..Math.Min(normalized.Length, 32)];
+    }
 
     private static string? Clean(string? value, int maxLength, string field)
     {

@@ -7,6 +7,9 @@ public sealed class StockTransfer : StoreScopedEntity
 {
     public int Id { get; set; }
 
+    [MaxLength(64)]
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
+
     [MaxLength(40)]
     public string TransferNumber { get; set; } = string.Empty;
 

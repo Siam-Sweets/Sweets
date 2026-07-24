@@ -10,13 +10,19 @@ namespace PosApp.Services;
 public class ReportService : IReportService
 {
     private readonly AppDbContext _db;
-    public ReportService(AppDbContext db) => _db = db;
+    private readonly IUserSessionContext _session;
+    public ReportService(AppDbContext db, IUserSessionContext session)
+    {
+        _db = db;
+        _session = session;
+    }
 
     public Task<DailySalesReport> GetDailyReportAsync(DateTime date)
         => GetDailyReportAsync(date, _db.CurrentStoreId);
 
     public async Task<DailySalesReport> GetDailyReportAsync(DateTime date, int? storeId)
     {
+        storeId = ResolveReadableStoreId(storeId);
         var range = DateTimeUtilities.InclusiveLocalDateRange(date, date);
         var sales = await LoadFinancialSalesAsync(range.FromUtc, range.ToUtcExclusive, storeId);
         return BuildDaily(date.Date, sales);
@@ -27,6 +33,7 @@ public class ReportService : IReportService
 
     public async Task<DateRangeReport> GetRangeReportAsync(DateTime from, DateTime to, int? storeId)
     {
+        storeId = ResolveReadableStoreId(storeId);
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var sales = await LoadFinancialSalesAsync(range.FromUtc, range.ToUtcExclusive, storeId);
         var report = new DateRangeReport { From = from.Date, To = to.Date };
@@ -42,22 +49,27 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<TopProductRow>> GetTopProductsAsync(
         DateTime from, DateTime to, int top, int? storeId)
     {
+        storeId = ResolveReadableStoreId(storeId);
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var query = _db.SaleItems.IgnoreQueryFilters().AsNoTracking()
-            .Where(i => i.Sale != null &&
-                        i.Sale!.SaleDate >= range.FromUtc && i.Sale!.SaleDate < range.ToUtcExclusive &&
-                        (i.Sale!.Status == SaleStatus.Completed || i.Sale!.Status == SaleStatus.Refunded));
+            .Where(i => i.Sale != null && i.Sale.SaleDate >= range.FromUtc &&
+                        i.Sale.SaleDate < range.ToUtcExclusive &&
+                        (i.Sale.Status == SaleStatus.Completed || i.Sale.Status == SaleStatus.Refunded));
         if (storeId.HasValue) query = query.Where(i => i.StoreId == storeId.Value);
         var items = await query.Select(i => new
         {
-            i.ProductId, i.ProductName, i.Sku, i.Quantity, i.UnitPrice, i.CostPrice, i.DiscountAmount
+            i.StoreId, i.ProductId, i.ProductName, i.Sku, i.Quantity,
+            i.UnitPrice, i.CostPrice, i.DiscountAmount
         }).ToListAsync();
+        var stores = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id);
 
-        return items.GroupBy(i => new { Name = i.ProductName, Sku = i.Sku ?? string.Empty })
+        return items.GroupBy(i => new { i.StoreId, i.ProductId, i.ProductName, Sku = i.Sku ?? string.Empty })
             .Select(g => new TopProductRow
             {
-                ProductId = g.First().ProductId,
-                ProductName = g.Key.Name,
+                StoreId = g.Key.StoreId,
+                StoreName = stores.GetValueOrDefault(g.Key.StoreId)?.Name ?? $"Store {g.Key.StoreId}",
+                ProductId = g.Key.ProductId,
+                ProductName = g.Key.ProductName,
                 Sku = string.IsNullOrEmpty(g.Key.Sku) ? null : g.Key.Sku,
                 QuantitySold = g.Sum(i => i.Quantity),
                 Revenue = g.Sum(i => i.UnitPrice * i.Quantity - i.DiscountAmount),
@@ -68,13 +80,13 @@ public class ReportService : IReportService
 
     public Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime date)
         => GetSalesByHourAsync(date, date, _db.CurrentStoreId);
-
     public Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(DateTime from, DateTime to)
         => GetSalesByHourAsync(from, to, _db.CurrentStoreId);
 
     public async Task<IReadOnlyList<SalesByHourRow>> GetSalesByHourAsync(
         DateTime from, DateTime to, int? storeId)
     {
+        storeId = ResolveReadableStoreId(storeId);
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var query = _db.Sales.IgnoreQueryFilters().AsNoTracking()
             .Where(s => s.SaleDate >= range.FromUtc && s.SaleDate < range.ToUtcExclusive &&
@@ -84,7 +96,6 @@ public class ReportService : IReportService
         {
             s.SaleDate, s.Status, s.Subtotal, s.DiscountTotal, s.TaxTotal, s.Rounding
         }).ToListAsync();
-
         return sales.GroupBy(s => DateTimeUtilities.ToLocal(s.SaleDate).Hour)
             .Select(g => new SalesByHourRow
             {
@@ -100,18 +111,18 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<SalesByCategoryRow>> GetSalesByCategoryAsync(
         DateTime from, DateTime to, int? storeId)
     {
+        storeId = ResolveReadableStoreId(storeId);
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var query = _db.SaleItems.IgnoreQueryFilters().AsNoTracking()
-            .Where(i => i.Sale != null &&
-                        i.Sale!.SaleDate >= range.FromUtc && i.Sale!.SaleDate < range.ToUtcExclusive &&
-                        (i.Sale!.Status == SaleStatus.Completed || i.Sale!.Status == SaleStatus.Refunded));
+            .Where(i => i.Sale != null && i.Sale.SaleDate >= range.FromUtc &&
+                        i.Sale.SaleDate < range.ToUtcExclusive &&
+                        (i.Sale.Status == SaleStatus.Completed || i.Sale.Status == SaleStatus.Refunded));
         if (storeId.HasValue) query = query.Where(i => i.StoreId == storeId.Value);
         var items = await query.Select(i => new
         {
-            CategoryName = i.Product != null && i.Product.Category != null ? i.Product.Category.Name : "Uncategorized",
+            CategoryName = string.IsNullOrEmpty(i.CategoryName) ? "Uncategorized" : i.CategoryName,
             i.Quantity, i.UnitPrice, i.DiscountAmount
         }).ToListAsync();
-
         return items.GroupBy(i => i.CategoryName)
             .Select(g => new SalesByCategoryRow
             {
@@ -127,14 +138,14 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<PaymentBreakdownRow>> GetPaymentBreakdownAsync(
         DateTime from, DateTime to, int? storeId)
     {
+        storeId = ResolveReadableStoreId(storeId);
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var query = _db.SalePayments.IgnoreQueryFilters().AsNoTracking()
-            .Where(p => p.Sale != null &&
-                        p.Sale!.SaleDate >= range.FromUtc && p.Sale!.SaleDate < range.ToUtcExclusive &&
-                        (p.Sale!.Status == SaleStatus.Completed || p.Sale!.Status == SaleStatus.Refunded));
+            .Where(p => p.Sale != null && p.Sale.SaleDate >= range.FromUtc &&
+                        p.Sale.SaleDate < range.ToUtcExclusive &&
+                        (p.Sale.Status == SaleStatus.Completed || p.Sale.Status == SaleStatus.Refunded));
         if (storeId.HasValue) query = query.Where(p => p.StoreId == storeId.Value);
         var payments = await query.Select(p => new { p.SaleId, p.Method, p.Amount }).ToListAsync();
-
         return payments.GroupBy(p => p.Method)
             .Select(g => new PaymentBreakdownRow
             {
@@ -150,6 +161,7 @@ public class ReportService : IReportService
     public async Task<IReadOnlyList<StorePerformanceRow>> GetStorePerformanceAsync(
         DateTime from, DateTime to, int? storeId)
     {
+        storeId = ResolveReadableStoreId(storeId);
         var range = DateTimeUtilities.InclusiveLocalDateRange(from, to);
         var sales = await LoadFinancialSalesAsync(range.FromUtc, range.ToUtcExclusive, storeId);
         var stores = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id);
@@ -168,6 +180,15 @@ public class ReportService : IReportService
                 GrossProfit = row.GrossProfit
             };
         }).OrderByDescending(x => x.NetSales).ThenBy(x => x.StoreName).ToList();
+    }
+
+    private int? ResolveReadableStoreId(int? requested)
+    {
+        if (_session.IsAdmin) return requested;
+        var allowed = _session.StoreId ?? _db.CurrentStoreId;
+        if (requested.HasValue && requested.Value != allowed)
+            throw new UnauthorizedAccessException("You can only view reports for the selected store.");
+        return allowed;
     }
 
     private async Task<List<Sale>> LoadFinancialSalesAsync(

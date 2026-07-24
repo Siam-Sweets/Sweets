@@ -6,19 +6,21 @@ const CLOUD_SCHEMA_STATEMENTS = [
   "CREATE INDEX IF NOT EXISTS ix_refresh_tokens_owner_device ON refresh_tokens(owner_id, device_id)",
   "CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expiry ON refresh_tokens(expires_at)",
   "CREATE TABLE IF NOT EXISTS stores (\n    sync_id TEXT NOT NULL,\n    owner_id TEXT NOT NULL,\n    code TEXT NOT NULL,\n    name TEXT NOT NULL,\n    address TEXT,\n    phone TEXT,\n    is_active INTEGER NOT NULL DEFAULT 1,\n    created_at TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    PRIMARY KEY (owner_id, sync_id),\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,\n    UNIQUE (owner_id, code)\n)",
-  "CREATE TABLE IF NOT EXISTS snapshots (\n    id TEXT PRIMARY KEY,\n    owner_id TEXT NOT NULL,\n    store_sync_id TEXT NOT NULL,\n    device_id TEXT NOT NULL,\n    version INTEGER NOT NULL,\n    schema_version INTEGER NOT NULL,\n    app_version TEXT NOT NULL,\n    row_count INTEGER NOT NULL,\n    sha256 TEXT NOT NULL,\n    payload_json TEXT NOT NULL,\n    sync_cursor INTEGER NOT NULL DEFAULT 0,\n    created_at TEXT NOT NULL,\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,\n    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE RESTRICT,\n    UNIQUE (owner_id, store_sync_id, version)\n)",
+  "CREATE TABLE IF NOT EXISTS snapshots (\n    id TEXT PRIMARY KEY,\n    owner_id TEXT NOT NULL,\n    store_sync_id TEXT NOT NULL,\n    device_id TEXT NOT NULL,\n    version INTEGER NOT NULL,\n    schema_version INTEGER NOT NULL,\n    app_version TEXT NOT NULL,\n    row_count INTEGER NOT NULL,\n    sha256 TEXT NOT NULL,\n    payload_json TEXT NOT NULL,\n    sync_cursor INTEGER NOT NULL DEFAULT 0,\n    backup_set_id TEXT NOT NULL DEFAULT '',\n    captured_at TEXT NOT NULL DEFAULT '',\n    created_at TEXT NOT NULL,\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,\n    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE RESTRICT,\n    UNIQUE (owner_id, store_sync_id, version)\n)",
   "CREATE INDEX IF NOT EXISTS ix_snapshots_latest ON snapshots(owner_id, store_sync_id, version DESC)",
+  "CREATE INDEX IF NOT EXISTS ix_snapshots_backup_set ON snapshots(owner_id, backup_set_id, captured_at DESC)",
   "CREATE TABLE IF NOT EXISTS sync_cursors (\n    owner_id TEXT NOT NULL,\n    store_sync_id TEXT NOT NULL,\n    device_id TEXT NOT NULL,\n    initial_snapshot_version INTEGER NOT NULL DEFAULT 0,\n    pull_cursor INTEGER NOT NULL DEFAULT 0,\n    updated_at TEXT NOT NULL,\n    PRIMARY KEY (owner_id, store_sync_id, device_id),\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,\n    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE\n)",
   "CREATE TABLE IF NOT EXISTS sync_records (\n    owner_id TEXT NOT NULL,\n    store_sync_id TEXT NOT NULL,\n    entity_type TEXT NOT NULL,\n    entity_sync_id TEXT NOT NULL,\n    cloud_version INTEGER NOT NULL,\n    entity_version INTEGER NOT NULL,\n    operation TEXT NOT NULL,\n    payload_json TEXT NOT NULL,\n    origin_device_id TEXT NOT NULL,\n    updated_at TEXT NOT NULL,\n    PRIMARY KEY (owner_id, store_sync_id, entity_type, entity_sync_id),\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,\n    FOREIGN KEY (origin_device_id) REFERENCES devices(id) ON DELETE RESTRICT\n)",
   "CREATE INDEX IF NOT EXISTS ix_sync_records_store ON sync_records(owner_id, store_sync_id)",
-  "CREATE TABLE IF NOT EXISTS sync_changes (\n    cursor INTEGER PRIMARY KEY AUTOINCREMENT,\n    owner_id TEXT NOT NULL,\n    store_sync_id TEXT NOT NULL,\n    change_id TEXT NOT NULL,\n    entity_type TEXT NOT NULL,\n    entity_sync_id TEXT NOT NULL,\n    cloud_version INTEGER NOT NULL,\n    entity_version INTEGER NOT NULL,\n    operation TEXT NOT NULL,\n    payload_json TEXT NOT NULL,\n    origin_device_id TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,\n    FOREIGN KEY (origin_device_id) REFERENCES devices(id) ON DELETE RESTRICT,\n    UNIQUE (owner_id, change_id)\n)",
+  "CREATE TABLE IF NOT EXISTS sync_changes (\n    cursor INTEGER PRIMARY KEY AUTOINCREMENT,\n    owner_id TEXT NOT NULL,\n    store_sync_id TEXT NOT NULL,\n    change_id TEXT NOT NULL,\n    operation_id TEXT NOT NULL DEFAULT '',\n    entity_type TEXT NOT NULL,\n    entity_sync_id TEXT NOT NULL,\n    cloud_version INTEGER NOT NULL,\n    entity_version INTEGER NOT NULL,\n    operation TEXT NOT NULL,\n    payload_json TEXT NOT NULL,\n    origin_device_id TEXT NOT NULL,\n    created_at TEXT NOT NULL,\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,\n    FOREIGN KEY (origin_device_id) REFERENCES devices(id) ON DELETE RESTRICT,\n    UNIQUE (owner_id, change_id)\n)",
   "CREATE INDEX IF NOT EXISTS ix_sync_changes_pull ON sync_changes(owner_id, store_sync_id, cursor)",
-  "CREATE TABLE IF NOT EXISTS sync_idempotency (\n    owner_id TEXT NOT NULL,\n    change_id TEXT NOT NULL,\n    store_sync_id TEXT NOT NULL,\n    entity_type TEXT NOT NULL,\n    entity_sync_id TEXT NOT NULL,\n    cloud_version INTEGER NOT NULL,\n    cursor INTEGER NOT NULL,\n    created_at TEXT NOT NULL,\n    PRIMARY KEY (owner_id, change_id),\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE\n)",
+  "CREATE TABLE IF NOT EXISTS sync_idempotency (\n    owner_id TEXT NOT NULL,\n    change_id TEXT NOT NULL,\n    operation_id TEXT NOT NULL DEFAULT '',\n    store_sync_id TEXT NOT NULL,\n    entity_type TEXT NOT NULL,\n    entity_sync_id TEXT NOT NULL,\n    cloud_version INTEGER NOT NULL,\n    cursor INTEGER NOT NULL,\n    created_at TEXT NOT NULL,\n    PRIMARY KEY (owner_id, change_id),\n    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE\n)",
   "CREATE INDEX IF NOT EXISTS ix_sync_idempotency_created ON sync_idempotency(created_at)",
   "CREATE TABLE IF NOT EXISTS auth_rate_limits (\n    rate_key TEXT NOT NULL,\n    window_start INTEGER NOT NULL,\n    attempts INTEGER NOT NULL,\n    updated_at TEXT NOT NULL,\n    PRIMARY KEY (rate_key, window_start)\n)",
   "CREATE INDEX IF NOT EXISTS ix_auth_rate_limits_updated ON auth_rate_limits(updated_at)"
 ];
 let schemaInitializationPromise;
+let lastCleanupAt = 0;
 
 const ACCESS_TOKEN_SECONDS = 15 * 60;
 const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
@@ -26,7 +28,7 @@ const PASSWORD_ITERATIONS = 120_000;
 const MAX_SNAPSHOT_BYTES = 15_000_000;
 const AUTH_WINDOW_SECONDS = 15 * 60;
 const AUTH_ATTEMPT_LIMIT = 10;
-const MAX_SYNC_BATCH = 100;
+const MAX_SYNC_BATCH = 1000;
 const MAX_PULL_LIMIT = 2000;
 const ALLOWED_ENTITY_TYPES = new Set([
   "Store", "Category", "Customer", "Discount", "Product", "Supplier", "Tax", "User",
@@ -55,46 +57,38 @@ async function route(request, env) {
 
   if (request.method === "GET" && path === "/v1/health") {
     await query(env, "SELECT 1 AS ok");
-    return json({ ok: true, service: "posapp-cloud", version: "1.9.8" });
+    return json({ ok: true, service: "posapp-cloud", version: "1.10.0" });
   }
+  if (request.method === "POST" && path === "/v1/auth/signup") return signup(request, env);
+  if (request.method === "POST" && path === "/v1/auth/login") return login(request, env);
+  if (request.method === "POST" && path === "/v1/auth/refresh") return refresh(request, env);
 
-  if (request.method === "POST" && path === "/v1/auth/signup") {
-    return signup(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/auth/login") {
-    return login(request, env);
-  }
-  if (request.method === "POST" && path === "/v1/auth/refresh") {
-    return refresh(request, env);
-  }
-
+  if (!isProtectedEndpoint(request.method, path)) throw new HttpError(404, "Endpoint not found.");
   const claims = await requireAccessToken(request, env);
-  if (request.method === "GET" && path === "/v1/account") {
-    return account(claims, env);
-  }
-  if (request.method === "POST" && path === "/v1/devices/register") {
-    return registerDevice(request, claims, env);
-  }
-  if (request.method === "GET" && path === "/v1/devices") {
-    return listDevices(claims, env);
-  }
-  if (request.method === "GET" && path === "/v1/stores") {
-    return listStores(claims, env);
-  }
-  if (request.method === "POST" && path === "/v1/sync/snapshot/upload") {
-    return uploadSnapshot(request, claims, env);
-  }
-  if (request.method === "GET" && path === "/v1/sync/snapshot/download") {
-    return downloadSnapshot(url, claims, env);
-  }
-  if (request.method === "POST" && path === "/v1/sync/push") {
-    return pushChanges(request, claims, env);
-  }
-  if (request.method === "GET" && path === "/v1/sync/pull") {
-    return pullChanges(url, claims, env);
-  }
+  await requireActiveDevice(claims, env);
+  await maybeCleanup(env, claims.sub);
 
+  if (request.method === "GET" && path === "/v1/account") return account(claims, env);
+  if (request.method === "POST" && path === "/v1/auth/logout") return logout(request, claims, env);
+  if (request.method === "POST" && path === "/v1/devices/register") return registerDevice(request, claims, env);
+  if (request.method === "GET" && path === "/v1/devices") return listDevices(claims, env);
+  if (request.method === "GET" && path === "/v1/stores") return listStores(claims, env);
+  if (request.method === "POST" && path === "/v1/sync/snapshot/upload") return uploadSnapshot(request, claims, env);
+  if (request.method === "GET" && path === "/v1/sync/snapshot/download") return downloadSnapshot(url, claims, env);
+  if (request.method === "GET" && path === "/v1/sync/snapshot/set/latest") return downloadLatestSnapshotSet(claims, env);
+  if (request.method === "POST" && path === "/v1/sync/push") return pushChanges(request, claims, env);
+  if (request.method === "GET" && path === "/v1/sync/pull") return pullChanges(url, claims, env);
+  if (request.method === "GET" && path === "/v1/sync/record") return getSyncRecord(url, claims, env);
   throw new HttpError(404, "Endpoint not found.");
+}
+
+function isProtectedEndpoint(method, path) {
+  return (method === "GET" && [
+    "/v1/account", "/v1/devices", "/v1/stores", "/v1/sync/snapshot/download",
+    "/v1/sync/snapshot/set/latest", "/v1/sync/pull", "/v1/sync/record",
+  ].includes(path)) || (method === "POST" && [
+    "/v1/auth/logout", "/v1/devices/register", "/v1/sync/snapshot/upload", "/v1/sync/push",
+  ].includes(path));
 }
 
 async function signup(request, env) {
@@ -104,12 +98,12 @@ async function signup(request, env) {
   const displayName = requiredText(body.displayName, "Display name", 100);
   const registrationKey = requiredText(body.registrationKey, "Registration key", 256);
   await enforceAuthRateLimit(request, email, env);
-
   if (!(await constantTimeTextEqual(registrationKey, env.REGISTRATION_KEY))) {
     throw new HttpError(403, "Registration key is invalid.");
   }
-  const existing = await queryOne(env, "SELECT id FROM owners WHERE email = ?", [email]);
-  if (existing) throw new HttpError(409, "An account with that email already exists.");
+  if (await queryOne(env, "SELECT id FROM owners WHERE email = ?", [email])) {
+    throw new HttpError(409, "An account with that email already exists.");
+  }
 
   const ownerId = crypto.randomUUID();
   const device = normalizeDevice(body);
@@ -118,27 +112,29 @@ async function signup(request, env) {
   const passwordHash = await hashPassword(password, salt, PASSWORD_ITERATIONS);
   const now = new Date().toISOString();
   const refreshToken = randomBase64Url(32);
-  const refreshId = crypto.randomUUID();
   const refreshHash = await sha256Base64Url(refreshToken);
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_SECONDS * 1000).toISOString();
-
-  await transaction(env, [
-    statement(
-      `INSERT INTO owners (id, email, display_name, password_hash, password_salt, password_iterations, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [ownerId, email, displayName, passwordHash, salt, PASSWORD_ITERATIONS, now, now],
-    ),
-    statement(
-      `INSERT INTO devices (id, owner_id, device_key, name, platform, app_version, created_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [deviceId, ownerId, device.deviceKey, device.deviceName, device.platform, device.appVersion, now, now],
-    ),
-    statement(
-      `INSERT INTO refresh_tokens (id, owner_id, device_id, token_hash, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [refreshId, ownerId, deviceId, refreshHash, refreshExpiresAt, now],
-    ),
-  ]);
+  try {
+    await transaction(env, [
+      statement(
+        `INSERT INTO owners (id, email, display_name, password_hash, password_salt, password_iterations, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [ownerId, email, displayName, passwordHash, salt, PASSWORD_ITERATIONS, now, now]),
+      statement(
+        `INSERT INTO devices (id, owner_id, device_key, name, platform, app_version, created_at, last_seen_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [deviceId, ownerId, device.deviceKey, device.deviceName, device.platform, device.appVersion, now, now]),
+      statement(
+        `INSERT INTO refresh_tokens (id, owner_id, device_id, token_hash, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [crypto.randomUUID(), ownerId, deviceId, refreshHash, refreshExpiresAt, now]),
+    ]);
+  } catch (error) {
+    if (/UNIQUE constraint failed: owners\.email|owners\.email/i.test(String(error?.message || error))) {
+      throw new HttpError(409, "An account with that email already exists.");
+    }
+    throw error;
+  }
   await clearAuthRateLimit(request, email, env);
   return authResponse(env, { id: ownerId, email, display_name: displayName },
     { id: deviceId, name: device.deviceName }, refreshToken);
@@ -149,7 +145,6 @@ async function login(request, env) {
   const email = normalizeEmail(body.email);
   const password = validatePassword(body.password);
   await enforceAuthRateLimit(request, email, env);
-
   const owner = await queryOne(env,
     `SELECT id, email, display_name, password_hash, password_salt, password_iterations
      FROM owners WHERE email = ?`, [email]);
@@ -159,32 +154,28 @@ async function login(request, env) {
 
   const device = normalizeDevice(body);
   const existingDevice = await queryOne(env,
-    "SELECT id FROM devices WHERE owner_id = ? AND device_key = ?", [owner.id, device.deviceKey]);
+    "SELECT id, revoked_at FROM devices WHERE owner_id = ? AND device_key = ?", [owner.id, device.deviceKey]);
+  if (existingDevice?.revoked_at) throw new HttpError(403, "This device has been revoked.");
   const deviceId = existingDevice?.id || crypto.randomUUID();
   const now = new Date().toISOString();
   const refreshToken = randomBase64Url(32);
   const refreshHash = await sha256Base64Url(refreshToken);
   const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_SECONDS * 1000).toISOString();
-
   const deviceStatement = existingDevice
     ? statement(
-        `UPDATE devices SET name = ?, platform = ?, app_version = ?, last_seen_at = ?, revoked_at = NULL
-         WHERE id = ? AND owner_id = ?`,
-        [device.deviceName, device.platform, device.appVersion, now, deviceId, owner.id],
-      )
+        `UPDATE devices SET name = ?, platform = ?, app_version = ?, last_seen_at = ?
+         WHERE id = ? AND owner_id = ? AND revoked_at IS NULL`,
+        [device.deviceName, device.platform, device.appVersion, now, deviceId, owner.id])
     : statement(
         `INSERT INTO devices (id, owner_id, device_key, name, platform, app_version, created_at, last_seen_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [deviceId, owner.id, device.deviceKey, device.deviceName, device.platform, device.appVersion, now, now],
-      );
-
+        [deviceId, owner.id, device.deviceKey, device.deviceName, device.platform, device.appVersion, now, now]);
   await transaction(env, [
     deviceStatement,
     statement(
       `INSERT INTO refresh_tokens (id, owner_id, device_id, token_hash, expires_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [crypto.randomUUID(), owner.id, deviceId, refreshHash, refreshExpiresAt, now],
-    ),
+      [crypto.randomUUID(), owner.id, deviceId, refreshHash, refreshExpiresAt, now]),
   ]);
   await clearAuthRateLimit(request, email, env);
   return authResponse(env, owner, { id: deviceId, name: device.deviceName }, refreshToken);
@@ -202,11 +193,9 @@ async function refresh(request, env) {
      JOIN owners o ON o.id = rt.owner_id
      JOIN devices d ON d.id = rt.device_id
      WHERE rt.token_hash = ? AND rt.revoked_at IS NULL`, [tokenHash]);
-
   if (!row || row.device_key !== deviceKey || row.revoked_at || Date.parse(row.expires_at) <= Date.now()) {
     throw new HttpError(401, "Refresh token is invalid or expired.");
   }
-
   const newRefreshToken = randomBase64Url(32);
   const newRefreshHash = await sha256Base64Url(newRefreshToken);
   const now = new Date().toISOString();
@@ -216,14 +205,20 @@ async function refresh(request, env) {
     statement(
       `INSERT INTO refresh_tokens (id, owner_id, device_id, token_hash, expires_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [crypto.randomUUID(), row.owner_id, row.device_id, newRefreshHash, expiresAt, now],
-    ),
-    statement("UPDATE devices SET last_seen_at = ? WHERE id = ?", [now, row.device_id]),
+      [crypto.randomUUID(), row.owner_id, row.device_id, newRefreshHash, expiresAt, now]),
+    statement("UPDATE devices SET last_seen_at = ? WHERE id = ? AND revoked_at IS NULL", [now, row.device_id]),
   ]);
-
   return authResponse(env,
     { id: row.owner_id, email: row.email, display_name: row.display_name },
     { id: row.device_id, name: row.name }, newRefreshToken);
+}
+
+async function requireActiveDevice(claims, env) {
+  const row = await queryOne(env,
+    "SELECT id FROM devices WHERE id = ? AND owner_id = ? AND revoked_at IS NULL", [claims.did, claims.sub]);
+  if (!row) throw new HttpError(401, "Account or device is no longer active.");
+  await execute(env, "UPDATE devices SET last_seen_at = ? WHERE id = ? AND owner_id = ?",
+    [new Date().toISOString(), claims.did, claims.sub]);
 }
 
 async function account(claims, env) {
@@ -238,17 +233,41 @@ async function account(claims, env) {
   });
 }
 
+async function logout(request, claims, env) {
+  const body = await readJson(request);
+  const refreshToken = optionalText(body.refreshToken, 1024);
+  const deviceKey = optionalText(body.deviceKey, 128);
+  const now = new Date().toISOString();
+  if (deviceKey) {
+    const device = await queryOne(env,
+      "SELECT device_key FROM devices WHERE id = ? AND owner_id = ?", [claims.did, claims.sub]);
+    if (!device || device.device_key !== deviceKey) throw new HttpError(401, "Device identity is invalid.");
+  }
+  if (refreshToken) {
+    const hash = await sha256Base64Url(refreshToken);
+    await execute(env,
+      "UPDATE refresh_tokens SET revoked_at = ? WHERE owner_id = ? AND device_id = ? AND token_hash = ? AND revoked_at IS NULL",
+      [now, claims.sub, claims.did, hash]);
+  } else {
+    await execute(env,
+      "UPDATE refresh_tokens SET revoked_at = ? WHERE owner_id = ? AND device_id = ? AND revoked_at IS NULL",
+      [now, claims.sub, claims.did]);
+  }
+  return json({ ok: true });
+}
+
 async function registerDevice(request, claims, env) {
   const body = await readJson(request);
   const device = normalizeDevice(body);
   const existing = await queryOne(env,
-    "SELECT id FROM devices WHERE owner_id = ? AND device_key = ?", [claims.sub, device.deviceKey]);
+    "SELECT id, revoked_at FROM devices WHERE owner_id = ? AND device_key = ?", [claims.sub, device.deviceKey]);
+  if (existing?.revoked_at) throw new HttpError(403, "This device has been revoked.");
   const id = existing?.id || crypto.randomUUID();
   const now = new Date().toISOString();
   if (existing) {
     await execute(env,
-      `UPDATE devices SET name = ?, platform = ?, app_version = ?, last_seen_at = ?, revoked_at = NULL
-       WHERE id = ? AND owner_id = ?`,
+      `UPDATE devices SET name = ?, platform = ?, app_version = ?, last_seen_at = ?
+       WHERE id = ? AND owner_id = ? AND revoked_at IS NULL`,
       [device.deviceName, device.platform, device.appVersion, now, id, claims.sub]);
   } else {
     await execute(env,
@@ -269,15 +288,9 @@ async function listDevices(claims, env) {
      GROUP BY d.id, d.name, d.platform, d.app_version, d.created_at, d.last_seen_at, d.revoked_at
      ORDER BY d.last_seen_at DESC`, [claims.sub]);
   return json({ devices: rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    platform: row.platform,
-    appVersion: row.app_version,
-    createdAt: row.created_at,
-    lastSeenAt: row.last_seen_at,
-    isCurrent: row.id === claims.did,
-    isRevoked: Boolean(row.revoked_at),
-    storeCursorCount: Number(row.store_cursor_count || 0),
+    id: row.id, name: row.name, platform: row.platform, appVersion: row.app_version,
+    createdAt: row.created_at, lastSeenAt: row.last_seen_at, isCurrent: row.id === claims.did,
+    isRevoked: Boolean(row.revoked_at), storeCursorCount: Number(row.store_cursor_count || 0),
   })) });
 }
 
@@ -286,41 +299,39 @@ async function listStores(claims, env) {
     `SELECT sync_id, code, name, address, phone, is_active, updated_at
      FROM stores WHERE owner_id = ? ORDER BY name`, [claims.sub]);
   return json({ stores: rows.map((row) => ({
-    syncId: row.sync_id,
-    code: row.code,
-    name: row.name,
-    address: row.address,
-    phone: row.phone,
-    isActive: Number(row.is_active) === 1,
-    updatedAt: row.updated_at,
+    syncId: row.sync_id, code: row.code, name: row.name, address: row.address, phone: row.phone,
+    isActive: Number(row.is_active) === 1, updatedAt: row.updated_at,
   })) });
 }
 
 async function uploadSnapshot(request, claims, env) {
   const body = await readJson(request, MAX_SNAPSHOT_BYTES + 1_000_000);
-  if (!body.store || typeof body.payload !== "object" || body.payload === null) {
+  if (!body.store || typeof body.payload !== "object" || body.payload === null || Array.isArray(body.payload)) {
     throw new HttpError(400, "Store metadata and snapshot payload are required.");
   }
+  const backupSetId = requiredText(body.backupSetId, "Backup set ID", 64);
+  const capturedAt = requiredIsoDate(body.capturedAt, "Captured at");
   const storeSyncId = requiredText(body.store.syncId, "Store sync ID", 64);
   const code = requiredText(body.store.code, "Store code", 24);
   const name = requiredText(body.store.name, "Store name", 100);
   const payloadJson = JSON.stringify(body.payload);
-  const payloadBytes = new TextEncoder().encode(payloadJson).byteLength;
-  if (payloadBytes > MAX_SNAPSHOT_BYTES) throw new HttpError(413, "Snapshot exceeds the 15 MB per-store limit.");
+  if (new TextEncoder().encode(payloadJson).byteLength > MAX_SNAPSHOT_BYTES) {
+    throw new HttpError(413, "Snapshot exceeds the 15 MB per-store limit.");
+  }
   const rowCount = integerInRange(body.rowCount, "Row count", 1, 100_000_000);
   const schemaVersion = integerInRange(body.schemaVersion, "Schema version", 1, 1000);
   const appVersion = requiredText(body.appVersion, "App version", 40);
   const syncCursor = integerInRange(body.syncCursor ?? 0, "Sync cursor", 0, Number.MAX_SAFE_INTEGER);
+  if (schemaVersion !== 5 || Number(body.payload.schemaVersion) !== schemaVersion) {
+    throw new HttpError(400, "Snapshot schema version is not supported or does not match the payload.");
+  }
+  if (countSnapshotRows(body.payload) !== rowCount) throw new HttpError(400, "Snapshot row count is incorrect.");
   const digest = await sha256Base64Url(payloadJson);
-  const latest = await queryOne(env,
-    "SELECT COALESCE(MAX(version), 0) AS version FROM snapshots WHERE owner_id = ? AND store_sync_id = ?",
-    [claims.sub, storeSyncId]);
-  const version = Number(latest?.version || 0) + 1;
   const snapshotId = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  await transaction(env, [
-    statement(
+  const result = await withTransaction(env, async (tx) => {
+    await tx.execute(
       `INSERT INTO stores (sync_id, owner_id, code, name, address, phone, is_active, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(owner_id, sync_id) DO UPDATE SET
@@ -328,79 +339,201 @@ async function uploadSnapshot(request, claims, env) {
          phone = excluded.phone, is_active = excluded.is_active, updated_at = excluded.updated_at`,
       [storeSyncId, claims.sub, code, name, optionalText(body.store.address, 500),
        optionalText(body.store.phone, 30), body.store.isActive === false ? 0 : 1,
-       body.store.createdAt || now, body.store.updatedAt || now],
-    ),
-    statement(
+       body.store.createdAt || now, body.store.updatedAt || now]);
+    const latest = await tx.queryOne(
+      "SELECT COALESCE(MAX(version), 0) AS version FROM snapshots WHERE owner_id = ? AND store_sync_id = ?",
+      [claims.sub, storeSyncId]);
+    const version = Number(latest?.version || 0) + 1;
+    await tx.execute(
       `INSERT INTO snapshots
-       (id, owner_id, store_sync_id, device_id, version, schema_version, app_version, row_count, sha256, payload_json, sync_cursor, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [snapshotId, claims.sub, storeSyncId, claims.did, version, schemaVersion,
-       appVersion, rowCount, digest, payloadJson, syncCursor, now],
-    ),
-    statement(
+       (id, owner_id, store_sync_id, device_id, version, schema_version, app_version, row_count, sha256,
+        payload_json, sync_cursor, backup_set_id, captured_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [snapshotId, claims.sub, storeSyncId, claims.did, version, schemaVersion, appVersion, rowCount,
+       digest, payloadJson, syncCursor, backupSetId, capturedAt, now]);
+    await tx.execute(
       `INSERT INTO sync_cursors (owner_id, store_sync_id, device_id, initial_snapshot_version, pull_cursor, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(owner_id, store_sync_id, device_id) DO UPDATE SET
          initial_snapshot_version = excluded.initial_snapshot_version,
-         pull_cursor = MAX(sync_cursors.pull_cursor, excluded.pull_cursor),
-         updated_at = excluded.updated_at`,
-      [claims.sub, storeSyncId, claims.did, version, syncCursor, now],
-    ),
-    statement(
-      `DELETE FROM snapshots
-       WHERE owner_id = ? AND store_sync_id = ? AND version < ?`,
-      [claims.sub, storeSyncId, Math.max(1, version - 2)],
-    ),
-  ]);
-
-  return json({ snapshotId, version, syncCursor, sha256: digest, rowCount, createdAt: now }, 201);
+         pull_cursor = MAX(sync_cursors.pull_cursor, excluded.pull_cursor), updated_at = excluded.updated_at`,
+      [claims.sub, storeSyncId, claims.did, version, syncCursor, now]);
+    await tx.execute(
+      `DELETE FROM snapshots WHERE owner_id = ? AND store_sync_id = ? AND version < ?`,
+      [claims.sub, storeSyncId, Math.max(1, version - 2)]);
+    return { version };
+  });
+  return json({ snapshotId, backupSetId, capturedAt, version: result.version, syncCursor,
+    sha256: digest, rowCount, createdAt: now }, 201);
 }
 
 async function downloadSnapshot(url, claims, env) {
   const storeSyncId = requiredText(url.searchParams.get("storeSyncId"), "Store sync ID", 64);
   const row = await queryOne(env,
-    `SELECT id, version, schema_version, app_version, row_count, sha256, payload_json, sync_cursor, created_at
+    `SELECT id, backup_set_id, captured_at, version, schema_version, app_version, row_count, sha256,
+            payload_json, sync_cursor, created_at
      FROM snapshots WHERE owner_id = ? AND store_sync_id = ?
      ORDER BY version DESC LIMIT 1`, [claims.sub, storeSyncId]);
   if (!row) throw new HttpError(404, "No snapshot exists for that store.");
-  return json({
-    snapshotId: row.id,
-    version: Number(row.version),
-    schemaVersion: Number(row.schema_version),
-    appVersion: row.app_version,
-    rowCount: Number(row.row_count),
-    sha256: row.sha256,
-    syncCursor: Number(row.sync_cursor || 0),
-    createdAt: row.created_at,
-    payload: JSON.parse(row.payload_json),
-  });
+  return json(snapshotResponse(row));
+}
+
+async function downloadLatestSnapshotSet(claims, env) {
+  const set = await queryOne(env,
+    `SELECT backup_set_id, captured_at, COUNT(DISTINCT store_sync_id) AS store_count
+     FROM snapshots
+     WHERE owner_id = ? AND backup_set_id IS NOT NULL AND backup_set_id <> ''
+     GROUP BY backup_set_id, captured_at
+     HAVING COUNT(DISTINCT store_sync_id) = (SELECT COUNT(*) FROM stores WHERE owner_id = ?)
+     ORDER BY captured_at DESC LIMIT 1`, [claims.sub, claims.sub]);
+  if (!set) throw new HttpError(404, "No complete cloud backup set is available.");
+  const rows = await query(env,
+    `SELECT id, backup_set_id, captured_at, version, schema_version, app_version, row_count, sha256,
+            payload_json, sync_cursor, created_at
+     FROM snapshots WHERE owner_id = ? AND backup_set_id = ? ORDER BY store_sync_id`,
+    [claims.sub, set.backup_set_id]);
+  return json({ backupSetId: set.backup_set_id, capturedAt: set.captured_at,
+    snapshots: rows.map(snapshotResponse) });
+}
+
+function snapshotResponse(row) {
+  return {
+    snapshotId: row.id, backupSetId: row.backup_set_id || "", capturedAt: row.captured_at || row.created_at,
+    version: Number(row.version), schemaVersion: Number(row.schema_version), appVersion: row.app_version,
+    rowCount: Number(row.row_count), sha256: row.sha256, syncCursor: Number(row.sync_cursor || 0),
+    createdAt: row.created_at, payloadJson: row.payload_json, payload: JSON.parse(row.payload_json),
+  };
+}
+
+function countSnapshotRows(payload) {
+  if (!payload.store || !payload.entities || typeof payload.entities !== "object" || Array.isArray(payload.entities)) {
+    throw new HttpError(400, "Snapshot payload structure is invalid.");
+  }
+  let count = 1;
+  for (const [name, rows] of Object.entries(payload.entities)) {
+    if (!Array.isArray(rows)) throw new HttpError(400, `Snapshot collection ${name} is invalid.`);
+    count += rows.length;
+  }
+  return count;
 }
 
 async function pushChanges(request, claims, env) {
-  const body = await readJson(request, 3_000_000);
+  const body = await readJson(request, 5_000_000);
   const storeSyncId = requiredText(body.storeSyncId, "Store sync ID", 64);
+  const operationId = requiredText(body.operationId, "Operation ID", 64);
   if (!Array.isArray(body.changes) || body.changes.length === 0 || body.changes.length > MAX_SYNC_BATCH) {
     throw new HttpError(400, `Changes must contain 1 to ${MAX_SYNC_BATCH} items.`);
   }
-
-  const results = [];
-  for (const raw of body.changes) {
-    const change = normalizeSyncChange(raw);
-    if (change.entityType !== "Store") {
-      const store = await queryOne(env,
-        "SELECT sync_id FROM stores WHERE owner_id = ? AND sync_id = ?", [claims.sub, storeSyncId]);
-      if (!store) throw new HttpError(404, "Store is not registered. Upload a snapshot or sync the store record first.");
-    } else if (change.entitySyncId !== storeSyncId) {
+  const changes = body.changes.map((raw) => normalizeSyncChange(raw, operationId));
+  const entityKeys = new Set();
+  for (const change of changes) {
+    if (change.entityType === "Store" && change.entitySyncId !== storeSyncId) {
       throw new HttpError(400, "A Store change must use the requested store sync ID.");
     }
-    results.push(await applyPushChange(env, claims, storeSyncId, change));
+    const key = `${change.entityType}\u0000${change.entitySyncId}`;
+    if (entityKeys.has(key)) throw new HttpError(400, "An operation may contain only one final change per record.");
+    entityKeys.add(key);
   }
 
-  return json({ storeSyncId, results });
+  return json(await withTransaction(env, async (tx) => {
+    const prior = [];
+    for (const change of changes) {
+      prior.push(await tx.queryOne(
+        `SELECT cloud_version, cursor, operation_id FROM sync_idempotency
+         WHERE owner_id = ? AND change_id = ?`, [claims.sub, change.changeId]));
+    }
+    const priorCount = prior.filter(Boolean).length;
+    if (priorCount > 0 && priorCount !== changes.length) {
+      throw new HttpError(409, "A partially replayed operation was rejected; retry the original complete operation.");
+    }
+    if (priorCount === changes.length) {
+      if (prior.some((row) => row.operation_id !== operationId)) {
+        throw new HttpError(409, "A change ID was already used by another operation.");
+      }
+      return { storeSyncId, operationId, committed: true, results: changes.map((change, index) => ({
+        changeId: change.changeId, status: "accepted", cloudVersion: Number(prior[index].cloud_version),
+        cursor: Number(prior[index].cursor), duplicate: true,
+      })) };
+    }
+
+    const store = await tx.queryOne(
+      "SELECT sync_id FROM stores WHERE owner_id = ? AND sync_id = ?", [claims.sub, storeSyncId]);
+    const createsStore = changes.some((x) => x.entityType === "Store" && x.operation === "upsert");
+    if (!store && !createsStore) {
+      throw new HttpError(404, "Store is not registered. Upload a snapshot or sync the store record first.");
+    }
+
+    const currentRows = [];
+    const conflicts = [];
+    for (const change of changes) {
+      const current = await tx.queryOne(
+        `SELECT cloud_version, operation, payload_json FROM sync_records
+         WHERE owner_id = ? AND store_sync_id = ? AND entity_type = ? AND entity_sync_id = ?`,
+        [claims.sub, storeSyncId, change.entityType, change.entitySyncId]);
+      currentRows.push(current);
+      const currentVersion = Number(current?.cloud_version || 0);
+      if (change.baseCloudVersion !== currentVersion) {
+        conflicts.push({
+          changeId: change.changeId, status: "conflict", cloudVersion: currentVersion,
+          operation: current?.operation || "missing",
+          payload: current?.payload_json ? JSON.parse(current.payload_json) : {},
+          message: "The cloud record changed on another device.",
+        });
+      }
+    }
+    if (conflicts.length) {
+      const conflictMap = new Map(conflicts.map((x) => [x.changeId, x]));
+      return { storeSyncId, operationId, committed: false, results: changes.map((change) =>
+        conflictMap.get(change.changeId) || ({
+          changeId: change.changeId, status: "blocked", cloudVersion: change.baseCloudVersion,
+          operation: change.operation, payload: change.payload,
+          message: "Another record in the same business operation conflicted.",
+        })) };
+    }
+
+    const now = new Date().toISOString();
+    const results = [];
+    for (let index = 0; index < changes.length; index++) {
+      const change = changes[index];
+      const cloudVersion = Number(currentRows[index]?.cloud_version || 0) + 1;
+      await tx.execute(
+        `INSERT INTO sync_records
+         (owner_id, store_sync_id, entity_type, entity_sync_id, cloud_version, entity_version,
+          operation, payload_json, origin_device_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(owner_id, store_sync_id, entity_type, entity_sync_id) DO UPDATE SET
+           cloud_version = excluded.cloud_version, entity_version = excluded.entity_version,
+           operation = excluded.operation, payload_json = excluded.payload_json,
+           origin_device_id = excluded.origin_device_id, updated_at = excluded.updated_at`,
+        [claims.sub, storeSyncId, change.entityType, change.entitySyncId, cloudVersion,
+         change.entityVersion, change.operation, change.payloadJson, claims.did, now]);
+      await tx.execute(
+        `INSERT INTO sync_changes
+         (owner_id, store_sync_id, change_id, operation_id, entity_type, entity_sync_id, cloud_version,
+          entity_version, operation, payload_json, origin_device_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [claims.sub, storeSyncId, change.changeId, operationId, change.entityType, change.entitySyncId,
+         cloudVersion, change.entityVersion, change.operation, change.payloadJson, claims.did, now]);
+      const cursorRow = await tx.queryOne("SELECT last_insert_rowid() AS cursor");
+      const cursor = Number(cursorRow?.cursor || 0);
+      await tx.execute(
+        `INSERT INTO sync_idempotency
+         (owner_id, change_id, operation_id, store_sync_id, entity_type, entity_sync_id, cloud_version, cursor, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [claims.sub, change.changeId, operationId, storeSyncId, change.entityType, change.entitySyncId,
+         cloudVersion, cursor, now]);
+      if (change.entityType === "Store") await applyStoreChange(tx, claims, storeSyncId, change, now);
+      results.push({ changeId: change.changeId, status: "accepted", cloudVersion, cursor, duplicate: false });
+    }
+    return { storeSyncId, operationId, committed: true, results };
+  }));
 }
 
-function normalizeSyncChange(raw) {
+function normalizeSyncChange(raw, operationId) {
   if (!raw || typeof raw !== "object") throw new HttpError(400, "Each change must be an object.");
+  if (raw.operationId && requiredText(raw.operationId, "Operation ID", 64) !== operationId) {
+    throw new HttpError(400, "Every change must belong to the requested operation.");
+  }
   const changeId = requiredText(raw.changeId, "Change ID", 64);
   const entityType = requiredText(raw.entityType, "Entity type", 80);
   if (!ALLOWED_ENTITY_TYPES.has(entityType)) throw new HttpError(400, `Unsupported entity type: ${entityType}.`);
@@ -417,130 +550,72 @@ function normalizeSyncChange(raw) {
   if (new TextEncoder().encode(payloadJson).byteLength > 500_000) {
     throw new HttpError(413, "A single sync record exceeds the 500 KB limit.");
   }
-  return { changeId, entityType, entitySyncId, operation, entityVersion, baseCloudVersion, payload, payloadJson };
+  return { changeId, operationId, entityType, entitySyncId, operation, entityVersion,
+    baseCloudVersion, payload, payloadJson };
 }
 
-async function applyPushChange(env, claims, storeSyncId, change) {
-  return withTransaction(env, async (tx) => {
-    const prior = await tx.queryOne(
-      `SELECT cloud_version, cursor FROM sync_idempotency
-       WHERE owner_id = ? AND change_id = ?`, [claims.sub, change.changeId]);
-    if (prior) {
-      return {
-        changeId: change.changeId,
-        status: "accepted",
-        cloudVersion: Number(prior.cloud_version),
-        cursor: Number(prior.cursor),
-        duplicate: true,
-      };
-    }
-
-    const current = await tx.queryOne(
-      `SELECT cloud_version, operation, payload_json FROM sync_records
-       WHERE owner_id = ? AND store_sync_id = ? AND entity_type = ? AND entity_sync_id = ?`,
-      [claims.sub, storeSyncId, change.entityType, change.entitySyncId]);
-    const currentVersion = Number(current?.cloud_version || 0);
-    if (change.baseCloudVersion !== currentVersion) {
-      return {
-        changeId: change.changeId,
-        status: "conflict",
-        cloudVersion: currentVersion,
-        operation: current?.operation || "missing",
-        payload: current?.payload_json ? JSON.parse(current.payload_json) : {},
-        message: "The cloud record changed on another device.",
-      };
-    }
-
-    const cloudVersion = currentVersion + 1;
-    const now = new Date().toISOString();
-    await tx.execute(
-      `INSERT INTO sync_records
-       (owner_id, store_sync_id, entity_type, entity_sync_id, cloud_version, entity_version,
-        operation, payload_json, origin_device_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(owner_id, store_sync_id, entity_type, entity_sync_id) DO UPDATE SET
-         cloud_version = excluded.cloud_version, entity_version = excluded.entity_version,
-         operation = excluded.operation, payload_json = excluded.payload_json,
-         origin_device_id = excluded.origin_device_id, updated_at = excluded.updated_at`,
-      [claims.sub, storeSyncId, change.entityType, change.entitySyncId, cloudVersion,
-       change.entityVersion, change.operation, change.payloadJson, claims.did, now]);
-    await tx.execute(
-      `INSERT INTO sync_changes
-       (owner_id, store_sync_id, change_id, entity_type, entity_sync_id, cloud_version,
-        entity_version, operation, payload_json, origin_device_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [claims.sub, storeSyncId, change.changeId, change.entityType, change.entitySyncId,
-       cloudVersion, change.entityVersion, change.operation, change.payloadJson, claims.did, now]);
-    const cursorRow = await tx.queryOne("SELECT last_insert_rowid() AS cursor");
-    const cursor = Number(cursorRow?.cursor || 0);
-    await tx.execute(
-      `INSERT INTO sync_idempotency
-       (owner_id, change_id, store_sync_id, entity_type, entity_sync_id, cloud_version, cursor, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [claims.sub, change.changeId, storeSyncId, change.entityType, change.entitySyncId,
-       cloudVersion, cursor, now]);
-
-    if (change.entityType === "Store") {
-      if (change.operation === "delete") {
-        await tx.execute(
-          "UPDATE stores SET is_active = 0, updated_at = ? WHERE owner_id = ? AND sync_id = ?",
-          [now, claims.sub, storeSyncId]);
-      } else {
-        const p = change.payload;
-        const code = requiredText(p.Code ?? p.code, "Store code", 24);
-        const name = requiredText(p.Name ?? p.name, "Store name", 100);
-        await tx.execute(
-          `INSERT INTO stores (sync_id, owner_id, code, name, address, phone, is_active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(owner_id, sync_id) DO UPDATE SET
-             code = excluded.code, name = excluded.name, address = excluded.address,
-             phone = excluded.phone, is_active = excluded.is_active, updated_at = excluded.updated_at`,
-          [storeSyncId, claims.sub, code, name, optionalText(p.Address ?? p.address, 500),
-           optionalText(p.Phone ?? p.phone, 30), (p.IsActive ?? p.isActive) === false ? 0 : 1,
-           p.CreatedAt ?? p.createdAt ?? now, p.UpdatedAt ?? p.updatedAt ?? now]);
-      }
-    }
-
-    return { changeId: change.changeId, status: "accepted", cloudVersion, cursor, duplicate: false };
-  });
+async function applyStoreChange(tx, claims, storeSyncId, change, now) {
+  if (change.operation === "delete") {
+    await tx.execute("UPDATE stores SET is_active = 0, updated_at = ? WHERE owner_id = ? AND sync_id = ?",
+      [now, claims.sub, storeSyncId]);
+    return;
+  }
+  const p = change.payload;
+  const code = requiredText(p.Code ?? p.code, "Store code", 24);
+  const name = requiredText(p.Name ?? p.name, "Store name", 100);
+  await tx.execute(
+    `INSERT INTO stores (sync_id, owner_id, code, name, address, phone, is_active, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(owner_id, sync_id) DO UPDATE SET
+       code = excluded.code, name = excluded.name, address = excluded.address,
+       phone = excluded.phone, is_active = excluded.is_active, updated_at = excluded.updated_at`,
+    [storeSyncId, claims.sub, code, name, optionalText(p.Address ?? p.address, 500),
+     optionalText(p.Phone ?? p.phone, 30), (p.IsActive ?? p.isActive) === false ? 0 : 1,
+     p.CreatedAt ?? p.createdAt ?? now, p.UpdatedAt ?? p.updatedAt ?? now]);
 }
 
 async function pullChanges(url, claims, env) {
   const storeSyncId = requiredText(url.searchParams.get("storeSyncId"), "Store sync ID", 64);
   const after = integerInRange(Number(url.searchParams.get("after") || 0), "After cursor", 0, Number.MAX_SAFE_INTEGER);
   const limit = integerInRange(Number(url.searchParams.get("limit") || 500), "Limit", 1, MAX_PULL_LIMIT);
-  const store = await queryOne(env,
-    "SELECT sync_id FROM stores WHERE owner_id = ? AND sync_id = ?", [claims.sub, storeSyncId]);
-  if (!store) throw new HttpError(404, "Store is not registered.");
-
+  if (!(await queryOne(env, "SELECT sync_id FROM stores WHERE owner_id = ? AND sync_id = ?", [claims.sub, storeSyncId]))) {
+    throw new HttpError(404, "Store is not registered.");
+  }
   const rows = await query(env,
-    `SELECT cursor, change_id, entity_type, entity_sync_id, cloud_version, entity_version,
+    `SELECT cursor, change_id, operation_id, entity_type, entity_sync_id, cloud_version, entity_version,
             operation, payload_json, origin_device_id, created_at
-     FROM sync_changes
-     WHERE owner_id = ? AND store_sync_id = ? AND cursor > ?
+     FROM sync_changes WHERE owner_id = ? AND store_sync_id = ? AND cursor > ?
      ORDER BY cursor LIMIT ?`, [claims.sub, storeSyncId, after, limit]);
   const changes = rows.map((row) => ({
-    cursor: Number(row.cursor),
-    changeId: row.change_id,
-    entityType: row.entity_type,
-    entitySyncId: row.entity_sync_id,
-    cloudVersion: Number(row.cloud_version),
-    entityVersion: Number(row.entity_version),
-    operation: row.operation,
-    payload: JSON.parse(row.payload_json || "{}"),
-    originDeviceId: row.origin_device_id,
-    createdAt: row.created_at,
+    cursor: Number(row.cursor), changeId: row.change_id, operationId: row.operation_id || row.change_id,
+    entityType: row.entity_type, entitySyncId: row.entity_sync_id, cloudVersion: Number(row.cloud_version),
+    entityVersion: Number(row.entity_version), operation: row.operation,
+    payload: JSON.parse(row.payload_json || "{}"), originDeviceId: row.origin_device_id, createdAt: row.created_at,
   }));
   const nextCursor = changes.length ? changes[changes.length - 1].cursor : after;
   const hasMore = changes.length === limit;
-  const now = new Date().toISOString();
   await execute(env,
     `INSERT INTO sync_cursors (owner_id, store_sync_id, device_id, pull_cursor, updated_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(owner_id, store_sync_id, device_id) DO UPDATE SET
        pull_cursor = MAX(sync_cursors.pull_cursor, excluded.pull_cursor), updated_at = excluded.updated_at`,
-    [claims.sub, storeSyncId, claims.did, nextCursor, now]);
+    [claims.sub, storeSyncId, claims.did, nextCursor, new Date().toISOString()]);
   return json({ storeSyncId, after, nextCursor, hasMore, changes });
+}
+
+async function getSyncRecord(url, claims, env) {
+  const storeSyncId = requiredText(url.searchParams.get("storeSyncId"), "Store sync ID", 64);
+  const entityType = requiredText(url.searchParams.get("entityType"), "Entity type", 80);
+  const entitySyncId = requiredText(url.searchParams.get("entitySyncId"), "Entity sync ID", 64);
+  if (!ALLOWED_ENTITY_TYPES.has(entityType)) throw new HttpError(400, "Entity type is invalid.");
+  const row = await queryOne(env,
+    `SELECT cloud_version, entity_version, operation, payload_json, origin_device_id, updated_at
+     FROM sync_records WHERE owner_id = ? AND store_sync_id = ? AND entity_type = ? AND entity_sync_id = ?`,
+    [claims.sub, storeSyncId, entityType, entitySyncId]);
+  if (!row) return json({ cloudVersion: 0, entityVersion: 0, operation: "missing", payload: {} });
+  return json({ cloudVersion: Number(row.cloud_version), entityVersion: Number(row.entity_version),
+    operation: row.operation, payload: JSON.parse(row.payload_json || "{}"),
+    originDeviceId: row.origin_device_id, updatedAt: row.updated_at });
 }
 
 async function authResponse(env, owner, device, refreshToken) {
@@ -583,26 +658,30 @@ async function createAccessToken(env, claims, expiresAt) {
 }
 
 async function verifyAccessToken(env, token) {
-  const parts = token.split(".");
-  if (parts.length !== 3) throw new HttpError(401, "Access token is invalid.");
-  const input = `${parts[0]}.${parts[1]}`;
-  const key = await crypto.subtle.importKey(
-    "raw", new TextEncoder().encode(env.JWT_SECRET),
-    { name: "HMAC", hash: "SHA-256" }, false, ["verify"],
-  );
-  const valid = await crypto.subtle.verify(
-    "HMAC", key, base64UrlToBytes(parts[2]), new TextEncoder().encode(input),
-  );
-  if (!valid) throw new HttpError(401, "Access token is invalid.");
-  let claims;
-  try { claims = JSON.parse(new TextDecoder().decode(base64UrlToBytes(parts[1]))); }
-  catch { throw new HttpError(401, "Access token is invalid."); }
-  const now = Math.floor(Date.now() / 1000);
-  if (claims.iss !== "posapp-cloud" || claims.aud !== "posapp-desktop" ||
-      !claims.sub || !claims.did || Number(claims.exp) <= now) {
-    throw new HttpError(401, "Access token is expired or invalid.");
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) throw new HttpError(401, "Access token is invalid.");
+    const input = `${parts[0]}.${parts[1]}`;
+    const key = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(env.JWT_SECRET),
+      { name: "HMAC", hash: "SHA-256" }, false, ["verify"],
+    );
+    const signature = base64UrlToBytes(parts[2]);
+    const valid = await crypto.subtle.verify(
+      "HMAC", key, signature, new TextEncoder().encode(input),
+    );
+    if (!valid) throw new HttpError(401, "Access token is invalid.");
+    const claims = JSON.parse(new TextDecoder().decode(base64UrlToBytes(parts[1])));
+    const now = Math.floor(Date.now() / 1000);
+    if (claims.iss !== "posapp-cloud" || claims.aud !== "posapp-desktop" ||
+        !claims.sub || !claims.did || Number(claims.exp) <= now) {
+      throw new HttpError(401, "Access token is expired or invalid.");
+    }
+    return claims;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(401, "Access token is invalid.");
   }
-  return claims;
 }
 
 async function hashPassword(password, salt, iterations) {
@@ -685,6 +764,13 @@ function optionalText(value, maximum) {
   return text || null;
 }
 
+function requiredIsoDate(value, field) {
+  const text = requiredText(value, field, 64);
+  const timestamp = Date.parse(text);
+  if (!Number.isFinite(timestamp)) throw new HttpError(400, `${field} is invalid.`);
+  return new Date(timestamp).toISOString();
+}
+
 function integerInRange(value, field, minimum, maximum) {
   const number = Number(value);
   if (!Number.isSafeInteger(number) || number < minimum || number > maximum) {
@@ -739,14 +825,58 @@ function isEnabled(value) {
 
 async function ensureCloudSchema(env) {
   if (!schemaInitializationPromise) {
-    schemaInitializationPromise = transaction(
-      env, CLOUD_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
-    ).catch((error) => {
+    schemaInitializationPromise = (async () => {
+      // Create the current schema for new databases, then add columns that older
+      // installations may be missing. PRAGMA-based checks keep this idempotent.
+      await transaction(env, CLOUD_SCHEMA_STATEMENTS
+        .filter((sql) => !sql.includes("ix_snapshots_backup_set"))
+        .map((sql) => statement(sql)));
+      await ensureColumn(env, "snapshots", "backup_set_id", "TEXT NOT NULL DEFAULT ''");
+      await ensureColumn(env, "snapshots", "captured_at", "TEXT NOT NULL DEFAULT ''");
+      await ensureColumn(env, "sync_changes", "operation_id", "TEXT NOT NULL DEFAULT ''");
+      await ensureColumn(env, "sync_idempotency", "operation_id", "TEXT NOT NULL DEFAULT ''");
+      await execute(env,
+        "CREATE INDEX IF NOT EXISTS ix_snapshots_backup_set ON snapshots(owner_id, backup_set_id, captured_at DESC)");
+    })().catch((error) => {
       schemaInitializationPromise = undefined;
       throw error;
     });
   }
   await schemaInitializationPromise;
+}
+
+async function ensureColumn(env, table, column, declaration) {
+  const rows = await query(env, `PRAGMA table_info(${table})`);
+  if (!rows.some((row) => String(row.name).toLowerCase() === column.toLowerCase())) {
+    await execute(env, `ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
+  }
+}
+
+async function maybeCleanup(env, ownerId) {
+  const nowMs = Date.now();
+  if (nowMs - lastCleanupAt < 60 * 60 * 1000) return;
+  lastCleanupAt = nowMs;
+  const now = new Date(nowMs).toISOString();
+  const weekAgo = new Date(nowMs - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const dayAgo = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
+  const ninetyDaysAgo = new Date(nowMs - 90 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    await transaction(env, [
+      statement("DELETE FROM refresh_tokens WHERE expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)", [now, weekAgo]),
+      statement("DELETE FROM auth_rate_limits WHERE updated_at < ?", [dayAgo]),
+      statement("DELETE FROM sync_idempotency WHERE owner_id = ? AND created_at < ?", [ownerId, ninetyDaysAgo]),
+      statement(
+        `DELETE FROM sync_changes
+         WHERE owner_id = ? AND created_at < ? AND cursor <= COALESCE((
+           SELECT MIN(sc.pull_cursor) FROM sync_cursors sc
+           JOIN devices d ON d.id = sc.device_id AND d.owner_id = sc.owner_id
+           WHERE sc.owner_id = ? AND d.revoked_at IS NULL
+         ), 0)`, [ownerId, ninetyDaysAgo, ownerId]),
+    ]);
+  } catch (error) {
+    // Cleanup is opportunistic and must never make a normal request fail.
+    console.warn("PosApp cloud cleanup failed", error);
+  }
 }
 
 function validateEnvironment(env) {

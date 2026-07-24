@@ -67,12 +67,15 @@ CREATE TABLE IF NOT EXISTS snapshots (
     sha256 TEXT NOT NULL,
     payload_json TEXT NOT NULL,
     sync_cursor INTEGER NOT NULL DEFAULT 0,
+    backup_set_id TEXT NOT NULL DEFAULT '',
+    captured_at TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE,
     FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE RESTRICT,
     UNIQUE (owner_id, store_sync_id, version)
 );
 CREATE INDEX IF NOT EXISTS ix_snapshots_latest ON snapshots(owner_id, store_sync_id, version DESC);
+CREATE INDEX IF NOT EXISTS ix_snapshots_backup_set ON snapshots(owner_id, backup_set_id, captured_at DESC);
 
 CREATE TABLE IF NOT EXISTS sync_cursors (
     owner_id TEXT NOT NULL,
@@ -109,6 +112,7 @@ CREATE TABLE IF NOT EXISTS sync_changes (
     owner_id TEXT NOT NULL,
     store_sync_id TEXT NOT NULL,
     change_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL DEFAULT '',
     entity_type TEXT NOT NULL,
     entity_sync_id TEXT NOT NULL,
     cloud_version INTEGER NOT NULL,
@@ -126,6 +130,7 @@ CREATE INDEX IF NOT EXISTS ix_sync_changes_pull ON sync_changes(owner_id, store_
 CREATE TABLE IF NOT EXISTS sync_idempotency (
     owner_id TEXT NOT NULL,
     change_id TEXT NOT NULL,
+    operation_id TEXT NOT NULL DEFAULT '',
     store_sync_id TEXT NOT NULL,
     entity_type TEXT NOT NULL,
     entity_sync_id TEXT NOT NULL,

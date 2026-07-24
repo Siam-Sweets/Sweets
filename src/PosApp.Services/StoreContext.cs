@@ -37,7 +37,7 @@ public sealed class StoreContext : IStoreContext
     // Capture starts only after this Windows user has connected a cloud account.
     // Applying downloaded changes uses SuppressCloudCapture so remote rows are not
     // echoed back into the outbox.
-    public bool IsCloudSyncEnabled => File.Exists(_credentialPath);
+    public bool IsCloudSyncEnabled => CloudCredentialStore.HasUsableCredential();
     public bool IsCloudCaptureSuppressed => _captureSuppression.Value > 0;
 
     public IDisposable SuppressCloudCapture()
@@ -50,14 +50,12 @@ public sealed class StoreContext : IStoreContext
     {
         ArgumentNullException.ThrowIfNull(store);
         if (store.Id <= 0) throw new InvalidOperationException("The store must be saved before it can be selected.");
-        lock (_gate)
-        {
-            _selection = new StoreSelection { StoreId = store.Id, StoreSyncId = store.SyncId };
-            var json = JsonSerializer.Serialize(_selection);
-            var temp = _statePath + ".tmp";
-            File.WriteAllText(temp, json);
-            File.Move(temp, _statePath, true);
-        }
+        var selection = new StoreSelection { StoreId = store.Id, StoreSyncId = store.SyncId };
+        var json = JsonSerializer.Serialize(selection);
+        var temp = _statePath + ".tmp";
+        File.WriteAllText(temp, json);
+        File.Move(temp, _statePath, true);
+        lock (_gate) _selection = selection;
     }
 
     private StoreSelection Load()

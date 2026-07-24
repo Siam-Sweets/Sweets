@@ -98,47 +98,45 @@ public class PurchaseService : IPurchaseService
     public async Task<PurchaseDocument> PostPurchaseAsync(PurchaseDraft draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
+        draft.OperationId = NormalizeOperationId(draft.OperationId);
+        var existing = await _db.PurchaseDocuments.AsNoTracking()
+            .Include(x => x.Supplier).Include(x => x.Items)
+            .FirstOrDefaultAsync(x => x.OperationId == draft.OperationId);
+        if (existing != null) return existing;
+
         var externalReference = Normalize(draft.ExternalReference);
         var note = Normalize(draft.Note);
         ValidateLength(externalReference, 80, "External reference");
         ValidateLength(note, 500, "Purchase note");
-        if (draft.Lines == null)
-            throw new InvalidOperationException("Purchase items are unavailable.");
-        if (draft.Lines.Count == 0)
+        if (draft.Lines == null || draft.Lines.Count == 0)
             throw new InvalidOperationException("Add at least one product to the purchase.");
         if (draft.UserId <= 0)
             throw new InvalidOperationException("A signed-in user is required.");
         if (draft.SupplierId is <= 0)
             throw new InvalidOperationException("Select a valid supplier.");
-        if (draft.Lines.Any(line =>
-                line.ProductId <= 0 || line.Quantity <= 0m || line.UnitCost < 0m ||
-                line.TaxRate is < 0m or > 100m))
+        if (draft.Lines.Any(line => line.ProductId <= 0 || line.Quantity <= 0m ||
+                                    line.UnitCost < 0m || line.TaxRate is < 0m or > 100m))
             throw new InvalidOperationException(
                 "Purchase products and quantities must be valid, costs cannot be negative, and tax must be between 0 and 100.");
 
-        // This service can outlive other management views. Clear previously tracked
-        // products so a stock change made elsewhere cannot be overwritten here.
+        using var operation = SyncOperationScope.Begin(draft.OperationId);
         _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
-            if (!await _db.Users.AsNoTracking().AnyAsync(user =>
-                    user.Id == draft.UserId && user.IsActive))
+            if (!await _db.Users.AsNoTracking().AnyAsync(user => user.Id == draft.UserId && user.IsActive))
                 throw new InvalidOperationException(
                     "The signed-in user no longer exists or is inactive. Sign in again.");
 
-            Supplier? supplier = null;
-            if (draft.SupplierId.HasValue)
-            {
-                supplier = await _db.Suppliers.FindAsync(draft.SupplierId.Value)
-                    ?? throw new InvalidOperationException("Supplier not found.");
-                if (!supplier.IsActive)
-                    throw new InvalidOperationException("The selected supplier is inactive.");
-            }
+            var supplier = await _db.Suppliers.FirstOrDefaultAsync(x => x.Id == draft.SupplierId.Value)
+                           ?? throw new InvalidOperationException("Supplier not found.");
+            if (!supplier.IsActive)
+                throw new InvalidOperationException("The selected supplier is inactive.");
 
             var now = DateTime.UtcNow;
             var document = new PurchaseDocument
             {
+                OperationId = draft.OperationId,
                 DocumentNumber = GenerateDocumentNumber(now),
                 ExternalReference = externalReference,
                 Supplier = supplier,
@@ -152,12 +150,12 @@ public class PurchaseService : IPurchaseService
                 Note = note
             };
 
+            var lineNumber = 0;
             foreach (var line in draft.Lines)
             {
-                var product = await _db.Products.FindAsync(line.ProductId)
-                    ?? throw new InvalidOperationException($"Product not found: {line.ProductName}");
-                if (!product.IsActive)
-                    throw new InvalidOperationException($"{product.Name} is inactive.");
+                var product = await _db.Products.FirstOrDefaultAsync(x => x.Id == line.ProductId)
+                              ?? throw new InvalidOperationException($"Product not found: {line.ProductName}");
+                if (!product.IsActive) throw new InvalidOperationException($"{product.Name} is inactive.");
                 if (!product.StockQuantity.HasValue)
                     throw new InvalidOperationException($"{product.Name} is not stock-tracked.");
 
@@ -166,47 +164,64 @@ public class PurchaseService : IPurchaseService
                 var oldValue = Math.Max(0m, oldQuantity) * product.CostPrice;
                 var incomingValue = line.Quantity * line.UnitCost;
                 product.StockQuantity = newQuantity;
-                product.CostPrice = newQuantity == 0m ? line.UnitCost : (oldValue + incomingValue) / newQuantity;
+                product.CostPrice = newQuantity == 0m ? line.UnitCost :
+                    (oldValue + incomingValue) / newQuantity;
                 product.UpdatedAt = now;
 
                 var purchaseItem = new PurchaseItem
                 {
-                    PurchaseDocument = document,
-                    Product = product,
-                    ProductName = product.Name,
-                    Sku = product.Sku,
-                    Quantity = line.Quantity,
-                    UnitCost = line.UnitCost,
-                    TaxRate = line.TaxRate
+                    PurchaseDocument = document, Product = product,
+                    ProductName = product.Name, Sku = product.Sku,
+                    Quantity = line.Quantity, UnitCost = line.UnitCost, TaxRate = line.TaxRate
                 };
                 document.Items.Add(purchaseItem);
-
                 _db.StockTransactions.Add(new StockTransaction
                 {
                     Product = product,
+                    OperationKey = $"{draft.OperationId}:purchase:{++lineNumber}",
                     Type = StockTransactionType.Purchase,
-                    Quantity = line.Quantity,
-                    BalanceAfter = newQuantity,
-                    UnitCost = line.UnitCost,
-                    Note = $"Purchase {document.DocumentNumber}" +
-                           (supplier == null ? string.Empty : $" - {supplier.Name}"),
-                    UserId = draft.UserId,
-                    CreatedAt = document.StockDate
+                    Quantity = line.Quantity, BalanceAfter = newQuantity, UnitCost = line.UnitCost,
+                    Note = $"Purchase {document.DocumentNumber} - {supplier.Name}",
+                    UserId = draft.UserId, CreatedAt = document.StockDate
                 });
             }
 
             _db.PurchaseDocuments.Add(document);
             await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
             _db.ChangeTracker.Clear();
-            return document;
+            return await _db.PurchaseDocuments.AsNoTracking()
+                .Include(x => x.Supplier).Include(x => x.Items)
+                .FirstAsync(x => x.OperationId == draft.OperationId);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "Inventory changed while this purchase was posting. Reload the products and try again.", ex);
+        }
+        catch (DbUpdateException)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            var duplicate = await _db.PurchaseDocuments.AsNoTracking()
+                .Include(x => x.Supplier).Include(x => x.Items)
+                .FirstOrDefaultAsync(x => x.OperationId == draft.OperationId);
+            if (duplicate != null) return duplicate;
+            throw;
         }
         catch
         {
-            await transaction.RollbackAsync();
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
+    }
+
+    private static string NormalizeOperationId(string? value)
+    {
+        var normalized = value?.Trim() ?? string.Empty;
+        if (normalized.Length is < 8 or > 64 || normalized.Any(char.IsWhiteSpace))
+            throw new InvalidOperationException("The purchase operation ID is invalid.");
+        return normalized;
     }
 
     private static string GenerateDocumentNumber(DateTime utcNow)

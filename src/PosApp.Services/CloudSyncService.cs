@@ -1,7 +1,9 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +22,7 @@ namespace PosApp.Services;
 /// </summary>
 public sealed partial class CloudSyncService : ICloudSyncService
 {
-    private const int PushBatchSize = 100;
+    private const int PushBatchSize = 1000;
     private const int PullBatchSize = 1000;
     private const int MaximumPushBatchesPerRun = 20;
     private static readonly SemaphoreSlim SyncGate = new(1, 1);
@@ -261,25 +263,19 @@ public sealed partial class CloudSyncService : ICloudSyncService
         {
             var credential = await RequireCredentialAsync(cancellationToken);
             credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
-            var cloudStores = await GetCloudStoresAsync(credential, cancellationToken);
-            if (cloudStores.Count == 0) throw new InvalidOperationException("No cloud store snapshots are available.");
-
-            var snapshots = new List<SnapshotDownload>();
-            foreach (var store in cloudStores)
-            {
-                snapshots.Add(await GetAsync<SnapshotDownload>(
-                    credential,
-                    $"/v1/sync/snapshot/download?storeSyncId={Uri.EscapeDataString(store.SyncId)}",
-                    cancellationToken));
-            }
+            var snapshotSet = await GetAsync<SnapshotSetDownload>(
+                credential, "/v1/sync/snapshot/set/latest", cancellationToken);
+            if (snapshotSet.Snapshots.Count == 0)
+                throw new InvalidOperationException("No complete cloud backup set is available.");
+            ValidateSnapshotSet(snapshotSet);
 
             await _backup.CreateBackupAsync(retentionCount: 20);
-            var restoredRows = await ReplaceLocalDataAsync(snapshots, cancellationToken);
+            var restoredRows = await ReplaceLocalDataAsync(snapshotSet.Snapshots, cancellationToken);
             credential.InitialSnapshotUploadedAt = DateTimeOffset.UtcNow;
             await _credentials.SaveAsync(credential, cancellationToken);
             return new CloudRestoreSummary
             {
-                StoreCount = snapshots.Count,
+                StoreCount = snapshotSet.Snapshots.Count,
                 RestoredRows = restoredRows,
                 RestoredAt = DateTimeOffset.UtcNow
             };
@@ -299,22 +295,33 @@ public sealed partial class CloudSyncService : ICloudSyncService
         var acceptedTotal = 0;
         for (var batchNumber = 0; batchNumber < MaximumPushBatchesPerRun; batchNumber++)
         {
-            // Only the oldest queued change for each record may be sent in one
-            // request. Sending two edits with the same base cloud revision would
-            // correctly make the second edit conflict with the first.
-            var eligible = _db.SyncOutbox.Where(x =>
-                x.StoreId == store.Id &&
-                (x.LastError == null || !x.LastError.StartsWith("Conflict:")));
-            var firstChangeIds = eligible
-                .GroupBy(x => new { x.EntityType, x.EntitySyncId })
-                .Select(group => group.Min(x => x.Id));
-            var batch = await eligible
-                .Where(x => firstChangeIds.Contains(x.Id))
+            var oldest = await _db.SyncOutbox
+                .Where(x => x.StoreId == store.Id &&
+                            (x.LastError == null || !x.LastError.StartsWith("Conflict:")))
+                .OrderBy(x => x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (oldest == null) break;
+
+            var operationId = string.IsNullOrWhiteSpace(oldest.OperationId)
+                ? oldest.ChangeId
+                : oldest.OperationId;
+            var batch = await _db.SyncOutbox
+                .Where(x => x.StoreId == store.Id &&
+                            (x.OperationId == operationId ||
+                             (x.OperationId == "" && x.ChangeId == operationId)))
                 .OrderBy(x => x.EntityType == nameof(Store) ? 0 : 1)
                 .ThenBy(x => x.Id)
-                .Take(PushBatchSize)
                 .ToListAsync(cancellationToken);
             if (batch.Count == 0) break;
+            var wireBatch = batch
+                .GroupBy(x => new { x.EntityType, x.EntitySyncId })
+                .Select(group => group.OrderBy(x => x.Id).Last())
+                .OrderBy(x => x.EntityType == nameof(Store) ? 0 : 1)
+                .ThenBy(x => x.Id)
+                .ToList();
+            if (wireBatch.Count > PushBatchSize)
+                throw new InvalidOperationException(
+                    $"Cloud operation {operationId} contains {wireBatch.Count} records; the limit is {PushBatchSize}.");
 
             credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
             PushResponse response;
@@ -323,9 +330,11 @@ public sealed partial class CloudSyncService : ICloudSyncService
                 response = await PostAsync<PushResponse>(credential, "/v1/sync/push", new
                 {
                     storeSyncId = store.SyncId,
-                    changes = batch.Select(x => new
+                    operationId,
+                    changes = wireBatch.Select(x => new
                     {
                         changeId = x.ChangeId,
+                        operationId,
                         entityType = x.EntityType,
                         entitySyncId = x.EntitySyncId,
                         operation = x.Operation,
@@ -347,24 +356,30 @@ public sealed partial class CloudSyncService : ICloudSyncService
                 throw;
             }
 
-            var acceptedThisBatch = 0;
-            foreach (var item in batch)
+            foreach (var group in batch.GroupBy(x => new { x.EntityType, x.EntitySyncId }))
             {
+                var rows = group.OrderBy(x => x.Id).ToList();
+                var item = rows[^1];
                 var result = response.Results.FirstOrDefault(x => x.ChangeId == item.ChangeId)
                              ?? throw new InvalidOperationException("The cloud API omitted a push result.");
-                item.AttemptCount++;
-                item.LastAttemptAt = DateTime.UtcNow;
-                if (string.Equals(result.Status, "accepted", StringComparison.OrdinalIgnoreCase))
+                foreach (var row in rows)
+                {
+                    row.AttemptCount++;
+                    row.LastAttemptAt = DateTime.UtcNow;
+                }
+                if (response.Committed && string.Equals(result.Status, "accepted", StringComparison.OrdinalIgnoreCase))
                 {
                     await UpdateEntityCloudVersionAsync(
                         item.StoreId, item.EntityType, item.EntitySyncId, result.CloudVersion, item.Id, cancellationToken);
-                    _db.SyncOutbox.Remove(item);
-                    acceptedThisBatch++;
-                    acceptedTotal++;
+                    _db.SyncOutbox.RemoveRange(rows);
+                    acceptedTotal += rows.Count;
+                    continue;
                 }
-                else
+
+                if (string.Equals(result.Status, "conflict", StringComparison.OrdinalIgnoreCase))
                 {
-                    item.LastError = "Conflict: " + Limit(result.Message, 960);
+                    foreach (var row in rows)
+                        row.LastError = "Conflict: " + Limit(result.Message, 960);
                     await AddConflictAsync(new SyncConflict
                     {
                         StoreId = item.StoreId,
@@ -379,14 +394,19 @@ public sealed partial class CloudSyncService : ICloudSyncService
                         RemotePayloadJson = result.Payload.ValueKind == JsonValueKind.Undefined
                             ? "{}"
                             : result.Payload.GetRawText(),
-                        Message = result.Message.Length == 0
+                        Message = string.IsNullOrWhiteSpace(result.Message)
                             ? "The cloud record changed on another device."
                             : result.Message
                     }, cancellationToken);
                 }
+                else
+                {
+                    foreach (var row in rows)
+                        row.LastError = "Operation blocked because another record in the same business operation conflicted.";
+                }
             }
             await _db.SaveChangesAsync(cancellationToken);
-            if (acceptedThisBatch == 0) break;
+            if (!response.Committed) break;
         }
         return acceptedTotal;
     }
@@ -408,22 +428,66 @@ public sealed partial class CloudSyncService : ICloudSyncService
                 cancellationToken);
             if (response.Changes.Count == 0) break;
 
-            var ordered = response.Changes
-                .OrderBy(ChangePriority)
-                .ThenBy(x => x.Cursor)
-                .ToList();
+            var ordered = response.Changes.OrderBy(ChangePriority).ThenBy(x => x.Cursor).ToList();
+            var failed = new List<(PullChange Change, Exception Error)>();
             foreach (var change in ordered)
             {
-                await ApplyRemoteChangeAsync(store, credential, change, cancellationToken);
-                pulled++;
+                try
+                {
+                    await ApplyRemoteChangeAsync(store, credential, change, cancellationToken);
+                    pulled++;
+                }
+                catch (Exception ex)
+                {
+                    failed.Add((change, ex));
+                }
             }
 
+            // Retry once after the remainder of the page has materialized. This
+            // handles valid dependency ordering gaps without pinning the cursor.
+            foreach (var failure in failed)
+            {
+                try
+                {
+                    await ApplyRemoteChangeAsync(store, credential, failure.Change, cancellationToken);
+                    pulled++;
+                }
+                catch (Exception retryError)
+                {
+                    await QuarantineRemoteChangeAsync(store.Id, failure.Change, retryError, cancellationToken);
+                }
+            }
+
+            state = await GetOrCreateStateAsync(store.Id, credential.DeviceId, cancellationToken);
             state.PullCursor = Math.Max(state.PullCursor, response.NextCursor);
             state.DeviceId = credential.DeviceId;
             await _db.SaveChangesAsync(cancellationToken);
             if (!response.HasMore) break;
         }
         return pulled;
+    }
+
+    private async Task QuarantineRemoteChangeAsync(
+        int storeId, PullChange change, Exception error, CancellationToken cancellationToken)
+    {
+        _db.ChangeTracker.Clear();
+        await AddConflictAsync(new SyncConflict
+        {
+            StoreId = storeId,
+            EntityType = change.EntityType,
+            EntitySyncId = change.EntitySyncId,
+            ChangeId = change.ChangeId,
+            LocalBaseCloudVersion = 0,
+            RemoteCloudVersion = change.CloudVersion,
+            LocalOperation = "upsert",
+            RemoteOperation = NormalizeRemoteOperation(change.Operation),
+            LocalPayloadJson = "{}",
+            RemotePayloadJson = change.Payload.ValueKind == JsonValueKind.Undefined
+                ? "{}"
+                : change.Payload.GetRawText(),
+            Message = "Remote record was quarantined: " + Limit(error.GetBaseException().Message, 900)
+        }, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task ApplyRemoteChangeAsync(
@@ -479,12 +543,11 @@ public sealed partial class CloudSyncService : ICloudSyncService
                     await UpsertRemoteEntityAsync(store.Id, change, cancellationToken);
                 await _db.SaveChangesAsync(cancellationToken);
             }
-            await transaction.CommitAsync(cancellationToken);
+            await _db.CommitExternalTransactionAsync(transaction, cancellationToken);
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction, cancellationToken);
             throw;
         }
     }
@@ -570,10 +633,27 @@ public sealed partial class CloudSyncService : ICloudSyncService
             return;
         }
 
+        if (ImmutableLedgerEntities.Contains(change.EntityType))
+            throw new InvalidOperationException(
+                $"Remote deletion of immutable {change.EntityType} records is not permitted.");
         if (!EntityTypes.TryGetValue(change.EntityType, out var type))
             throw new InvalidOperationException($"Unsupported cloud entity type: {change.EntityType}.");
         var entity = await FindEntityAsync(type, storeId, change.EntitySyncId, cancellationToken);
-        if (entity != null) _db.Remove(entity);
+        if (entity == null) return;
+        var activeProperty = entity.GetType().GetProperty("IsActive");
+        if (activeProperty?.CanWrite == true && activeProperty.PropertyType == typeof(bool))
+        {
+            activeProperty.SetValue(entity, false);
+            if (entity is StoreScopedEntity scoped)
+            {
+                scoped.CloudVersion = change.CloudVersion;
+                scoped.SyncUpdatedAt = DateTime.UtcNow;
+            }
+        }
+        else
+        {
+            _db.Remove(entity);
+        }
     }
 
     private async Task ResolveReferencesAsync(
@@ -941,6 +1021,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
             {
                 using (_storeContext.SuppressCloudCapture())
                 {
+                    await DbSchemaUpgrader.DropIntegrityGuardsAsync(_db);
                     foreach (var table in new[]
                              {
                                  "CashMovements", "SalePayments", "StockTransactions", "StockTransferItems", "SaleItems", "PurchaseItems",
@@ -956,42 +1037,62 @@ public sealed partial class CloudSyncService : ICloudSyncService
                     long restoredRows = 0;
                     foreach (var snapshot in snapshots)
                     {
-                        var storeElement = RequireProperty(snapshot.Payload, "store");
-                        var store = JsonSerializer.Deserialize<Store>(storeElement.GetRawText(), JsonOptions)
-                                    ?? throw new InvalidOperationException("A cloud snapshot contains invalid store metadata.");
-                        if (string.IsNullOrWhiteSpace(store.SyncId))
-                            throw new InvalidOperationException("A cloud snapshot is missing its store sync ID.");
-                        _db.Stores.Add(store);
+                        var row = RequireProperty(snapshot.Payload, "store");
+                        var syncId = GetString(row, nameof(Store.SyncId))
+                                     ?? throw new InvalidOperationException("A cloud snapshot is missing its store sync ID.");
+                        var synthetic = new PullChange
+                        {
+                            ChangeId = $"restore-store-{syncId}",
+                            EntityType = nameof(Store),
+                            EntitySyncId = syncId,
+                            EntityVersion = GetLong(row, nameof(Store.SyncVersion), 1),
+                            CloudVersion = GetLong(row, nameof(Store.CloudVersion), 0),
+                            Operation = "upsert",
+                            Payload = row
+                        };
+                        await UpsertRemoteEntityAsync(0, synthetic, cancellationToken);
                         await _db.SaveChangesAsync(cancellationToken);
-                        storeIds[store.SyncId] = store.Id;
+                        var local = await _db.Stores.FirstAsync(x => x.SyncId == syncId, cancellationToken);
+                        storeIds[syncId] = local.Id;
                         restoredRows++;
                     }
 
                     foreach (var entityName in RestoreOrder)
                     {
-                        var type = EntityTypes[entityName];
                         foreach (var snapshot in snapshots)
                         {
-                            var storeElement = RequireProperty(snapshot.Payload, "store");
-                            var storeSyncId = GetString(storeElement, nameof(Store.SyncId))
+                            var storeRow = RequireProperty(snapshot.Payload, "store");
+                            var storeSyncId = GetString(storeRow, nameof(Store.SyncId))
                                               ?? throw new InvalidOperationException("A snapshot store sync ID is missing.");
                             var entities = RequireProperty(snapshot.Payload, "entities");
                             if (!TryGetProperty(entities, entityName, out var rows) || rows.ValueKind != JsonValueKind.Array)
                                 continue;
                             foreach (var row in rows.EnumerateArray())
                             {
-                                var entity = JsonSerializer.Deserialize(row.GetRawText(), type, JsonOptions) as StoreScopedEntity
-                                             ?? throw new InvalidOperationException($"A cloud {entityName} row is invalid.");
-                                entity.StoreId = storeIds[storeSyncId];
-                                if (entity is Setting setting &&
-                                    (setting.Key.StartsWith("cloud:", StringComparison.OrdinalIgnoreCase) ||
-                                     setting.Key.StartsWith("device:", StringComparison.OrdinalIgnoreCase)))
-                                    continue;
-                                _db.Add(entity);
+                                if (entityName == nameof(Setting))
+                                {
+                                    var key = GetString(row, nameof(Setting.Key)) ?? string.Empty;
+                                    if (key.StartsWith("cloud:", StringComparison.OrdinalIgnoreCase) ||
+                                        key.StartsWith("device:", StringComparison.OrdinalIgnoreCase))
+                                        continue;
+                                }
+                                var syncId = GetString(row, nameof(StoreScopedEntity.SyncId))
+                                             ?? throw new InvalidOperationException($"A cloud {entityName} row is missing its sync ID.");
+                                var synthetic = new PullChange
+                                {
+                                    ChangeId = $"restore-{entityName}-{syncId}",
+                                    EntityType = entityName,
+                                    EntitySyncId = syncId,
+                                    EntityVersion = GetLong(row, nameof(StoreScopedEntity.SyncVersion), 1),
+                                    CloudVersion = GetLong(row, nameof(StoreScopedEntity.CloudVersion), 0),
+                                    Operation = "upsert",
+                                    Payload = row
+                                };
+                                await UpsertRemoteEntityAsync(storeIds[storeSyncId], synthetic, cancellationToken);
                                 restoredRows++;
                             }
+                            await _db.SaveChangesAsync(cancellationToken);
                         }
-                        await _db.SaveChangesAsync(cancellationToken);
                     }
 
                     foreach (var snapshot in snapshots)
@@ -1008,6 +1109,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
                         });
                     }
                     await _db.SaveChangesAsync(cancellationToken);
+                    await DbSchemaUpgrader.EnsureIntegrityGuardsAsync(_db);
 
                     var connection = _db.Database.GetDbConnection();
                     await using var command = connection.CreateCommand();
@@ -1018,13 +1120,13 @@ public sealed partial class CloudSyncService : ICloudSyncService
                         throw new InvalidOperationException(
                             "Cloud restore failed relational validation. The pre-restore backup remains available.");
 
-                    await transaction.CommitAsync(cancellationToken);
+                    await _db.CommitExternalTransactionAsync(transaction, cancellationToken);
                     return restoredRows;
                 }
             }
             catch
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await _db.RollbackExternalTransactionAsync(transaction, cancellationToken);
                 throw;
             }
             finally
@@ -1036,6 +1138,75 @@ public sealed partial class CloudSyncService : ICloudSyncService
         {
             await _db.Database.CloseConnectionAsync();
         }
+    }
+
+    private static void ValidateSnapshotSet(SnapshotSetDownload set)
+    {
+        if (string.IsNullOrWhiteSpace(set.BackupSetId))
+            throw new InvalidOperationException("Cloud backup set ID is missing.");
+        if (set.Snapshots.Count == 0)
+            throw new InvalidOperationException("Cloud backup set contains no store snapshots.");
+        if (set.Snapshots.Any(x => !string.Equals(x.BackupSetId, set.BackupSetId, StringComparison.Ordinal)))
+            throw new InvalidOperationException("Cloud restore contains snapshots from different backup sets.");
+        if (set.Snapshots.Any(x => x.CapturedAt.ToUniversalTime() != set.CapturedAt.ToUniversalTime()))
+            throw new InvalidOperationException("Cloud restore contains snapshots captured at different times.");
+        if (set.Snapshots.Select(x => x.SnapshotId).Any(string.IsNullOrWhiteSpace) ||
+            set.Snapshots.Select(x => x.SnapshotId).Distinct(StringComparer.Ordinal).Count() != set.Snapshots.Count)
+            throw new InvalidOperationException("Cloud restore contains missing or duplicate snapshot IDs.");
+
+        var storeSyncIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var snapshot in set.Snapshots)
+        {
+            if (string.IsNullOrWhiteSpace(snapshot.PayloadJson))
+                throw new InvalidOperationException("Cloud snapshot payload text is missing.");
+            try
+            {
+                snapshot.Payload = JsonSerializer.Deserialize<JsonElement>(snapshot.PayloadJson, JsonOptions).Clone();
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException("Cloud snapshot payload is invalid JSON.", ex);
+            }
+            if (snapshot.SchemaVersion != 5)
+                throw new InvalidOperationException(
+                    $"Cloud snapshot schema {snapshot.SchemaVersion} is not supported by this application.");
+            if (!Version.TryParse(snapshot.AppVersion, out var appVersion) || appVersion.Major != 1)
+                throw new InvalidOperationException("Cloud snapshot application version is incompatible.");
+            var payloadSchema = GetLong(snapshot.Payload, "schemaVersion", -1);
+            if (payloadSchema != snapshot.SchemaVersion)
+                throw new InvalidOperationException("Cloud snapshot schema metadata does not match its payload.");
+            var exportedAt = GetDateTimeOffset(snapshot.Payload, "exportedAtUtc");
+            if (exportedAt == null || exportedAt.Value.ToUniversalTime() != set.CapturedAt.ToUniversalTime())
+                throw new InvalidOperationException("Cloud snapshot capture metadata does not match its backup set.");
+            var store = RequireProperty(snapshot.Payload, "store");
+            var storeSyncId = GetString(store, nameof(Store.SyncId));
+            if (string.IsNullOrWhiteSpace(storeSyncId) || !storeSyncIds.Add(storeSyncId))
+                throw new InvalidOperationException("Cloud restore contains a missing or duplicate store sync ID.");
+            var actualRows = CountSnapshotRows(snapshot.Payload);
+            if (actualRows != snapshot.RowCount)
+                throw new InvalidOperationException("Cloud snapshot row count validation failed.");
+            var digestBytes = SHA256.HashData(Encoding.UTF8.GetBytes(snapshot.PayloadJson));
+            var digest = Convert.ToBase64String(digestBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            if (string.IsNullOrWhiteSpace(snapshot.Sha256) ||
+                !CryptographicOperations.FixedTimeEquals(
+                    Encoding.ASCII.GetBytes(digest), Encoding.ASCII.GetBytes(snapshot.Sha256)))
+                throw new InvalidOperationException("Cloud snapshot integrity validation failed.");
+        }
+    }
+
+    private static long CountSnapshotRows(JsonElement payload)
+    {
+        long count = 1;
+        var entities = RequireProperty(payload, "entities");
+        if (entities.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Cloud snapshot entity collection is invalid.");
+        foreach (var property in entities.EnumerateObject())
+        {
+            if (property.Value.ValueKind != JsonValueKind.Array)
+                throw new InvalidOperationException($"Cloud snapshot collection {property.Name} is invalid.");
+            count += property.Value.GetArrayLength();
+        }
+        return count;
     }
 
     private async Task<IReadOnlyList<CloudStore>> GetCloudStoresAsync(
@@ -1184,6 +1355,23 @@ public sealed partial class CloudSyncService : ICloudSyncService
         return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
     }
 
+    private static long GetLong(JsonElement element, string name, long fallback)
+    {
+        if (!TryGetProperty(element, name, out var value)) return fallback;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)) return number;
+        return long.TryParse(value.ToString(), out number) ? number : fallback;
+    }
+
+    private static DateTimeOffset? GetDateTimeOffset(JsonElement element, string name)
+    {
+        if (!TryGetProperty(element, name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+        if (value.ValueKind == JsonValueKind.String && value.TryGetDateTimeOffset(out var parsed)) return parsed;
+        return DateTimeOffset.TryParse(value.ToString(), CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out parsed)
+            ? parsed
+            : null;
+    }
+
     private static bool? GetBoolean(JsonElement element, string name)
     {
         if (!TryGetProperty(element, name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
@@ -1202,6 +1390,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
 
     private sealed class PushResponse
     {
+        public bool Committed { get; set; }
         public List<PushResult> Results { get; set; } = new();
     }
 
@@ -1226,6 +1415,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
     {
         public long Cursor { get; set; }
         public string ChangeId { get; set; } = string.Empty;
+        public string OperationId { get; set; } = string.Empty;
         public string EntityType { get; set; } = string.Empty;
         public string EntitySyncId { get; set; } = string.Empty;
         public long CloudVersion { get; set; }
@@ -1247,11 +1437,25 @@ public sealed partial class CloudSyncService : ICloudSyncService
         public string Name { get; set; } = string.Empty;
     }
 
+    private sealed class SnapshotSetDownload
+    {
+        public string BackupSetId { get; set; } = string.Empty;
+        public DateTimeOffset CapturedAt { get; set; }
+        public List<SnapshotDownload> Snapshots { get; set; } = new();
+    }
+
     private sealed class SnapshotDownload
     {
+        public string SnapshotId { get; set; } = string.Empty;
+        public string BackupSetId { get; set; } = string.Empty;
+        public DateTimeOffset CapturedAt { get; set; }
         public long Version { get; set; }
+        public int SchemaVersion { get; set; }
+        public string AppVersion { get; set; } = string.Empty;
         public long RowCount { get; set; }
+        public string Sha256 { get; set; } = string.Empty;
         public long SyncCursor { get; set; }
+        public string PayloadJson { get; set; } = string.Empty;
         public JsonElement Payload { get; set; }
     }
 

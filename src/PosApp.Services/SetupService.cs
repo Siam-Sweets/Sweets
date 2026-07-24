@@ -126,11 +126,11 @@ public sealed class SetupService : ISetupService
             if (request.IncludeSampleProducts)
                 await DbSeeder.SeedSampleProductsAsync(_db);
 
-            await transaction.CommitAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
         }
         catch
         {
-            await transaction.RollbackAsync();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
 

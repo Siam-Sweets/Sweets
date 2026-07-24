@@ -11,11 +11,13 @@ public sealed class StoreService : IStoreService
 {
     private readonly AppDbContext _db;
     private readonly IStoreContext _context;
+    private readonly IUserSessionContext _session;
 
-    public StoreService(AppDbContext db, IStoreContext context)
+    public StoreService(AppDbContext db, IStoreContext context, IUserSessionContext session)
     {
         _db = db;
         _context = context;
+        _session = session;
     }
 
     public async Task InitializeAsync()
@@ -95,25 +97,37 @@ public sealed class StoreService : IStoreService
                 _db.Stores.Add(created);
                 await _db.SaveChangesAsync();
                 await SeedNewStoreAsync(created);
-                await transaction.CommitAsync();
+                await _db.CommitExternalTransactionAsync(transaction);
                 return created;
             }
             catch
             {
-                await transaction.RollbackAsync();
+                await _db.RollbackExternalTransactionAsync(transaction);
                 throw;
             }
         }
 
         var existing = await _db.Stores.FirstOrDefaultAsync(x => x.Id == store.Id)
                        ?? throw new InvalidOperationException("Store not found.");
-        existing.Name = name;
-        existing.Code = code;
-        existing.Address = address;
-        existing.Phone = phone;
-        existing.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-        await UpdateStoreConfigurationNameAsync(existing);
+        await using (var transaction = await _db.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                existing.Name = name;
+                existing.Code = code;
+                existing.Address = address;
+                existing.Phone = phone;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await UpdateStoreConfigurationNameAsync(existing);
+                await _db.SaveChangesAsync();
+                await _db.CommitExternalTransactionAsync(transaction);
+            }
+            catch
+            {
+                await _db.RollbackExternalTransactionAsync(transaction);
+                throw;
+            }
+        }
         SettingsService.InvalidateStoreCache(existing.Id);
         return existing;
     }
@@ -144,23 +158,27 @@ public sealed class StoreService : IStoreService
 
     private async Task SeedNewStoreAsync(Store store)
     {
-        var sourceUsers = await _db.Users.AsNoTracking().ToListAsync();
-        if (!sourceUsers.Any(x => x.IsActive && x.Role == UserRole.Admin))
-            throw new InvalidOperationException("The current store must have an active administrator before another store can be created.");
-        foreach (var source in sourceUsers)
+        var sourceUser = _session.UserId.HasValue
+            ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(x =>
+                x.Id == _session.UserId.Value && x.IsActive && x.Role == UserRole.Admin)
+            : null;
+        sourceUser ??= await _db.Users.AsNoTracking()
+            .Where(x => x.IsActive && x.Role == UserRole.Admin)
+            .OrderBy(x => x.Id).FirstOrDefaultAsync();
+        if (sourceUser == null)
+            throw new InvalidOperationException(
+                "An active administrator is required before another store can be created.");
+        _db.Users.Add(new User
         {
-            _db.Users.Add(new User
-            {
-                StoreId = store.Id,
-                Username = source.Username,
-                FullName = source.FullName,
-                PasswordHash = source.PasswordHash,
-                PasswordSalt = source.PasswordSalt,
-                Role = source.Role,
-                IsActive = source.IsActive,
-                Email = source.Email
-            });
-        }
+            StoreId = store.Id,
+            Username = sourceUser.Username,
+            FullName = sourceUser.FullName,
+            PasswordHash = sourceUser.PasswordHash,
+            PasswordSalt = sourceUser.PasswordSalt,
+            Role = UserRole.Admin,
+            IsActive = true,
+            Email = sourceUser.Email
+        });
 
         var categories = new[]
         {
@@ -199,7 +217,10 @@ public sealed class StoreService : IStoreService
         if (!string.IsNullOrWhiteSpace(setting?.Value))
         {
             try { settings = JsonSerializer.Deserialize<StoreSettings>(setting.Value) ?? new StoreSettings(); }
-            catch { settings = new StoreSettings(); }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException("Store settings are corrupted and cannot be synchronized with store details.", ex);
+            }
         }
         settings.StoreName = store.Name;
         settings.Address = store.Address ?? string.Empty;
@@ -218,7 +239,6 @@ public sealed class StoreService : IStoreService
             setting.Value = JsonSerializer.Serialize(settings);
             setting.UpdatedAt = DateTime.UtcNow;
         }
-        await _db.SaveChangesAsync();
     }
 
     private static string Normalize(string? value, int max, string field, bool required)

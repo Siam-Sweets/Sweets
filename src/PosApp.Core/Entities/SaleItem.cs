@@ -25,6 +25,10 @@ public class SaleItem : StoreScopedEntity
     [MaxLength(64)]
     public string? Sku { get; set; }
 
+    /// <summary>Category snapshot retained for historically stable reporting.</summary>
+    [MaxLength(100)]
+    public string CategoryName { get; set; } = "Uncategorized";
+
     public decimal Quantity { get; set; }
 
     /// <summary>Unit-of-measure snapshot retained for receipt reprints.</summary>
@@ -61,4 +65,7 @@ public class SaleItem : StoreScopedEntity
     public string QuantityDisplay => $"{Quantity:0.###} {UnitSymbol}";
 
     public bool IsRefunded { get; set; } = false;
+
+    /// <summary>Cumulative positive quantity refunded from this original line.</summary>
+    public decimal RefundedQuantity { get; set; }
 }

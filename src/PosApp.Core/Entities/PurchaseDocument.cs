@@ -9,6 +9,9 @@ public class PurchaseDocument : StoreScopedEntity
 {
     public int Id { get; set; }
 
+    [MaxLength(64)]
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
+
     [MaxLength(32)]
     public string DocumentNumber { get; set; } = string.Empty;
 

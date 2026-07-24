@@ -11,6 +11,10 @@ public class Sale : StoreScopedEntity
 {
     public int Id { get; set; }
 
+    /// <summary>Idempotency identifier for the command that created this sale.</summary>
+    [MaxLength(64)]
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
+
     /// <summary>Human-readable receipt number, e.g. 20260716-0001.</summary>
     [MaxLength(32)]
     public string ReceiptNumber { get; set; } = string.Empty;

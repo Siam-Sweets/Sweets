@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (e.g. 1.9.8, v1.9.8, or V1.9.8) - leave empty for dev build'
+        description: 'Version (e.g. 1.10.0, v1.10.0, or V1.10.0) - leave empty for dev build'
         required: false
         default: ''
 

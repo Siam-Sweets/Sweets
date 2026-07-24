@@ -21,7 +21,17 @@ namespace PosApp.Wpf;
 public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
-    public static User? CurrentUser { get; set; }
+    private static User? _currentUser;
+    public static User? CurrentUser
+    {
+        get => _currentUser;
+        set
+        {
+            _currentUser = value;
+            if (Services != null)
+                Services.GetService<IUserSessionContext>()?.SetCurrentUser(value);
+        }
+    }
     public static Store? CurrentStore { get; private set; }
     public static StoreSettings StoreSettings { get; private set; } = new();
     public static event EventHandler? SettingsChanged;
@@ -300,6 +310,7 @@ public partial class App : Application
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<IStoreContext, StoreContext>();
+        services.AddSingleton<IUserSessionContext, UserSessionContext>();
 
         // DbContext
         services.AddDbContext<AppDbContext>(opt =>

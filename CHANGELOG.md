@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.10.0 — Comprehensive integrity, synchronization, and authorization fixes
+
+- Reworked EF Core save/outbox transactions so rollbacks clear invalid tracked state and cloud notifications occur only after commit.
+- Added optimistic stock and promotion concurrency, durable operation IDs, deterministic stock-ledger keys, and idempotent sales, refunds, voids, purchases, counts, adjustments, and transfers.
+- Enforced append-only stock history and added missing transfer, user, sale, product, and ledger relationship guards for existing SQLite databases.
+- Added cumulative partial-refund quantities, split-tender refund allocation, service-level open-register enforcement, and promotion usage rollback safety.
+- Made Worker operation pushes atomic, added current-record conflict checks, malformed-token handling, active-device enforcement, server-side logout, last-seen updates, and safe retention cleanup.
+- Made multi-store snapshots one coherent backup set with transactional capture, exact payload hash/row/schema/version validation, sync-ID relationship rebuilding, and additive Worker schema upgrades.
+- Added retry ordering and quarantine for invalid downloaded records so one corrupt remote row cannot block future synchronization.
+- Hardened store authorization, manager transfer visibility, store/settings consistency, user seeding, historical category reports, and all-store product grouping.
+- Hardened CSV preflight validation and separated catalog-only, inventory-count, and purchase-import behavior.
+- Continued excluding image paths and image files from cloud payloads.
+- Bumped application, assembly, file, informational, installer, Worker, README, and changelog versions to 1.10.0.
+
 ## 1.9.8 — Fresh-install default-store startup fix
 
 - Fixed fresh installations failing at startup with `No active store is available.`

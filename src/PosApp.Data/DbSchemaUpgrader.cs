@@ -313,6 +313,37 @@ public static class DbSchemaUpgrader
             "\"BaseCloudVersion\" INTEGER NOT NULL DEFAULT 0");
         await EnsureColumnAsync(db, "SyncStates", "LastSnapshotUploadedAt",
             "\"LastSnapshotUploadedAt\" TEXT NULL");
+        await EnsureColumnAsync(db, "Products", "StockVersion",
+            "\"StockVersion\" INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Discounts", "UsageVersion",
+            "\"UsageVersion\" INTEGER NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "Sales", "OperationId",
+            "\"OperationId\" TEXT NOT NULL DEFAULT ''");
+        await EnsureColumnAsync(db, "PurchaseDocuments", "OperationId",
+            "\"OperationId\" TEXT NOT NULL DEFAULT ''");
+        await EnsureColumnAsync(db, "StockTransfers", "OperationId",
+            "\"OperationId\" TEXT NOT NULL DEFAULT ''");
+        await EnsureColumnAsync(db, "SaleItems", "CategoryName",
+            "\"CategoryName\" TEXT NOT NULL DEFAULT 'Uncategorized'");
+        await EnsureColumnAsync(db, "SaleItems", "RefundedQuantity",
+            "\"RefundedQuantity\" decimal(18,4) NOT NULL DEFAULT 0");
+        await EnsureColumnAsync(db, "StockTransactions", "OperationKey",
+            "\"OperationKey\" TEXT NOT NULL DEFAULT ''");
+        await EnsureColumnAsync(db, "SyncOutbox", "OperationId",
+            "\"OperationId\" TEXT NOT NULL DEFAULT ''");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"SyncOutbox\" SET \"OperationId\" = \"ChangeId\" " +
+            "WHERE \"OperationId\" IS NULL OR TRIM(\"OperationId\") = '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"SaleItems\" SET \"CategoryName\" = COALESCE((" +
+            "SELECT c.\"Name\" FROM \"Products\" p LEFT JOIN \"Categories\" c ON c.\"Id\" = p.\"CategoryId\" " +
+            "WHERE p.\"Id\" = \"SaleItems\".\"ProductId\"), 'Uncategorized') " +
+            "WHERE \"CategoryName\" IS NULL OR TRIM(\"CategoryName\") = '' OR \"CategoryName\" = 'Uncategorized';");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"SaleItems\" SET \"RefundedQuantity\" = COALESCE((" +
+            "SELECT SUM(ABS(r.\"Quantity\")) FROM \"SaleItems\" r " +
+            "WHERE r.\"RefundedSaleItemId\" = \"SaleItems\".\"Id\"), 0) " +
+            "WHERE \"Quantity\" > 0;");
         await db.Database.ExecuteSqlRawAsync(
             "UPDATE \"Stores\" SET \"SyncUpdatedAt\" = CURRENT_TIMESTAMP " +
             "WHERE \"SyncUpdatedAt\" = '1970-01-01 00:00:00';");
@@ -336,6 +367,18 @@ public static class DbSchemaUpgrader
                 $"\"SyncUpdatedAt\" = CASE WHEN \"SyncUpdatedAt\" = '1970-01-01 00:00:00' THEN CURRENT_TIMESTAMP ELSE \"SyncUpdatedAt\" END " +
                 $"WHERE \"SyncId\" IS NULL OR TRIM(\"SyncId\") = '' OR \"SyncUpdatedAt\" = '1970-01-01 00:00:00';");
         }
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"Sales\" SET \"OperationId\" = 'legacy-sale:' || \"SyncId\" " +
+            "WHERE \"OperationId\" IS NULL OR TRIM(\"OperationId\") = '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"PurchaseDocuments\" SET \"OperationId\" = 'legacy-purchase:' || \"SyncId\" " +
+            "WHERE \"OperationId\" IS NULL OR TRIM(\"OperationId\") = '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"StockTransfers\" SET \"OperationId\" = 'legacy-transfer:' || \"SyncId\" " +
+            "WHERE \"OperationId\" IS NULL OR TRIM(\"OperationId\") = '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE \"StockTransactions\" SET \"OperationKey\" = 'legacy-stock:' || \"SyncId\" " +
+            "WHERE \"OperationKey\" IS NULL OR TRIM(\"OperationKey\") = '';");
 
         // EnsureCreated builds the current Store table with non-null sync metadata
         // columns. Supply those values explicitly; INSERT OR IGNORE previously hid
@@ -480,6 +523,17 @@ public static class DbSchemaUpgrader
             "CREATE INDEX IF NOT EXISTS \"IX_StockTransactions_StockTransferId\" ON \"StockTransactions\" (\"StockTransferId\");");
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS \"IX_StockTransactions_StockTransferItemId\" ON \"StockTransactions\" (\"StockTransferItemId\");");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_Sales_Store_OperationId\" ON \"Sales\" (\"StoreId\", \"OperationId\") WHERE TRIM(\"OperationId\") <> '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_PurchaseDocuments_Store_OperationId\" ON \"PurchaseDocuments\" (\"StoreId\", \"OperationId\") WHERE TRIM(\"OperationId\") <> '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_StockTransfers_Store_OperationId\" ON \"StockTransfers\" (\"StoreId\", \"OperationId\") WHERE TRIM(\"OperationId\") <> '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"UX_StockTransactions_Store_OperationKey\" ON \"StockTransactions\" (\"StoreId\", \"OperationKey\") WHERE TRIM(\"OperationKey\") <> '';");
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS \"IX_SyncOutbox_OperationId_Id\" ON \"SyncOutbox\" (\"OperationId\", \"Id\");");
+        await EnsureIntegrityGuardsAsync(db);
 
         await transaction.CommitAsync();
         }
@@ -650,6 +704,132 @@ public static class DbSchemaUpgrader
             """
         };
 
+        foreach (var command in commands)
+            await db.Database.ExecuteSqlRawAsync(command);
+    }
+
+    public static async Task DropIntegrityGuardsAsync(AppDbContext db)
+    {
+        foreach (var name in new[]
+                 {
+                     "TR_StockTransactions_AppendOnly_Update",
+                     "TR_StockTransactions_AppendOnly_Delete",
+                     "TR_Products_ProtectLedger_Delete",
+                     "TR_StockTransfers_References_Insert",
+                     "TR_StockTransfers_References_Update",
+                     "TR_StockTransferItems_References_Insert",
+                     "TR_StockTransferItems_References_Update",
+                     "TR_StockTransactions_References_Insert",
+                     "TR_StockTransactions_References_Update"
+                 })
+        {
+            await db.Database.ExecuteSqlRawAsync($"DROP TRIGGER IF EXISTS \"{name}\";");
+        }
+    }
+
+    public static async Task EnsureIntegrityGuardsAsync(AppDbContext db)
+    {
+        var commands = new[]
+        {
+            "DROP TRIGGER IF EXISTS \"TR_StockTransactions_AppendOnly_Update\";",
+            "DROP TRIGGER IF EXISTS \"TR_StockTransactions_AppendOnly_Delete\";",
+            "DROP TRIGGER IF EXISTS \"TR_Products_ProtectLedger_Delete\";",
+            "DROP TRIGGER IF EXISTS \"TR_StockTransfers_References_Insert\";",
+            "DROP TRIGGER IF EXISTS \"TR_StockTransfers_References_Update\";",
+            "DROP TRIGGER IF EXISTS \"TR_StockTransferItems_References_Insert\";",
+            "DROP TRIGGER IF EXISTS \"TR_StockTransferItems_References_Update\";",
+            "DROP TRIGGER IF EXISTS \"TR_StockTransactions_References_Insert\";",
+            "DROP TRIGGER IF EXISTS \"TR_StockTransactions_References_Update\";",
+            """
+            CREATE TRIGGER "TR_StockTransactions_AppendOnly_Update"
+            BEFORE UPDATE ON "StockTransactions"
+            WHEN NEW."ProductId" <> OLD."ProductId"
+              OR NEW."Type" <> OLD."Type"
+              OR NEW."Quantity" <> OLD."Quantity"
+              OR NEW."BalanceAfter" <> OLD."BalanceAfter"
+              OR COALESCE(NEW."UnitCost", -999999999) <> COALESCE(OLD."UnitCost", -999999999)
+              OR COALESCE(NEW."SaleId", -1) <> COALESCE(OLD."SaleId", -1)
+              OR COALESCE(NEW."SaleItemId", -1) <> COALESCE(OLD."SaleItemId", -1)
+              OR COALESCE(NEW."StockTransferId", -1) <> COALESCE(OLD."StockTransferId", -1)
+              OR COALESCE(NEW."StockTransferItemId", -1) <> COALESCE(OLD."StockTransferItemId", -1)
+              OR COALESCE(NEW."Note", '') <> COALESCE(OLD."Note", '')
+              OR COALESCE(NEW."UserId", -1) <> COALESCE(OLD."UserId", -1)
+              OR NEW."CreatedAt" <> OLD."CreatedAt"
+              OR NEW."StoreId" <> OLD."StoreId"
+              OR NEW."SyncId" <> OLD."SyncId"
+              OR NEW."OperationKey" <> OLD."OperationKey"
+            BEGIN SELECT RAISE(ABORT, 'Stock ledger rows are append-only'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_StockTransactions_AppendOnly_Delete"
+            BEFORE DELETE ON "StockTransactions"
+            BEGIN SELECT RAISE(ABORT, 'Stock ledger rows are append-only'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_Products_ProtectLedger_Delete"
+            BEFORE DELETE ON "Products"
+            WHEN EXISTS (SELECT 1 FROM "StockTransactions" WHERE "ProductId" = OLD."Id")
+            BEGIN SELECT RAISE(ABORT, 'A product with stock history cannot be deleted'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_StockTransfers_References_Insert"
+            BEFORE INSERT ON "StockTransfers"
+            WHEN NOT EXISTS (SELECT 1 FROM "Stores" WHERE "Id" = NEW."DestinationStoreId")
+              OR (NEW."CreatedByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."CreatedByUserId"))
+              OR (NEW."DispatchedByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."DispatchedByUserId"))
+              OR (NEW."ReceivedByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."ReceivedByUserId"))
+              OR (NEW."CancelledByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."CancelledByUserId"))
+            BEGIN SELECT RAISE(ABORT, 'Stock transfer contains an invalid reference'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_StockTransfers_References_Update"
+            BEFORE UPDATE ON "StockTransfers"
+            WHEN NOT EXISTS (SELECT 1 FROM "Stores" WHERE "Id" = NEW."DestinationStoreId")
+              OR (NEW."CreatedByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."CreatedByUserId"))
+              OR (NEW."DispatchedByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."DispatchedByUserId"))
+              OR (NEW."ReceivedByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."ReceivedByUserId"))
+              OR (NEW."CancelledByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."CancelledByUserId"))
+            BEGIN SELECT RAISE(ABORT, 'Stock transfer contains an invalid reference'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_StockTransferItems_References_Insert"
+            BEFORE INSERT ON "StockTransferItems"
+            WHEN NOT EXISTS (SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId")
+              OR NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId")
+              OR NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."DestinationProductId")
+            BEGIN SELECT RAISE(ABORT, 'Stock transfer item contains an invalid reference'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_StockTransferItems_References_Update"
+            BEFORE UPDATE ON "StockTransferItems"
+            WHEN NOT EXISTS (SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId")
+              OR NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId")
+              OR NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."DestinationProductId")
+            BEGIN SELECT RAISE(ABORT, 'Stock transfer item contains an invalid reference'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_StockTransactions_References_Insert"
+            BEFORE INSERT ON "StockTransactions"
+            WHEN NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId")
+              OR (NEW."SaleId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Sales" WHERE "Id" = NEW."SaleId"))
+              OR (NEW."SaleItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "SaleItems" WHERE "Id" = NEW."SaleItemId"))
+              OR (NEW."StockTransferId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId"))
+              OR (NEW."StockTransferItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransferItems" WHERE "Id" = NEW."StockTransferItemId"))
+              OR (NEW."UserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId"))
+            BEGIN SELECT RAISE(ABORT, 'Stock transaction contains an invalid reference'); END;
+            """,
+            """
+            CREATE TRIGGER "TR_StockTransactions_References_Update"
+            BEFORE UPDATE ON "StockTransactions"
+            WHEN NOT EXISTS (SELECT 1 FROM "Products" WHERE "Id" = NEW."ProductId")
+              OR (NEW."SaleId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Sales" WHERE "Id" = NEW."SaleId"))
+              OR (NEW."SaleItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "SaleItems" WHERE "Id" = NEW."SaleItemId"))
+              OR (NEW."StockTransferId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransfers" WHERE "Id" = NEW."StockTransferId"))
+              OR (NEW."StockTransferItemId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "StockTransferItems" WHERE "Id" = NEW."StockTransferItemId"))
+              OR (NEW."UserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Users" WHERE "Id" = NEW."UserId"))
+            BEGIN SELECT RAISE(ABORT, 'Stock transaction contains an invalid reference'); END;
+            """
+        };
         foreach (var command in commands)
             await db.Database.ExecuteSqlRawAsync(command);
     }

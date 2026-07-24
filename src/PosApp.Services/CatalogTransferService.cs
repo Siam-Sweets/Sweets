@@ -76,7 +76,28 @@ public class CatalogTransferService : ICatalogTransferService
         var hasUnitColumn = headerMap.ContainsKey("unit");
         var hasSaleModeColumn = headerMap.ContainsKey("salemode");
 
+        // Validate the entire scanner-identifier namespace before any database
+        // mutation. This turns late unique-index failures into precise row errors.
+        var identifiers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var rowNumber = 1; rowNumber < records.Count; rowNumber++)
+        {
+            foreach (var value in new[]
+                     {
+                         EmptyToNull(Field(records[rowNumber], headerMap, "sku")),
+                         EmptyToNull(Field(records[rowNumber], headerMap, "barcode"))
+                     }.Where(value => value != null).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (identifiers.TryGetValue(value!, out var firstRow) && firstRow != rowNumber + 1)
+                    throw new InvalidOperationException(
+                        $"Rows {firstRow} and {rowNumber + 1}: identifier '{value}' is repeated. " +
+                        "Each SKU/barcode may identify only one CSV row.");
+                identifiers[value!] = rowNumber + 1;
+            }
+        }
+
         var result = new CatalogImportResult();
+        var operationId = $"csv-{Guid.NewGuid():N}";
+        using var operation = SyncOperationScope.Begin(operationId);
         _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
@@ -128,19 +149,8 @@ public class CatalogTransferService : ICatalogTransferService
                         $"Row {rowNumber + 1}: tax rate must be between 0 and 100.");
                 var categoryName = EmptyToNull(Field(row, headerMap, "category")) ?? "Uncategorized";
                 ValidateLength(categoryName, 100, "Category", rowNumber + 1);
-                var category = categories.FirstOrDefault(item =>
+                Category? category = categories.FirstOrDefault(item =>
                     string.Equals(item.Name, categoryName, StringComparison.OrdinalIgnoreCase));
-                if (category == null)
-                {
-                    category = new Category
-                    {
-                        Name = categoryName,
-                        SortOrder = nextCategorySort++,
-                        IsActive = true
-                    };
-                    categories.Add(category);
-                    _db.Categories.Add(category);
-                }
 
                 // SKU and barcode share the scanner's identifier namespace. Resolve
                 // every supplied identifier across both fields and reject an import
@@ -161,6 +171,17 @@ public class CatalogTransferService : ICatalogTransferService
                     product = nameMatches.SingleOrDefault();
                 }
                 var isNew = product == null;
+                if ((isNew || mode == ProductImportMode.CatalogOnly) && category == null)
+                {
+                    category = new Category
+                    {
+                        Name = categoryName,
+                        SortOrder = nextCategorySort++,
+                        IsActive = true
+                    };
+                    categories.Add(category);
+                    _db.Categories.Add(category);
+                }
                 if (isNew)
                 {
                     product = new Product
@@ -168,14 +189,16 @@ public class CatalogTransferService : ICatalogTransferService
                         Name = name,
                         Sku = sku,
                         Barcode = barcode,
-                        Category = category,
+                        Category = category!,
                         Price = rowPrice ?? 0m,
                         CostPrice = rowCost ?? 0m,
                         TaxRate = rowTax ?? 0m,
                         LowStockThreshold = rowThreshold,
                         AllowDiscount = BoolField(row, headerMap, "allowdiscount") ?? true,
                         IsActive = BoolField(row, headerMap, "isactive") ?? true,
-                        StockQuantity = rowStock,
+                        // Catalog-only imports may enable tracking, but never create
+                        // opening stock. Count/purchase movements are posted below.
+                        StockQuantity = rowStock.HasValue ? 0m : null,
                         CreatedAt = DateTime.UtcNow
                     };
                     ApplyMeasurement(product, rowSaleMode, rowUnit, rowWeighted);
@@ -183,21 +206,19 @@ public class CatalogTransferService : ICatalogTransferService
                     _db.Products.Add(product);
                     result.Created++;
 
-                    var openingStock = product.StockQuantity.GetValueOrDefault();
-                    if (openingStock != 0m)
+                    if (mode != ProductImportMode.CatalogOnly && rowStock.HasValue && rowStock.Value != 0m)
                     {
-                        var type = mode == ProductImportMode.Purchase
-                            ? StockTransactionType.Purchase
-                            : mode == ProductImportMode.InventoryCount
-                                ? StockTransactionType.Adjustment
-                                : StockTransactionType.InitialStock;
+                        product.StockQuantity = rowStock.Value;
                         _db.StockTransactions.Add(new StockTransaction
                         {
                             Product = product,
-                            Type = type,
-                            Quantity = openingStock,
-                            BalanceAfter = openingStock,
-                            UnitCost = product.CostPrice,
+                            OperationKey = $"{operationId}:row:{rowNumber + 1}",
+                            Type = mode == ProductImportMode.Purchase
+                                ? StockTransactionType.Purchase
+                                : StockTransactionType.Adjustment,
+                            Quantity = rowStock.Value,
+                            BalanceAfter = rowStock.Value,
+                            UnitCost = mode == ProductImportMode.Purchase ? product.CostPrice : null,
                             Note = $"CSV import ({mode})",
                             UserId = userId
                         });
@@ -208,18 +229,21 @@ public class CatalogTransferService : ICatalogTransferService
 
                 var oldQuantity = product!.StockQuantity;
                 var oldCost = product.CostPrice;
-                product.Name = name;
-                if (hasSkuColumn) product.Sku = sku;
-                if (hasBarcodeColumn) product.Barcode = barcode;
-                product.Category = category;
-                SetDecimal(row, headerMap, "price", value => product.Price = value);
-                SetDecimal(row, headerMap, "taxrate", value => product.TaxRate = value);
-                SetDecimal(row, headerMap, "lowstockthreshold", value => product.LowStockThreshold = value);
-                ApplyMeasurement(product, rowSaleMode, rowUnit, rowWeighted);
-                var allowDiscount = BoolField(row, headerMap, "allowdiscount");
-                if (allowDiscount.HasValue) product.AllowDiscount = allowDiscount.Value;
-                var active = BoolField(row, headerMap, "isactive");
-                if (active.HasValue) product.IsActive = active.Value;
+                if (mode == ProductImportMode.CatalogOnly)
+                {
+                    product.Name = name;
+                    if (hasSkuColumn) product.Sku = sku;
+                    if (hasBarcodeColumn) product.Barcode = barcode;
+                    product.Category = category!;
+                    SetDecimal(row, headerMap, "price", value => product.Price = value);
+                    SetDecimal(row, headerMap, "taxrate", value => product.TaxRate = value);
+                    SetDecimal(row, headerMap, "lowstockthreshold", value => product.LowStockThreshold = value);
+                    ApplyMeasurement(product, rowSaleMode, rowUnit, rowWeighted);
+                    var allowDiscount = BoolField(row, headerMap, "allowdiscount");
+                    if (allowDiscount.HasValue) product.AllowDiscount = allowDiscount.Value;
+                    var active = BoolField(row, headerMap, "isactive");
+                    if (active.HasValue) product.IsActive = active.Value;
+                }
 
                 var importedCost = rowCost;
                 var importedStock = rowStock;
@@ -237,7 +261,6 @@ public class CatalogTransferService : ICatalogTransferService
                     {
                         stockDelta = importedStock.Value - oldStock;
                         product.StockQuantity = importedStock.Value;
-                        if (importedCost.HasValue) product.CostPrice = importedCost.Value;
                     }
                     else
                     {
@@ -257,6 +280,7 @@ public class CatalogTransferService : ICatalogTransferService
                         _db.StockTransactions.Add(new StockTransaction
                         {
                             Product = product,
+                            OperationKey = $"{operationId}:row:{rowNumber + 1}",
                             Type = mode == ProductImportMode.Purchase
                                 ? StockTransactionType.Purchase
                                 : StockTransactionType.Adjustment,
@@ -269,23 +293,24 @@ public class CatalogTransferService : ICatalogTransferService
                         result.StockAdjusted++;
                     }
                 }
-                else if (mode == ProductImportMode.InventoryCount && importedCost.HasValue)
-                {
-                    product.CostPrice = importedCost.Value;
-                }
                 product.UpdatedAt = DateTime.UtcNow;
                 result.Updated++;
             }
 
             await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
             _db.ChangeTracker.Clear();
             return result;
         }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "Catalog or inventory data changed while the CSV was being imported. Reload and try again.", ex);
+        }
         catch
         {
-            await transaction.RollbackAsync();
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
     }

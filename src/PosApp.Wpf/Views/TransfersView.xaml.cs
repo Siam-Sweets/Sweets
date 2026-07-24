@@ -63,8 +63,16 @@ public partial class TransfersView : UserControl, IRefreshable
         try
         {
             var options = new List<StoreFilterOption>();
-            if (App.CurrentUser?.Role == UserRole.Admin) options.Add(new StoreFilterOption(0, FindResource("Transfer_AllStores")?.ToString() ?? "All stores"));
-            options.AddRange(_storeList.Select(x => new StoreFilterOption(x.Id, x.Name)));
+            if (App.CurrentUser?.Role == UserRole.Admin)
+            {
+                options.Add(new StoreFilterOption(0, FindResource("Transfer_AllStores")?.ToString() ?? "All stores"));
+                options.AddRange(_storeList.Select(x => new StoreFilterOption(x.Id, x.Name)));
+            }
+            else
+            {
+                var current = App.CurrentStore;
+                if (current != null) options.Add(new StoreFilterOption(current.Id, current.Name));
+            }
             InventoryStoreFilter.ItemsSource = options;
             var desired = App.CurrentUser?.Role == UserRole.Admin ? 0 : App.CurrentStore?.Id ?? 1;
             InventoryStoreFilter.SelectedValue = desired;

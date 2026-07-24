@@ -10,6 +10,10 @@ public class StockTransaction : StoreScopedEntity
 {
     public int Id { get; set; }
 
+    /// <summary>Deterministic idempotency key for this ledger movement.</summary>
+    [MaxLength(128)]
+    public string OperationKey { get; set; } = Guid.NewGuid().ToString("N");
+
     public int ProductId { get; set; }
     public Product? Product { get; set; }
 

@@ -133,22 +133,41 @@ public sealed partial class CloudSyncService
                 ?? throw new InvalidOperationException("The selected conflict has already been resolved or no longer exists.");
             var store = await _db.Stores.FirstOrDefaultAsync(x => x.Id == conflict.StoreId, cancellationToken)
                         ?? throw new InvalidOperationException("The conflict store no longer exists.");
+
+            var credential = await RequireCredentialAsync(cancellationToken);
+            credential = await EnsureFreshAccessTokenAsync(credential, cancellationToken);
+            var currentRemote = await GetAsync<CloudRecordResponse>(credential,
+                $"/v1/sync/record?storeSyncId={Uri.EscapeDataString(store.SyncId)}" +
+                $"&entityType={Uri.EscapeDataString(conflict.EntityType)}" +
+                $"&entitySyncId={Uri.EscapeDataString(conflict.EntitySyncId)}", cancellationToken);
+            if (currentRemote.CloudVersion != conflict.RemoteCloudVersion)
+            {
+                conflict.RemoteCloudVersion = currentRemote.CloudVersion;
+                conflict.RemoteOperation = NormalizeRemoteOperation(currentRemote.Operation);
+                conflict.RemotePayloadJson = currentRemote.Payload.ValueKind == JsonValueKind.Undefined
+                    ? "{}"
+                    : currentRemote.Payload.GetRawText();
+                conflict.Message = "The cloud record changed again. Review the refreshed conflict before resolving it.";
+                await _db.SaveChangesAsync(cancellationToken);
+                throw new InvalidOperationException(conflict.Message);
+            }
+
             var pending = await _db.SyncOutbox
                 .Where(x => x.StoreId == conflict.StoreId && x.EntityType == conflict.EntityType &&
                             x.EntitySyncId == conflict.EntitySyncId)
                 .OrderBy(x => x.Id)
                 .ToListAsync(cancellationToken);
-
             var latestLocal = pending.LastOrDefault();
             var localOperation = NormalizeRemoteOperation(latestLocal?.Operation ?? conflict.LocalOperation);
             var localPayload = latestLocal?.PayloadJson ?? conflict.LocalPayloadJson;
-            var remoteOperation = NormalizeRemoteOperation(conflict.RemoteOperation);
+            var remoteOperation = NormalizeRemoteOperation(currentRemote.Operation);
             var chosenOperation = request.Mode == SyncConflictResolutionMode.UseCloud
                 ? remoteOperation
                 : request.Mode == SyncConflictResolutionMode.Merge ? "upsert" : localOperation;
             var chosenPayload = request.Mode switch
             {
-                SyncConflictResolutionMode.UseCloud => conflict.RemotePayloadJson,
+                SyncConflictResolutionMode.UseCloud => currentRemote.Payload.ValueKind == JsonValueKind.Undefined
+                    ? "{}" : currentRemote.Payload.GetRawText(),
                 SyncConflictResolutionMode.Merge => request.MergedPayloadJson ?? string.Empty,
                 _ => localPayload
             };
@@ -166,65 +185,67 @@ public sealed partial class CloudSyncService
             {
                 EntityType = conflict.EntityType,
                 EntitySyncId = conflict.EntitySyncId,
-                CloudVersion = conflict.RemoteCloudVersion,
+                CloudVersion = currentRemote.CloudVersion,
                 EntityVersion = Math.Max(1, latestLocal?.EntityVersion ?? 1),
                 Operation = chosenOperation,
                 Payload = payload
             };
 
-            using (_storeContext.SuppressCloudCapture())
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                if (chosenOperation == "delete")
-                    await DeleteRemoteEntityAsync(store.Id, synthetic, cancellationToken);
-                else
-                    await UpsertRemoteEntityAsync(store.Id, synthetic, cancellationToken);
-                await _db.SaveChangesAsync(cancellationToken);
-            }
-
-            _db.SyncOutbox.RemoveRange(pending);
-
-            string? resolvedPayload = chosenOperation == "upsert" ? chosenPayload : "{}";
-            if (request.Mode != SyncConflictResolutionMode.UseCloud)
-            {
-                var entityVersion = Math.Max(1, pending.Select(x => x.EntityVersion).DefaultIfEmpty(1).Max() + 1);
-                if (chosenOperation == "upsert")
+                using (_storeContext.SuppressCloudCapture())
                 {
-                    resolvedPayload = await RefreshLocalSyncPayloadAsync(
-                        store.Id, conflict.EntityType, conflict.EntitySyncId,
-                        conflict.RemoteCloudVersion, entityVersion, cancellationToken);
+                    if (chosenOperation == "delete")
+                        await DeleteRemoteEntityAsync(store.Id, synthetic, cancellationToken);
+                    else
+                        await UpsertRemoteEntityAsync(store.Id, synthetic, cancellationToken);
+                    await _db.SaveChangesAsync(cancellationToken);
                 }
 
-                _db.SyncOutbox.Add(new SyncOutboxItem
+                _db.SyncOutbox.RemoveRange(pending);
+                string? resolvedPayload = chosenOperation == "upsert" ? chosenPayload : "{}";
+                if (request.Mode != SyncConflictResolutionMode.UseCloud)
                 {
-                    StoreId = store.Id,
-                    ChangeId = Guid.NewGuid().ToString("N"),
-                    EntityType = conflict.EntityType,
-                    EntitySyncId = conflict.EntitySyncId,
-                    Operation = chosenOperation,
-                    EntityVersion = entityVersion,
-                    BaseCloudVersion = conflict.RemoteCloudVersion,
-                    PayloadJson = resolvedPayload ?? "{}"
-                });
-            }
+                    var entityVersion = Math.Max(1, pending.Select(x => x.EntityVersion).DefaultIfEmpty(1).Max() + 1);
+                    if (chosenOperation == "upsert")
+                    {
+                        resolvedPayload = await RefreshLocalSyncPayloadAsync(
+                            store.Id, conflict.EntityType, conflict.EntitySyncId,
+                            currentRemote.CloudVersion, entityVersion, cancellationToken);
+                    }
 
-            var related = await _db.SyncConflicts
-                .Where(x => x.StoreId == conflict.StoreId && x.EntityType == conflict.EntityType &&
-                            x.EntitySyncId == conflict.EntitySyncId && x.ResolvedAt == null)
-                .ToListAsync(cancellationToken);
-            var now = DateTime.UtcNow;
-            var resolution = request.Mode switch
-            {
-                SyncConflictResolutionMode.UseCloud => "cloud",
-                SyncConflictResolutionMode.Merge => "merged",
-                _ => "local"
-            };
-            foreach (var row in related)
-            {
-                row.ResolvedAt = now;
-                row.Resolution = resolution;
-                row.ResolvedPayloadJson = resolvedPayload;
+                    var operationId = Guid.NewGuid().ToString("N");
+                    _db.SyncOutbox.Add(new SyncOutboxItem
+                    {
+                        StoreId = store.Id,
+                        ChangeId = Guid.NewGuid().ToString("N"),
+                        OperationId = operationId,
+                        EntityType = conflict.EntityType,
+                        EntitySyncId = conflict.EntitySyncId,
+                        Operation = chosenOperation,
+                        EntityVersion = entityVersion,
+                        BaseCloudVersion = currentRemote.CloudVersion,
+                        PayloadJson = resolvedPayload ?? "{}"
+                    });
+                }
+
+                conflict.ResolvedAt = DateTime.UtcNow;
+                conflict.Resolution = request.Mode switch
+                {
+                    SyncConflictResolutionMode.UseCloud => "cloud",
+                    SyncConflictResolutionMode.Merge => "merged",
+                    _ => "local"
+                };
+                conflict.ResolvedPayloadJson = resolvedPayload;
+                await _db.SaveChangesAsync(cancellationToken);
+                await _db.CommitExternalTransactionAsync(transaction, cancellationToken);
             }
-            await _db.SaveChangesAsync(cancellationToken);
+            catch
+            {
+                await _db.RollbackExternalTransactionAsync(transaction, cancellationToken);
+                throw;
+            }
         }
         finally
         {
@@ -400,4 +421,11 @@ public sealed partial class CloudSyncService
     {
         public List<CloudDeviceRecord> Devices { get; set; } = new();
     }
+    private sealed class CloudRecordResponse
+    {
+        public long CloudVersion { get; set; }
+        public string Operation { get; set; } = "missing";
+        public JsonElement Payload { get; set; }
+    }
+
 }

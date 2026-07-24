@@ -59,6 +59,8 @@ public class InventoryService : IInventoryService
     public async Task<Product> CreateOrUpdateProductAsync(Product product, int? userId = null)
     {
         ArgumentNullException.ThrowIfNull(product);
+        var operationId = $"product-{Guid.NewGuid():N}";
+        using var operation = SyncOperationScope.Begin(operationId);
         await ValidateOptionalUserAsync(userId);
         NormalizeAndValidateProduct(product);
         await EnsureIdentifiersUniqueAsync(product);
@@ -82,6 +84,7 @@ public class InventoryService : IInventoryService
                     // The database generates the product key. Using the clean tracked
                     // product lets EF propagate that key to the stock transaction.
                     Product = created,
+                    OperationKey = $"{operationId}:initial",
                     Type = StockTransactionType.InitialStock,
                     Quantity = created.StockQuantity.Value,
                     BalanceAfter = created.StockQuantity.Value,
@@ -120,6 +123,7 @@ public class InventoryService : IInventoryService
             _db.StockTransactions.Add(new StockTransaction
             {
                 ProductId = tracked.Id,
+                OperationKey = $"{operationId}:editor",
                 Type = StockTransactionType.Adjustment,
                 Quantity = newBalance - previousBalance,
                 BalanceAfter = newBalance,
@@ -219,28 +223,46 @@ public class InventoryService : IInventoryService
         await ValidateOptionalUserAsync(userId);
         note = NormalizeOptional(note, 500, "Stock note");
 
-        var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId);
-        if (product == null) throw new InvalidOperationException("Product not found");
-        if (!product.StockQuantity.HasValue)
-            throw new InvalidOperationException("This product is not stock-tracked");
-
-        var balance = product.StockQuantity.Value + delta;
-        if (balance < 0) throw new InvalidOperationException("Insufficient stock");
-
-        product.StockQuantity = balance;
-        product.UpdatedAt = DateTime.UtcNow;
-
-        _db.StockTransactions.Add(new StockTransaction
+        var operationId = $"adjust-{Guid.NewGuid():N}";
+        using var operation = SyncOperationScope.Begin(operationId);
+        _db.ChangeTracker.Clear();
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        try
         {
-            ProductId = productId,
-            Type = type,
-            Quantity = delta,
-            BalanceAfter = balance,
-            UnitCost = unitCost,
-            Note = note,
-            UserId = userId
-        });
-        await _db.SaveChangesAsync();
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId)
+                          ?? throw new InvalidOperationException("Product not found");
+            if (!product.StockQuantity.HasValue)
+                throw new InvalidOperationException("This product is not stock-tracked");
+
+            var balance = product.StockQuantity.Value + delta;
+            if (balance < 0) throw new InvalidOperationException("Insufficient stock");
+            product.StockQuantity = balance;
+            product.UpdatedAt = DateTime.UtcNow;
+            _db.StockTransactions.Add(new StockTransaction
+            {
+                ProductId = productId,
+                OperationKey = operationId,
+                Type = type,
+                Quantity = delta,
+                BalanceAfter = balance,
+                UnitCost = unitCost,
+                Note = note,
+                UserId = userId
+            });
+            await _db.SaveChangesAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "Stock changed on another screen or device. Reload the product and try again.", ex);
+        }
+        catch
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<StockTransaction>> GetStockHistoryAsync(int productId)
@@ -367,10 +389,13 @@ public class InventoryService : IInventoryService
 
         // This service lives for the view lifetime. Discard older tracked product
         // snapshots so a count cannot overwrite stock changed by another screen.
+        var operationId = $"count-{Guid.NewGuid():N}";
+        using var operation = SyncOperationScope.Begin(operationId);
         _db.ChangeTracker.Clear();
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
+            var lineNumber = 0;
             foreach (var count in counts)
             {
                 var product = await _db.Products.FindAsync(count.Key)
@@ -385,6 +410,7 @@ public class InventoryService : IInventoryService
                 _db.StockTransactions.Add(new StockTransaction
                 {
                     Product = product,
+                    OperationKey = $"{operationId}:{++lineNumber}",
                     Type = StockTransactionType.Adjustment,
                     Quantity = delta,
                     BalanceAfter = count.Value,
@@ -394,13 +420,17 @@ public class InventoryService : IInventoryService
                 });
             }
             await _db.SaveChangesAsync();
-            await transaction.CommitAsync();
-            _db.ChangeTracker.Clear();
+            await _db.CommitExternalTransactionAsync(transaction);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "Inventory changed while the count was being posted. Reload the count and try again.", ex);
         }
         catch
         {
-            await transaction.RollbackAsync();
-            _db.ChangeTracker.Clear();
+            await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
     }

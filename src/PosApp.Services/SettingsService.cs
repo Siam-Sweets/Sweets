@@ -106,7 +106,36 @@ public class SettingsService : ISettingsService
         normalized.MessageDurationSeconds = Math.Clamp(normalized.MessageDurationSeconds, 1, 60);
         normalized.BackupRetentionCount = Math.Clamp(normalized.BackupRetentionCount, 1, 365);
         var json = JsonSerializer.Serialize(normalized);
-        await SetAsync("store:config", json);
+        _db.ChangeTracker.Clear();
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var setting = await _db.Settings.FirstOrDefaultAsync(x => x.Key == "store:config");
+            if (setting == null)
+                _db.Settings.Add(new Setting { Key = "store:config", Value = json });
+            else
+            {
+                setting.Value = json;
+                setting.UpdatedAt = DateTime.UtcNow;
+            }
+
+            var store = await _db.Stores.FirstOrDefaultAsync(x => x.Id == _storeContext.StoreId)
+                        ?? throw new InvalidOperationException("The selected store no longer exists.");
+            store.Name = normalized.StoreName;
+            store.Address = normalized.Address;
+            store.Phone = normalized.Phone;
+            store.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
+        }
+        catch
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw;
+        }
+        await CacheGate.WaitAsync();
+        try { CachedJsonByStore[_storeContext.StoreId] = json; }
+        finally { CacheGate.Release(); }
     }
 
 
@@ -138,7 +167,15 @@ public class SettingsService : ISettingsService
 
     private static StoreSettings DeserializeClone(string json)
     {
-        try { return JsonSerializer.Deserialize<StoreSettings>(json) ?? new StoreSettings(); }
-        catch { return new StoreSettings(); }
+        try
+        {
+            return JsonSerializer.Deserialize<StoreSettings>(json)
+                   ?? throw new InvalidOperationException("Store settings are empty or invalid.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                "Store settings are corrupted. Restore a backup or save corrected settings before continuing.", ex);
+        }
     }
 }

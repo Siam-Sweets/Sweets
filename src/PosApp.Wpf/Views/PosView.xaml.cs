@@ -446,6 +446,7 @@ public class PosViewModel : ViewModelBase
     private readonly SemaphoreSlim _productLoadGate = new(1, 1);
     private int _productLoadVersion;
     private int? _suspendedSaleId;
+    private string _operationId = Guid.NewGuid().ToString("N");
     private bool _checkoutInProgress;
     private string _serviceType;
     private string _note = string.Empty;
@@ -721,6 +722,7 @@ public class PosViewModel : ViewModelBase
                 ProductId = product.Id,
                 ProductName = product.Name,
                 Sku = product.Sku,
+                CategoryName = product.Category?.Name ?? "Uncategorized",
                 Quantity = qty,
                 Unit = unit,
                 UnitPrice = product.Price,
@@ -777,6 +779,7 @@ public class PosViewModel : ViewModelBase
         CartLines.Clear();
         _selectedCustomer = null;
         _suspendedSaleId = null;
+        _operationId = Guid.NewGuid().ToString("N");
         Note = string.Empty;
         ServiceType = string.IsNullOrWhiteSpace(App.StoreSettings.DefaultServiceType)
             ? "Retail" : App.StoreSettings.DefaultServiceType;
@@ -922,6 +925,7 @@ public class PosViewModel : ViewModelBase
                         ProductId = item.ProductId,
                         ProductName = item.ProductName,
                         Sku = item.Sku,
+                        CategoryName = item.CategoryName,
                         Quantity = item.Quantity,
                         Unit = product?.EffectiveUnit ?? item.Unit,
                         UnitPrice = item.UnitPrice,
@@ -936,6 +940,9 @@ public class PosViewModel : ViewModelBase
                 }
 
                 _suspendedSaleId = dlg.SelectedSale.Id;
+                _operationId = string.IsNullOrWhiteSpace(dlg.SelectedSale.OperationId)
+                    ? Guid.NewGuid().ToString("N")
+                    : dlg.SelectedSale.OperationId;
                 _selectedCustomer = dlg.SelectedSale.Customer;
                 var recalledNote = dlg.SelectedSale.Note ?? string.Empty;
                 var recalledServiceType = string.IsNullOrWhiteSpace(dlg.SelectedSale.ServiceType)
@@ -976,6 +983,7 @@ public class PosViewModel : ViewModelBase
     {
         return new SaleDraft
         {
+            OperationId = _operationId,
             UserId = App.CurrentUser!.Id,
             CustomerId = _selectedCustomer?.Id,
             Lines = CartLines.ToList(),

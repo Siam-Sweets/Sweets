@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Storage;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 
@@ -63,24 +64,31 @@ public class AppDbContext : DbContext
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        ApplyConcurrencyTokensAndValidateImmutableRows();
         var changes = PrepareStoreChanges();
         if (changes.Count == 0)
             return base.SaveChanges(acceptAllChangesOnSuccess);
 
         var ownsTransaction = Database.CurrentTransaction == null;
         using var transaction = ownsTransaction ? Database.BeginTransaction() : null;
+        var originalEntries = ChangeTracker.Entries()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .ToList();
         try
         {
-            var affected = base.SaveChanges(true);
+            var affected = base.SaveChanges(false);
             AddOutboxRows(changes);
-            base.SaveChanges(acceptAllChangesOnSuccess);
+            MarkFirstPhaseEntriesSaved(originalEntries);
+            base.SaveChanges(false);
             if (ownsTransaction) transaction!.Commit();
-            RaiseCloudOutboxChanged();
+            ChangeTracker.AcceptAllChanges();
+            if (ownsTransaction) RaiseCloudOutboxChanged();
             return affected;
         }
         catch
         {
             if (ownsTransaction && transaction != null) transaction.Rollback();
+            ChangeTracker.Clear();
             throw;
         }
     }
@@ -92,31 +100,107 @@ public class AppDbContext : DbContext
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
+        ApplyConcurrencyTokensAndValidateImmutableRows();
         var changes = PrepareStoreChanges();
         if (changes.Count == 0)
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
 
-        // Generated keys and foreign keys are only final after the first write. Keep
-        // that write and the corresponding outbox rows in the same transaction so a
-        // crash can never commit one without the other.
         var ownsTransaction = Database.CurrentTransaction == null;
         await using var transaction = ownsTransaction
             ? await Database.BeginTransactionAsync(cancellationToken)
             : null;
+        var originalEntries = ChangeTracker.Entries()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .ToList();
         try
         {
-            var affected = await base.SaveChangesAsync(true, cancellationToken);
+            var affected = await base.SaveChangesAsync(false, cancellationToken);
             AddOutboxRows(changes);
-            await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            MarkFirstPhaseEntriesSaved(originalEntries);
+            await base.SaveChangesAsync(false, cancellationToken);
             if (ownsTransaction) await transaction!.CommitAsync(cancellationToken);
-            RaiseCloudOutboxChanged();
+            ChangeTracker.AcceptAllChanges();
+            if (ownsTransaction) RaiseCloudOutboxChanged();
             return affected;
         }
         catch
         {
             if (ownsTransaction && transaction != null)
                 await transaction.RollbackAsync(cancellationToken);
+            ChangeTracker.Clear();
             throw;
+        }
+    }
+
+    public async Task CommitExternalTransactionAsync(
+        IDbContextTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        await transaction.CommitAsync(cancellationToken);
+        ChangeTracker.AcceptAllChanges();
+        RaiseCloudOutboxChanged();
+    }
+
+    public async Task RollbackExternalTransactionAsync(
+        IDbContextTransaction transaction,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transaction);
+        try { await transaction.RollbackAsync(cancellationToken); }
+        finally { ChangeTracker.Clear(); }
+    }
+
+    private static void MarkFirstPhaseEntriesSaved(IEnumerable<EntityEntry> entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.State == EntityState.Deleted)
+                entry.State = EntityState.Detached;
+            else if (entry.State is EntityState.Added or EntityState.Modified)
+                entry.State = EntityState.Unchanged;
+        }
+    }
+
+    private void ApplyConcurrencyTokensAndValidateImmutableRows()
+    {
+        foreach (var entry in ChangeTracker.Entries<Product>())
+        {
+            if (entry.State == EntityState.Modified &&
+                entry.Property(x => x.StockQuantity).IsModified &&
+                !_storeContext.IsCloudCaptureSuppressed)
+            {
+                entry.Entity.StockVersion = Math.Max(
+                    entry.Entity.StockVersion,
+                    Convert.ToInt64(entry.Property(x => x.StockVersion).OriginalValue)) + 1;
+                entry.Property(x => x.StockVersion).IsModified = true;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<Discount>())
+        {
+            if (entry.State == EntityState.Modified &&
+                entry.Property(x => x.UsedCount).IsModified &&
+                !_storeContext.IsCloudCaptureSuppressed)
+            {
+                entry.Entity.UsageVersion = Math.Max(
+                    entry.Entity.UsageVersion,
+                    Convert.ToInt64(entry.Property(x => x.UsageVersion).OriginalValue)) + 1;
+                entry.Property(x => x.UsageVersion).IsModified = true;
+            }
+        }
+
+        foreach (var entry in ChangeTracker.Entries<StockTransaction>())
+        {
+            if (entry.State == EntityState.Deleted)
+                throw new InvalidOperationException("Stock ledger rows are append-only and cannot be deleted.");
+            if (entry.State != EntityState.Modified) continue;
+            var illegal = entry.Properties.Any(property => property.IsModified &&
+                property.Metadata.Name is not nameof(StoreScopedEntity.CloudVersion)
+                    and not nameof(StoreScopedEntity.SyncVersion)
+                    and not nameof(StoreScopedEntity.SyncUpdatedAt));
+            if (illegal)
+                throw new InvalidOperationException("Stock ledger rows are append-only and cannot be edited.");
         }
     }
 
@@ -128,6 +212,7 @@ public class AppDbContext : DbContext
 
     private void AddOutboxRows(IEnumerable<PendingSyncChange> changes)
     {
+        var operationId = SyncOperationScope.CurrentOperationId ?? Guid.NewGuid().ToString("N");
         foreach (var change in changes)
         {
             SyncOutbox.Add(new SyncOutboxItem
@@ -138,6 +223,7 @@ public class AppDbContext : DbContext
                 Operation = change.State == EntityState.Deleted ? "delete" : "upsert",
                 EntityVersion = change.EntityVersion,
                 BaseCloudVersion = change.BaseCloudVersion,
+                OperationId = operationId,
                 PayloadJson = change.State == EntityState.Deleted
                     ? "{}"
                     : SyncPayloadSerializer.SerializeForSync(change.Entity, this)
@@ -227,6 +313,7 @@ public class AppDbContext : DbContext
             b.Property(s => s.Name).IsRequired();
             b.Property(s => s.Code).IsRequired().UseCollation("NOCASE");
             b.Property(s => s.SyncId).IsRequired().UseCollation("NOCASE");
+            b.Property(s => s.SyncVersion).IsConcurrencyToken();
             b.Property(s => s.CloudVersion).HasDefaultValue(0L);
             b.HasIndex(s => s.Code).IsUnique();
             b.HasIndex(s => s.SyncId).IsUnique();
@@ -261,6 +348,7 @@ public class AppDbContext : DbContext
             b.Property(p => p.CostPrice).HasColumnType("decimal(18,4)");
             b.Property(p => p.TaxRate).HasColumnType("decimal(6,3)");
             b.Property(p => p.StockQuantity).HasColumnType("decimal(18,4)");
+            b.Property(p => p.StockVersion).IsConcurrencyToken();
             b.Property(p => p.LowStockThreshold).HasColumnType("decimal(18,4)");
             b.HasIndex(p => new { p.StoreId, p.Sku }).IsUnique();
             b.HasIndex(p => new { p.StoreId, p.Barcode }).IsUnique();
@@ -307,6 +395,9 @@ public class AppDbContext : DbContext
             b.HasOne(s => s.CashSession).WithMany(session => session.Sales)
                 .HasForeignKey(s => s.CashSessionId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(s => new { s.StoreId, s.ReceiptNumber }).IsUnique();
+            b.HasIndex(s => new { s.StoreId, s.OperationId }).IsUnique();
+            b.HasOne<Sale>().WithMany().HasForeignKey(s => s.RefundedSaleId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(s => s.SaleDate);
             b.HasIndex(s => s.CashSessionId);
             b.HasIndex(s => s.RefundedSaleId);
@@ -325,6 +416,8 @@ public class AppDbContext : DbContext
                 .HasForeignKey(i => i.SaleId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(i => i.Product).WithMany(p => p.SaleItems)
                 .HasForeignKey(i => i.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<SaleItem>().WithMany().HasForeignKey(i => i.RefundedSaleItemId)
+                .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(i => i.RefundedSaleItemId);
         });
 
@@ -343,12 +436,16 @@ public class AppDbContext : DbContext
             b.Property(t => t.BalanceAfter).HasColumnType("decimal(18,4)");
             b.Property(t => t.UnitCost).HasColumnType("decimal(18,4)");
             b.HasOne(t => t.Product).WithMany(p => p.StockTransactions)
-                .HasForeignKey(t => t.ProductId).OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(t => t.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<Sale>().WithMany().HasForeignKey(t => t.SaleId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<SaleItem>().WithMany().HasForeignKey(t => t.SaleItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<StockTransfer>().WithMany().HasForeignKey(t => t.StockTransferId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<StockTransferItem>().WithMany().HasForeignKey(t => t.StockTransferItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(t => t.CreatedAt);
             b.HasIndex(t => t.StockTransferId);
             b.HasIndex(t => t.StockTransferItemId);
-            b.HasOne<User>().WithMany().HasForeignKey(t => t.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(t => new { t.StoreId, t.OperationKey }).IsUnique();
         });
 
         modelBuilder.Entity<StockTransfer>(b =>
@@ -356,7 +453,13 @@ public class AppDbContext : DbContext
             b.HasKey(t => t.Id);
             b.Property(t => t.TransferNumber).IsRequired().UseCollation("NOCASE");
             b.HasIndex(t => new { t.StoreId, t.TransferNumber }).IsUnique();
+            b.HasIndex(t => new { t.StoreId, t.OperationId }).IsUnique();
             b.HasIndex(t => new { t.DestinationStoreId, t.Status });
+            b.HasOne<Store>().WithMany().HasForeignKey(t => t.DestinationStoreId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<User>().WithMany().HasForeignKey(t => t.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<User>().WithMany().HasForeignKey(t => t.DispatchedByUserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<User>().WithMany().HasForeignKey(t => t.ReceivedByUserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<User>().WithMany().HasForeignKey(t => t.CancelledByUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<StockTransferItem>(b =>
@@ -370,6 +473,7 @@ public class AppDbContext : DbContext
             b.HasOne<Product>().WithMany().HasForeignKey(i => i.ProductId)
                 .OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(i => i.StockTransferId);
+            b.HasOne<Product>().WithMany().HasForeignKey(i => i.DestinationProductId).OnDelete(DeleteBehavior.Restrict);
             b.HasIndex(i => i.DestinationProductId);
         });
 
@@ -384,6 +488,7 @@ public class AppDbContext : DbContext
             b.HasKey(d => d.Id);
             b.Property(d => d.Value).HasColumnType("decimal(18,4)");
             b.Property(d => d.Code).UseCollation("NOCASE");
+            b.Property(d => d.UsageVersion).IsConcurrencyToken();
             b.HasIndex(d => new { d.StoreId, d.Code }).IsUnique();
         });
 
@@ -409,6 +514,7 @@ public class AppDbContext : DbContext
             b.Property(p => p.TaxTotal).HasColumnType("decimal(18,4)");
             b.Property(p => p.Total).HasColumnType("decimal(18,4)");
             b.HasIndex(p => new { p.StoreId, p.DocumentNumber }).IsUnique();
+            b.HasIndex(p => new { p.StoreId, p.OperationId }).IsUnique();
             b.HasIndex(p => p.DocumentDate);
             b.HasOne(p => p.Supplier).WithMany(s => s.Purchases)
                 .HasForeignKey(p => p.SupplierId).OnDelete(DeleteBehavior.SetNull);
@@ -459,6 +565,7 @@ public class AppDbContext : DbContext
             b.Property(x => x.PayloadJson).IsRequired();
             b.HasIndex(x => x.ChangeId).IsUnique();
             b.HasIndex(x => new { x.StoreId, x.Id });
+            b.HasIndex(x => new { x.OperationId, x.Id });
         });
 
         modelBuilder.Entity<SyncState>(b =>
@@ -491,6 +598,7 @@ public class AppDbContext : DbContext
             // hierarchy. Each concrete POS entity must keep its own existing table.
             b.HasBaseType((Type?)null);
             b.Property(x => x.SyncId).IsRequired().UseCollation("NOCASE");
+            b.Property(x => x.SyncVersion).IsConcurrencyToken();
             b.Property(x => x.CloudVersion).HasDefaultValue(0L);
             b.HasIndex(x => new { x.StoreId, x.SyncId }).IsUnique();
             b.HasIndex(x => x.StoreId);

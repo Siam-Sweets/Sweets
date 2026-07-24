@@ -31,6 +31,9 @@ public class Discount : StoreScopedEntity
     public int? MaxUses { get; set; }
     public int UsedCount { get; set; }
 
+    /// <summary>Optimistic concurrency token for promotion usage.</summary>
+    public long UsageVersion { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

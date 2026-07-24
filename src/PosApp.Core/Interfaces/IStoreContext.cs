@@ -21,3 +21,12 @@ public interface IStoreService
     Task SetStoreActiveAsync(int storeId, bool isActive);
     Task SelectStoreAsync(int storeId);
 }
+
+public interface IUserSessionContext
+{
+    int? UserId { get; }
+    int? StoreId { get; }
+    UserRole? Role { get; }
+    bool IsAdmin { get; }
+    void SetCurrentUser(User? user);
+}

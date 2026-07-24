@@ -41,6 +41,9 @@ public class Product : StoreScopedEntity
     /// <summary>Current stock quantity. Null = non-tracked (service item).</summary>
     public decimal? StockQuantity { get; set; }
 
+    /// <summary>Optimistic concurrency token for stock-changing commands.</summary>
+    public long StockVersion { get; set; }
+
     /// <summary>Low-stock threshold for alerts.</summary>
     public decimal? LowStockThreshold { get; set; }
 

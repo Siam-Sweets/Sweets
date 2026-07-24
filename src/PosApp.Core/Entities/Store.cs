@@ -66,6 +66,9 @@ public sealed class SyncOutboxItem
 
     public long EntityVersion { get; set; }
     public long BaseCloudVersion { get; set; }
+
+    [MaxLength(64)]
+    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
     public string PayloadJson { get; set; } = "{}";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int AttemptCount { get; set; }
