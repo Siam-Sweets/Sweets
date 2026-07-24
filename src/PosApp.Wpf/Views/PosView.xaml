@@ -478,7 +478,10 @@
                                                 <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
 
-                                            <TextBlock Grid.Row="0" Text="{Binding Name}" ToolTip="{Binding Name}"
+                                            <Border Grid.Row="0" Height="4" VerticalAlignment="Top" CornerRadius="2"
+                                                    Background="{Binding Category.Color, Mode=OneWay, Converter={StaticResource HexColorToBrushConverter}}"/>
+
+                                            <TextBlock Grid.Row="0" Text="{Binding Name}" ToolTip="{Binding Name}" Margin="0,9,0,0"
                                                        FontWeight="SemiBold" FontSize="13" LineHeight="18"
                                                        TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
 
@@ -529,15 +532,26 @@
                             <DataTemplate><Button Content="{Binding}" Tag="{Binding}" Click="VirtualKey_Click" Style="{StaticResource OutlineButton}" MinWidth="38" Padding="8,5" Margin="2"/></DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <ItemsControl Grid.Row="5" ItemsSource="{Binding Categories}" Margin="0,10,0,0">
-                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Content="{Binding Name}" Tag="{Binding Id}" Click="Category_Click"
-                                        Style="{StaticResource OutlineButton}" Padding="13,7" Margin="0,0,7,0"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <ScrollViewer Grid.Row="5" Margin="0,10,0,0"
+                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                  PanningMode="HorizontalOnly" CanContentScroll="False">
+                        <ItemsControl ItemsSource="{Binding Categories}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Tag="{Binding Id}" Click="Category_Click"
+                                            Style="{StaticResource OutlineButton}" Padding="13,7" Margin="0,0,7,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Width="12" Height="12" CornerRadius="6" Margin="0,0,7,0"
+                                                    BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                                    Background="{Binding Color, Mode=OneWay, Converter={StaticResource HexColorToBrushConverter}}"/>
+                                            <TextBlock Text="{Binding Name, Mode=OneWay}" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </Grid>
             </Border>
         </Grid>

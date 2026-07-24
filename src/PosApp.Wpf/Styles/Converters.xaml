@@ -6,6 +6,7 @@
     <c:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     <c:InverseBoolConverter x:Key="InverseBoolConverter"/>
     <c:StockColorConverter x:Key="StockColorConverter"/>
+    <c:HexColorToBrushConverter x:Key="HexColorToBrushConverter"/>
     <c:SaleStatusToStringConverter x:Key="SaleStatusToStringConverter"/>
     <c:PaymentMethodToStringConverter x:Key="PaymentMethodToStringConverter"/>
     <c:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>

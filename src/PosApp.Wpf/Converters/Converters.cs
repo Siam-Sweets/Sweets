@@ -71,6 +71,39 @@ public class InverseBoolConverter : IValueConverter
         => !(value is bool b && b);
 }
 
+
+public class HexColorToBrushConverter : IValueConverter
+{
+    private static readonly Brush FallbackBrush = new SolidColorBrush(Color.FromRgb(100, 116, 139));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var text = value?.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(text)) return FallbackBrush;
+
+        try
+        {
+            var converted = ColorConverter.ConvertFromString(text);
+            if (converted is Color color)
+            {
+                var brush = new SolidColorBrush(color);
+                brush.Freeze();
+                return brush;
+            }
+        }
+        catch (FormatException)
+        {
+            // Invalid values remain visible through the text field while the
+            // preview uses a neutral fallback brush.
+        }
+
+        return FallbackBrush;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => Binding.DoNothing;
+}
+
 public class StockColorConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

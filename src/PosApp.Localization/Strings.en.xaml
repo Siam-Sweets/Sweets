@@ -211,6 +211,7 @@
     <sys:String x:Key="Prod_CategoriesHelp">Create, edit, or remove product categories.</sys:String>
     <sys:String x:Key="Prod_CategoryDescription">Description</sys:String>
     <sys:String x:Key="Prod_CategoryColor">Color (#RRGGBB)</sys:String>
+    <sys:String x:Key="Prod_CategoryColorPreview">Color preview</sys:String>
     <sys:String x:Key="Prod_DeleteCategoryConfirm">Delete category '{0}'?</sys:String>
     <sys:String x:Key="Prod_Edit">Edit</sys:String>
     <sys:String x:Key="Prod_Delete">Delete</sys:String>

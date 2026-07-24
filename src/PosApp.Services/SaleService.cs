@@ -133,9 +133,7 @@ public class SaleService : ISaleService
             await EnsureActiveUserAsync(draft.UserId);
             await EnsureActiveCustomerAsync(draft.CustomerId);
             var openSessionId = await GetOpenSessionIdAsync();
-            var requiresRegister = settings.RequireOpenRegisterForSales ||
-                                   draft.Payments.Any(x => x.Method == PaymentMethod.Cash);
-            if (requiresRegister && !openSessionId.HasValue)
+            if (settings.RequireOpenRegisterForSales && !openSessionId.HasValue)
                 throw new InvalidOperationException("Open the cash register before completing this sale.");
 
             Sale? sale = null;
@@ -196,7 +194,14 @@ public class SaleService : ISaleService
                 });
             }
 
-            var stockLinks = new List<(StockTransaction Transaction, SaleItem Item)>();
+            var pendingStockMovements = new List<(
+                int ProductId,
+                string OperationKey,
+                decimal Quantity,
+                decimal BalanceAfter,
+                decimal? UnitCost,
+                SaleItem Item,
+                string Note)>();
             var lineNumber = 0;
             foreach (var line in draft.Lines)
             {
@@ -221,28 +226,37 @@ public class SaleService : ISaleService
                     throw new InvalidOperationException($"Insufficient stock for {product.Name}.");
                 product.StockQuantity = balance;
                 product.UpdatedAt = DateTime.UtcNow;
-                var ledger = new StockTransaction
-                {
-                    ProductId = product.Id,
-                    OperationKey = $"{draft.OperationId}:sale:{++lineNumber}",
-                    Type = StockTransactionType.Sale,
-                    Quantity = -line.Quantity,
-                    BalanceAfter = balance,
-                    UnitCost = product.CostPrice,
-                    UserId = draft.UserId,
-                    Note = $"Sale {receiptNo}"
-                };
-                _db.StockTransactions.Add(ledger);
-                stockLinks.Add((ledger, item));
+                pendingStockMovements.Add((
+                    product.Id,
+                    $"{draft.OperationId}:sale:{++lineNumber}",
+                    -line.Quantity,
+                    balance,
+                    product.CostPrice,
+                    item,
+                    $"Sale {receiptNo}"));
             }
 
+            // Save the sale and its items first so their generated IDs are known.
+            // Ledger rows are then inserted once with final foreign keys; an
+            // append-only row is never updated after insertion.
             await _db.SaveChangesAsync();
-            foreach (var link in stockLinks)
+            foreach (var movement in pendingStockMovements)
             {
-                link.Transaction.SaleId = sale.Id;
-                link.Transaction.SaleItemId = link.Item.Id;
+                _db.StockTransactions.Add(new StockTransaction
+                {
+                    ProductId = movement.ProductId,
+                    OperationKey = movement.OperationKey,
+                    Type = StockTransactionType.Sale,
+                    Quantity = movement.Quantity,
+                    BalanceAfter = movement.BalanceAfter,
+                    UnitCost = movement.UnitCost,
+                    SaleId = sale.Id,
+                    SaleItemId = movement.Item.Id,
+                    UserId = draft.UserId,
+                    Note = movement.Note
+                });
             }
-            if (stockLinks.Count > 0) await _db.SaveChangesAsync();
+            if (pendingStockMovements.Count > 0) await _db.SaveChangesAsync();
             await _db.CommitExternalTransactionAsync(transaction);
             var id = sale.Id;
             _db.ChangeTracker.Clear();
@@ -520,7 +534,14 @@ public class SaleService : ISaleService
                 });
             }
 
-            var stockLinks = new List<(StockTransaction Transaction, SaleItem Item)>();
+            var pendingStockMovements = new List<(
+                int ProductId,
+                string OperationKey,
+                decimal Quantity,
+                decimal BalanceAfter,
+                decimal? UnitCost,
+                SaleItem Item,
+                string Note)>();
             var lineNumber = 0;
             foreach (var selection in selections)
             {
@@ -551,31 +572,39 @@ public class SaleService : ISaleService
                 if (product?.StockQuantity is not decimal current) continue;
                 product.StockQuantity = current + selection.Quantity;
                 product.UpdatedAt = DateTime.UtcNow;
-                var ledger = new StockTransaction
-                {
-                    ProductId = product.Id,
-                    OperationKey = $"{draft.OperationId}:refund:{++lineNumber}",
-                    Type = StockTransactionType.Return,
-                    Quantity = selection.Quantity,
-                    BalanceAfter = product.StockQuantity.Value,
-                    UnitCost = item.CostPrice,
-                    UserId = draft.UserId,
-                    Note = $"Refund of sale {original.ReceiptNumber}"
-                };
-                _db.StockTransactions.Add(ledger);
-                stockLinks.Add((ledger, refundItem));
+                pendingStockMovements.Add((
+                    product.Id,
+                    $"{draft.OperationId}:refund:{++lineNumber}",
+                    selection.Quantity,
+                    product.StockQuantity.Value,
+                    item.CostPrice,
+                    refundItem,
+                    $"Refund of sale {original.ReceiptNumber}"));
             }
 
             if (allRemainingSelected) await ReleasePromotionsAsync(original.Items);
             original.UpdatedAt = DateTime.UtcNow;
             _db.Sales.Add(refund);
+            // Persist the refund and refund items before creating immutable
+            // ledger rows, so every ledger row is inserted with final links.
             await _db.SaveChangesAsync();
-            foreach (var link in stockLinks)
+            foreach (var movement in pendingStockMovements)
             {
-                link.Transaction.SaleId = refund.Id;
-                link.Transaction.SaleItemId = link.Item.Id;
+                _db.StockTransactions.Add(new StockTransaction
+                {
+                    ProductId = movement.ProductId,
+                    OperationKey = movement.OperationKey,
+                    Type = StockTransactionType.Return,
+                    Quantity = movement.Quantity,
+                    BalanceAfter = movement.BalanceAfter,
+                    UnitCost = movement.UnitCost,
+                    SaleId = refund.Id,
+                    SaleItemId = movement.Item.Id,
+                    UserId = draft.UserId,
+                    Note = movement.Note
+                });
             }
-            if (stockLinks.Count > 0) await _db.SaveChangesAsync();
+            if (pendingStockMovements.Count > 0) await _db.SaveChangesAsync();
             await _db.CommitExternalTransactionAsync(transaction);
             var id = refund.Id;
             _db.ChangeTracker.Clear();

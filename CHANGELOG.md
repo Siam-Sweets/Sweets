@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.10.6 — Store dialog scrolling fix
+
+- Replaced the fixed Store Details form area with a vertical `ScrollViewer` so every field remains reachable under Windows display scaling and on smaller screens.
+- Made the Store Details window resizable with practical minimum dimensions.
+- Kept the Save and Cancel buttons fixed while only the form body scrolls.
+- Added an internal scrollbar to the multiline address field.
+- No database schema, cloud protocol, localization, or image-handling changes are required.
+
+## 1.10.5 — Dark mode surface cleanup
+
+- Fixed dark mode windows and dialogs still showing light client-area surfaces in several management flows.
+- Added a global window-theme helper that reapplies PosApp theme brushes to every WPF window, including programmatically created dialogs.
+- Added best-effort immersive dark title bars for Windows 10/11 so the main window and modal dialogs no longer show bright caption bars in dark mode.
+- Applied theme refresh to already-open windows when the user changes appearance settings.
+- No database schema, synchronization protocol, or cloud API changes are required.
+
+## 1.10.4 — Category scrolling and color visibility fix
+
+- Added explicit scrolling to Category Management and a resizable, vertically scrollable category editor.
+- Added a live `#RRGGBB` color preview and color swatches in category management.
+- Displayed category colors in POS category filters and product-card accents.
+- Added English/Bengali localization for the color preview label.
+- Bumped application, assembly, file, informational, installer, Worker, README, and changelog versions to 1.10.4.
+- No database or cloud schema migration is required.
+
+## 1.10.3 — Checkout register-setting and immutable-ledger fix
+
+- Fixed cash checkout requiring an open register even when **Require an open register before selling** was disabled.
+- Made the stored register setting authoritative for checkout; an available open session is still attached when one exists.
+- Fixed stock-tracked checkout failing because newly inserted ledger rows were edited afterward to attach sale/item IDs.
+- Fixed the same append-only ledger issue in item-level refunds.
+- Sale/refund rows and line items are now saved first inside the existing transaction, then ledger rows are inserted once with final foreign keys.
+- No SQLite schema, Turso schema, synchronization protocol, cloud endpoint, localization, or image-handling changes.
+- Bumped application, assembly, file, informational, installer, Worker, README, and changelog versions to 1.10.3.
+
 ## 1.10.2 — Cloudflare PBKDF2 runtime compatibility fix
 
 - Fixed owner-account signup failing with `NotSupportedError` because Cloudflare Workers rejects PBKDF2 iteration counts above 100,000.

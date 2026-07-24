@@ -3,10 +3,12 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Win32;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Wpf.Converters;
 
 namespace PosApp.Wpf.Views;
 
@@ -680,10 +682,44 @@ public sealed class CategoryManagerDialog : Window
         _grid.AutoGenerateColumns = false;
         _grid.IsReadOnly = true;
         _grid.HeadersVisibility = DataGridHeadersVisibility.Column;
+        _grid.SetValue(ScrollViewer.CanContentScrollProperty, true);
+        ScrollViewer.SetVerticalScrollBarVisibility(_grid, ScrollBarVisibility.Auto);
+        ScrollViewer.SetHorizontalScrollBarVisibility(_grid, ScrollBarVisibility.Auto);
+        VirtualizingPanel.SetIsVirtualizing(_grid, true);
+        VirtualizingPanel.SetVirtualizationMode(_grid, VirtualizationMode.Recycling);
         _grid.ItemsSource = _categories;
         _grid.Columns.Add(new DataGridTextColumn { Header = DialogLayout.Text("Prod_Name", "Name"), Binding = new System.Windows.Data.Binding(nameof(Category.Name)), Width = new DataGridLength(2, DataGridLengthUnitType.Star) });
         _grid.Columns.Add(new DataGridTextColumn { Header = DialogLayout.Text("Prod_CategoryDescription", "Description"), Binding = new System.Windows.Data.Binding(nameof(Category.Description)), Width = new DataGridLength(3, DataGridLengthUnitType.Star) });
-        _grid.Columns.Add(new DataGridTextColumn { Header = DialogLayout.Text("Prod_CategoryColor", "Color"), Binding = new System.Windows.Data.Binding(nameof(Category.Color)), Width = 90 });
+        var colorColumn = new DataGridTemplateColumn
+        {
+            Header = DialogLayout.Text("Prod_CategoryColor", "Color"),
+            Width = 130
+        };
+        var colorPanel = new FrameworkElementFactory(typeof(StackPanel));
+        colorPanel.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+        colorPanel.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        var colorSwatch = new FrameworkElementFactory(typeof(Border));
+        colorSwatch.SetValue(FrameworkElement.WidthProperty, 24d);
+        colorSwatch.SetValue(FrameworkElement.HeightProperty, 16d);
+        colorSwatch.SetValue(Border.CornerRadiusProperty, new CornerRadius(4));
+        colorSwatch.SetValue(Border.BorderThicknessProperty, new Thickness(1));
+        colorSwatch.SetValue(Border.BorderBrushProperty, (Brush)Application.Current.FindResource("BorderBrush"));
+        colorSwatch.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 8, 0));
+        colorSwatch.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding(nameof(Category.Color))
+        {
+            Mode = System.Windows.Data.BindingMode.OneWay,
+            Converter = new HexColorToBrushConverter()
+        });
+        var colorText = new FrameworkElementFactory(typeof(TextBlock));
+        colorText.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        colorText.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(Category.Color))
+        {
+            Mode = System.Windows.Data.BindingMode.OneWay
+        });
+        colorPanel.AppendChild(colorSwatch);
+        colorPanel.AppendChild(colorText);
+        colorColumn.CellTemplate = new DataTemplate { VisualTree = colorPanel };
+        _grid.Columns.Add(colorColumn);
         var actions = new DataGridTemplateColumn { Header = DialogLayout.Text("Common_Actions", "Actions"), Width = 150 };
         var factory = new FrameworkElementFactory(typeof(StackPanel));
         factory.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
@@ -765,8 +801,20 @@ public sealed class CategoryEditDialog : Window
     private readonly IInventoryService _service;
     private readonly Category _category;
     private readonly TextBox _name = new();
-    private readonly TextBox _description = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 90 };
+    private readonly TextBox _description = new()
+    {
+        AcceptsReturn = true,
+        TextWrapping = TextWrapping.Wrap,
+        Height = 90,
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+    };
     private readonly TextBox _color = new();
+    private readonly Border _colorPreview = new()
+    {
+        Height = 34,
+        CornerRadius = new CornerRadius(6),
+        BorderThickness = new Thickness(1)
+    };
 
     public CategoryEditDialog(IInventoryService service, Category? existing)
     {
@@ -779,24 +827,64 @@ public sealed class CategoryEditDialog : Window
         };
         Title = existing == null ? DialogLayout.Text("Prod_NewCategory", "New Category") : DialogLayout.Text("Prod_EditCategory", "Edit Category");
         Width = 480;
-        Height = 400;
+        Height = 440;
+        MinWidth = 400;
+        MinHeight = 320;
+        ResizeMode = ResizeMode.CanResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
         _name.Text = _category.Name;
         _description.Text = _category.Description ?? string.Empty;
         _color.Text = _category.Color;
+        _color.TextChanged += (_, _) => UpdateColorPreview();
+        _colorPreview.BorderBrush = (Brush)Application.Current.FindResource("BorderBrush");
 
         var panel = new StackPanel { Margin = new Thickness(24) };
         panel.Children.Add(ProductEditDialog.MakeRowForExternal(DialogLayout.Text("Prod_Name", "Name"), _name));
         panel.Children.Add(ProductEditDialog.MakeRowForExternal(DialogLayout.Text("Prod_CategoryDescription", "Description"), _description));
         panel.Children.Add(ProductEditDialog.MakeRowForExternal(DialogLayout.Text("Prod_CategoryColor", "Color (#RRGGBB)"), _color));
+        panel.Children.Add(ProductEditDialog.MakeRowForExternal(DialogLayout.Text("Prod_CategoryColorPreview", "Color preview"), _colorPreview));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
         var cancel = new Button { Content = DialogLayout.Text("Common_Cancel", "Cancel"), Style = (Style)Application.Current.FindResource("OutlineButton"), Padding = new Thickness(18, 9, 18, 9), Margin = new Thickness(0, 0, 8, 0) };
         cancel.Click += (_, _) => { DialogResult = false; Close(); };
         var save = new Button { Content = DialogLayout.Text("Common_Save", "Save"), Style = (Style)Application.Current.FindResource("PrimaryButton"), Padding = new Thickness(18, 9, 18, 9) };
         save.Click += Save_Click;
         buttons.Children.Add(cancel); buttons.Children.Add(save); panel.Children.Add(buttons);
-        Content = panel;
+        Content = new ScrollViewer
+        {
+            Content = panel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            PanningMode = PanningMode.VerticalFirst
+        };
+        Loaded += (_, _) =>
+        {
+            MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - 40);
+            UpdateColorPreview();
+        };
+    }
+
+    private void UpdateColorPreview()
+    {
+        try
+        {
+            var converted = ColorConverter.ConvertFromString(_color.Text.Trim());
+            if (converted is Color color)
+            {
+                var brush = new SolidColorBrush(color);
+                brush.Freeze();
+                _colorPreview.Background = brush;
+                _colorPreview.BorderBrush = (Brush)Application.Current.FindResource("BorderBrush");
+                return;
+            }
+        }
+        catch (FormatException)
+        {
+            // Keep the editor usable while the user is still typing.
+        }
+
+        _colorPreview.Background = (Brush)Application.Current.FindResource("CardBrush");
+        _colorPreview.BorderBrush = Application.Current.TryFindResource("DangerBrush") as Brush ?? Brushes.IndianRed;
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)

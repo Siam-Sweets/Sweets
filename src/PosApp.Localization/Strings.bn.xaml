@@ -211,6 +211,7 @@
     <sys:String x:Key="Prod_CategoriesHelp">পণ্যের বিভাগ তৈরি, সম্পাদনা বা মুছুন।</sys:String>
     <sys:String x:Key="Prod_CategoryDescription">বিবরণ</sys:String>
     <sys:String x:Key="Prod_CategoryColor">রঙ (#RRGGBB)</sys:String>
+    <sys:String x:Key="Prod_CategoryColorPreview">রঙের প্রিভিউ</sys:String>
     <sys:String x:Key="Prod_DeleteCategoryConfirm">'{0}' বিভাগটি মুছবেন?</sys:String>
     <sys:String x:Key="Prod_Edit">সম্পাদনা</sys:String>
     <sys:String x:Key="Prod_Delete">মুছুন</sys:String>

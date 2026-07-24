@@ -66,6 +66,7 @@ public partial class App : Application
                 if (sender is Window window) RuntimeUiText.LocalizeWindow(window);
             }));
 
+        WindowThemeHelper.Initialize();
         EnterKeyNavigation.Register();
     }
 
@@ -477,6 +478,9 @@ public partial class App : Application
         SetThemeBrush("DrawerMutedBrush", dark ? "#94A3B8" : "#64748B");
         SetThemeBrush("DrawerBorderBrush", dark ? "#475569" : "#CBD5E1");
         SetThemeBrush("DrawerHoverBrush", dark ? "#334155" : "#F1F5F9");
+
+        foreach (Window window in Current.Windows)
+            WindowThemeHelper.ApplyTheme(window);
     }
 
     public static void ApplyLanguage(string? language)

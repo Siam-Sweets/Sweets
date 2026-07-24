@@ -1,22 +1,18 @@
-# PosApp v1.10.2 Validation Notes
+# PosApp v1.10.6 Validation Notes
 
 ## Completed in this environment
 
-- Ran `node --check cloud/worker/src/index.js` successfully.
-- Ran the complete Cloud Worker atomic-sync smoke suite successfully.
-- Added and passed a signup assertion confirming `password_iterations = 100000`.
-- Confirmed the Worker rejects invalid or above-limit password iteration values before calling Web Crypto.
-- Confirmed local desktop user PIN hashing remains unchanged at 120,000 iterations.
-- Parsed 35 XML, XAML, project, and RESX files successfully.
-- Parsed GitHub Actions YAML, strict JSON, and Wrangler JSONC successfully.
-- Verified English/Bengali localization parity across 605 resource keys.
-- Verified application, assembly, file, informational, installer, Worker package, documentation, and workflow example versions are 1.10.2.
-- Confirmed v1.10.2 requires no SQLite or Turso schema migration.
-- Confirmed cloud payload image exclusion was not changed.
+- Replaced the fixed Store Details content region with a vertically scrollable form.
+- Made the Store Details window resizable and added minimum dimensions for small/high-DPI displays.
+- Kept Save and Cancel outside the scrolling region so they remain visible.
+- Added vertical scrolling to the multiline Address field.
+- Retained the v1.10.5 global dark-window and dark-title-bar fixes.
+- Updated project, installer, Worker, workflow, README, changelog, fix note, and handoff version markers to 1.10.6.
+- Parsed all WPF XAML/XML files successfully.
+- Ran the cloud Worker syntax and smoke test suite successfully.
+- Confirmed no SQLite or Turso schema migration is required.
+- Confirmed cloud image exclusion was not changed.
 
 ## Not available in this environment
 
-- The .NET SDK, MSBuild, and Windows WPF runtime are unavailable, so `dotnet restore`, Windows compilation, installer creation, and live UI execution were not claimed.
-- Live Cloudflare/Turso deployment and real account creation require the owner's deployed services.
-
-Redeploy the Worker, verify `/v1/health` reports `1.10.2`, and then retry owner-account creation.
+- The Windows WPF runtime is unavailable, so live mouse-wheel/touchpad scrolling and the compiled installer still require GitHub Actions and a Windows test run.
