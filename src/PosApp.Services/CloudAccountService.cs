@@ -147,7 +147,11 @@ public sealed class CloudAccountService : ICloudAccountService
     {
         var credential = await RequireCredentialAsync(cancellationToken);
         var backupSetId = Guid.NewGuid().ToString("N");
-        var capturedAt = DateTimeOffset.UtcNow;
+        // JavaScript/Cloudflare serializes dates at millisecond precision.
+        // Normalize before embedding the same timestamp in both the upload
+        // envelope and payload so future restores compare one canonical value.
+        var capturedAt = DateTimeOffset.FromUnixTimeMilliseconds(
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         List<(Store Store, StoreSnapshot Snapshot, long Cursor)> snapshots;
 
         // Capture every store under one SQLite read transaction so the backup set
@@ -454,7 +458,7 @@ public sealed class CloudAccountService : ICloudAccountService
     }
 
     private static string CurrentVersion()
-        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.10.10";
+        => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "1.10.11";
 
     private sealed class StoreSnapshot
     {

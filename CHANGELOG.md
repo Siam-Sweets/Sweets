@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.11 — Cloud snapshot capture-time compatibility fix
+
+- Fixed existing-account setup sign-in failing with `Cloud snapshot capture metadata does not match its backup set`.
+- Normalized snapshot capture timestamps to millisecond precision before embedding them in the upload envelope and payload.
+- Made desktop restore accept valid existing snapshots where the Worker stored a millisecond timestamp while the hashed payload retained additional .NET fractional-second digits.
+- Kept payload hash, row-count, backup-set, store-ID, schema, and application-version integrity checks unchanged.
+- Added Worker-side validation that rejects genuinely mismatched envelope and payload capture times.
+- Added a Worker regression test for timestamp normalization and mismatch rejection.
+- No SQLite or Turso schema migration is required.
+
 ## 1.10.10 — Setup sign-in build-reference fix
 
 - Fixed the Release build failure in `StoreService` caused by a stale reference to `SetupService.SetupCompleteKey`.

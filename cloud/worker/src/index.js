@@ -58,7 +58,7 @@ async function route(request, env) {
 
   if (request.method === "GET" && path === "/v1/health") {
     await query(env, "SELECT 1 AS ok");
-    return json({ ok: true, service: "posapp-cloud", version: "1.10.10" });
+    return json({ ok: true, service: "posapp-cloud", version: "1.10.11" });
   }
   if (request.method === "POST" && path === "/v1/auth/signup") return signup(request, env);
   if (request.method === "POST" && path === "/v1/auth/login") return login(request, env);
@@ -325,6 +325,10 @@ async function uploadSnapshot(request, claims, env) {
   const syncCursor = integerInRange(body.syncCursor ?? 0, "Sync cursor", 0, Number.MAX_SAFE_INTEGER);
   if (schemaVersion !== 5 || Number(body.payload.schemaVersion) !== schemaVersion) {
     throw new HttpError(400, "Snapshot schema version is not supported or does not match the payload.");
+  }
+  const payloadCapturedAt = requiredIsoDate(body.payload.exportedAtUtc, "Snapshot exported at");
+  if (payloadCapturedAt !== capturedAt) {
+    throw new HttpError(400, "Snapshot capture metadata does not match the backup set.");
   }
   if (countSnapshotRows(body.payload) !== rowCount) throw new HttpError(400, "Snapshot row count is incorrect.");
   const digest = await sha256Base64Url(payloadJson);

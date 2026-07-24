@@ -1167,7 +1167,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
             throw new InvalidOperationException("Cloud backup set contains no store snapshots.");
         if (set.Snapshots.Any(x => !string.Equals(x.BackupSetId, set.BackupSetId, StringComparison.Ordinal)))
             throw new InvalidOperationException("Cloud restore contains snapshots from different backup sets.");
-        if (set.Snapshots.Any(x => x.CapturedAt.ToUniversalTime() != set.CapturedAt.ToUniversalTime()))
+        if (set.Snapshots.Any(x => !SnapshotCaptureInstantsMatch(x.CapturedAt, set.CapturedAt)))
             throw new InvalidOperationException("Cloud restore contains snapshots captured at different times.");
         if (set.Snapshots.Select(x => x.SnapshotId).Any(string.IsNullOrWhiteSpace) ||
             set.Snapshots.Select(x => x.SnapshotId).Distinct(StringComparer.Ordinal).Count() != set.Snapshots.Count)
@@ -1195,7 +1195,8 @@ public sealed partial class CloudSyncService : ICloudSyncService
             if (payloadSchema != snapshot.SchemaVersion)
                 throw new InvalidOperationException("Cloud snapshot schema metadata does not match its payload.");
             var exportedAt = GetDateTimeOffset(snapshot.Payload, "exportedAtUtc");
-            if (exportedAt == null || exportedAt.Value.ToUniversalTime() != set.CapturedAt.ToUniversalTime())
+            if (exportedAt == null ||
+                !SnapshotCaptureInstantsMatch(exportedAt.Value, set.CapturedAt))
                 throw new InvalidOperationException("Cloud snapshot capture metadata does not match its backup set.");
             var store = RequireProperty(snapshot.Payload, "store");
             var storeSyncId = GetString(store, nameof(Store.SyncId));
@@ -1211,6 +1212,17 @@ public sealed partial class CloudSyncService : ICloudSyncService
                     Encoding.ASCII.GetBytes(digest), Encoding.ASCII.GetBytes(snapshot.Sha256)))
                 throw new InvalidOperationException("Cloud snapshot integrity validation failed.");
         }
+    }
+
+    private static bool SnapshotCaptureInstantsMatch(
+        DateTimeOffset left,
+        DateTimeOffset right)
+    {
+        // Cloudflare's JavaScript runtime persists ISO timestamps to
+        // millisecond precision, while .NET can emit seven fractional digits.
+        // Comparing the millisecond instant accepts snapshots already stored
+        // by older clients without weakening payload hash or row validation.
+        return left.ToUnixTimeMilliseconds() == right.ToUnixTimeMilliseconds();
     }
 
     private static long CountSnapshotRows(JsonElement payload)

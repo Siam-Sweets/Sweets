@@ -1,7 +1,12 @@
-# PosApp v1.10.10 Validation Notes
+# PosApp v1.10.11 Validation Notes
 
 ## Completed in this environment
 
+- Fixed existing-account restore failing with `Cloud snapshot capture metadata does not match its backup set`.
+- Normalized new snapshot capture timestamps to the millisecond precision shared by .NET and Cloudflare.
+- Made restore compatible with already-uploaded snapshots whose payload retains additional .NET fractional-second digits.
+- Added Worker-side rejection for genuinely mismatched envelope/payload capture timestamps.
+- Added a Worker regression test covering valid precision normalization and invalid capture-time mismatch.
 - Fixed the `CS0117` Release build error by replacing the stale `SetupService.SetupCompleteKey` reference in `StoreService` with `SettingSyncPolicy.SetupCompleteKey`.
 - Confirmed no source references to `SetupService.SetupCompleteKey` remain.
 - Added theme-aware **Sign in** and **Create organization** tabs to first-run setup.
@@ -16,7 +21,7 @@
 - Parsed all project XAML/XML files successfully.
 - Confirmed English and Bengali localization keys are unique and remain in parity.
 - Ran the Cloud Worker JavaScript syntax check and smoke suite successfully.
-- Updated application, installer, Worker, workflow, README, changelog, fix note, deployment guide, and handoff markers to 1.10.10.
+- Updated application, installer, Worker, workflow, README, changelog, fix note, deployment guide, and handoff markers to 1.10.11.
 - Confirmed no SQLite or Turso schema migration is required.
 
 ## Not available in this environment
