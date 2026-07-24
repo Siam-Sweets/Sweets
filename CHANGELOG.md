@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.10 — Setup sign-in build-reference fix
+
+- Fixed the Release build failure in `StoreService` caused by a stale reference to `SetupService.SetupCompleteKey`.
+- Updated new-store initialization to use the centralized device-local `SettingSyncPolicy.SetupCompleteKey`.
+- Kept the v1.10.9 setup-page email/password sign-in, complete cloud restore, organization creation, and synchronization behavior unchanged.
+- Bumped application, installer, Worker, workflow, and current documentation versions to 1.10.10.
+- No SQLite or Turso schema migration is required.
+
 ## 1.10.9 — Online first-run sign-in and organization setup
 
 - Replaced the obsolete local-only first-run path with two explicit online choices: **Sign in** and **Create organization**.

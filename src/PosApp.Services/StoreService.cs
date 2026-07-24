@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PosApp.Core.Entities;
 using PosApp.Core.Interfaces;
 using PosApp.Core.Models;
+using PosApp.Core.Utilities;
 using PosApp.Data;
 
 namespace PosApp.Services;
@@ -205,7 +206,7 @@ public sealed class StoreService : IStoreService
         };
         _db.Settings.AddRange(
             new Setting { StoreId = store.Id, Key = "store:config", Value = JsonSerializer.Serialize(settings) },
-            new Setting { StoreId = store.Id, Key = SetupService.SetupCompleteKey, Value = "true" });
+            new Setting { StoreId = store.Id, Key = SettingSyncPolicy.SetupCompleteKey, Value = "true" });
         await _db.SaveChangesAsync();
     }
 

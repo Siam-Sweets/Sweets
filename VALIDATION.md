@@ -1,7 +1,9 @@
-# PosApp v1.10.9 Validation Notes
+# PosApp v1.10.10 Validation Notes
 
 ## Completed in this environment
 
+- Fixed the `CS0117` Release build error by replacing the stale `SetupService.SetupCompleteKey` reference in `StoreService` with `SettingSyncPolicy.SetupCompleteKey`.
+- Confirmed no source references to `SetupService.SetupCompleteKey` remain.
 - Added theme-aware **Sign in** and **Create organization** tabs to first-run setup.
 - Added existing-owner email/password authentication followed by complete cloud snapshot restore.
 - Added two-phase new-organization setup: local preparation, cloud owner creation, full snapshot upload, then device-local completion.
@@ -14,7 +16,7 @@
 - Parsed all project XAML/XML files successfully.
 - Confirmed English and Bengali localization keys are unique and remain in parity.
 - Ran the Cloud Worker JavaScript syntax check and smoke suite successfully.
-- Updated application, installer, Worker, workflow, README, changelog, fix note, deployment guide, and handoff markers to 1.10.9.
+- Updated application, installer, Worker, workflow, README, changelog, fix note, deployment guide, and handoff markers to 1.10.10.
 - Confirmed no SQLite or Turso schema migration is required.
 
 ## Not available in this environment
