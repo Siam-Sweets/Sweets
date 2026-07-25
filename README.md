@@ -1,10 +1,10 @@
 # PosApp - Offline-First Point of Sale (WPF / .NET 8)
 
-A feature-rich, **offline-first** Point of Sale desktop application for Windows, built with C# and WPF on .NET 8. Version 1.10.13 fixes Cloudflare Worker HTTP 500 failures during multi-record sync pushes by batching Turso operations below the Free-plan external-subrequest limit. It retains the login scrolling and idempotent store-default fixes from v1.10.12.
+A feature-rich, **offline-first** Point of Sale desktop application for Windows, built with C# and WPF on .NET 8. Version 1.10.14 fixes stale sync conflicts remaining after the corresponding local/cloud revision has already synchronized. It retains the Cloudflare push batching, login scrolling, and idempotent store-default fixes from earlier releases.
 
 ## Offline-First Cloud Boundary
 
-Version 1.10.13 keeps local SQLite authoritative for checkout and retains all-store owner reporting, per-store inventory visibility, and the draft → dispatch → receive/cancel stock-transfer workflow. Transfer movements are append-only ledger records and participate in the existing conflict-safe cloud synchronization model.
+Version 1.10.14 keeps local SQLite authoritative for checkout and retains all-store owner reporting, per-store inventory visibility, and the draft → dispatch → receive/cancel stock-transfer workflow. Transfer movements are append-only ledger records and participate in the existing conflict-safe cloud synchronization model.
 
 A fresh Windows device can restore the latest full snapshots after creating an automatic local backup. Access and refresh tokens are protected with Windows DPAPI; Turso credentials and JWT secrets stay only in Worker secrets. Product and user image paths remain excluded, and no image files are uploaded.
 
@@ -13,6 +13,8 @@ First run is online-only. The setup window offers **Sign in** for an existing or
 Snapshot capture timestamps are canonicalized to milliseconds before upload. Restore compares the same millisecond instant, allowing valid snapshots created by earlier .NET clients to remain usable after the Worker stored their timestamp at JavaScript precision. Payload hashes, row counts, backup-set IDs, store IDs, and schema compatibility remain strictly validated.
 
 Incremental push operations retain one atomic Turso transaction while grouping record lookups and writes into bounded SQL-over-HTTP pipelines. A large operation no longer spends one external Worker subrequest for every individual SQL statement, and cursor/idempotency records are still committed together or rolled back together.
+
+Conflict reconciliation never silently chooses between different local and cloud edits. PosApp closes a conflict automatically only when there is no pending local edit and the local record proves it has already reached the reported cloud revision. Real divergences remain visible in Sync Center.
 
 This is an original POS implementation inspired by the publicly known feature set of POS systems in general (sales, inventory, customers, receipts, hardware integration, reports, etc.). The codebase, UI, and architecture are written from scratch.
 
@@ -47,19 +49,19 @@ This is an original POS implementation inspired by the publicly known feature se
 4. Cancelling a dispatched transfer restores source stock with compensating ledger entries. Received transfers cannot be cancelled.
 5. If the destination lacks the product, PosApp creates matching catalog/category records without copying any image path or image file.
 
-Version 1.10.13 retains the Stock Transfers Dark-mode fix. Both tabs use theme-aware headers and content surfaces instead of Windows default white tab chrome. The inventory store selector renders the store name rather than the `StoreFilterOption` object representation, while transfer and cross-store inventory data remain unchanged.
+Version 1.10.14 retains the Stock Transfers Dark-mode fix. Both tabs use theme-aware headers and content surfaces instead of Windows default white tab chrome. The inventory store selector renders the store name rather than the `StoreFilterOption` object representation, while transfer and cross-store inventory data remain unchanged.
 
-Version 1.10.13 also retains the Cloudflare owner-signup fix by using the Workers-compatible PBKDF2 limit of 100,000 iterations for cloud passwords. Local desktop user PIN hashing remains at 120,000 iterations. It retains the comprehensive integrity and synchronization hardening release. It makes business operations idempotent and atomic, protects stock and promotion counters with optimistic concurrency, enforces an append-only stock ledger, validates coherent multi-store backup sets before restore, quarantines invalid remote rows, hardens device authentication/logout, and closes store-authorization and historical-reporting gaps. Product/user image paths and image files remain excluded from cloud payloads.
+Version 1.10.14 also retains the Cloudflare owner-signup fix by using the Workers-compatible PBKDF2 limit of 100,000 iterations for cloud passwords. Local desktop user PIN hashing remains at 120,000 iterations. It retains the comprehensive integrity and synchronization hardening release. It makes business operations idempotent and atomic, protects stock and promotion counters with optimistic concurrency, enforces an append-only stock ledger, validates coherent multi-store backup sets before restore, quarantines invalid remote rows, hardens device authentication/logout, and closes store-authorization and historical-reporting gaps. Product/user image paths and image files remain excluded from cloud payloads.
 
-Version 1.10.13 retains category usability on smaller/high-DPI displays. Category Management and the category editor scroll correctly, the editor includes a live color preview, and saved category colors appear in management, POS category filters, and product-card accents.
+Version 1.10.14 retains category usability on smaller/high-DPI displays. Category Management and the category editor scroll correctly, the editor includes a live color preview, and saved category colors appear in management, POS category filters, and product-card accents.
 
-Version 1.10.13 retains the dark-mode surface cleanup. Programmatically created dialogs, management popups, and Windows caption bars follow the active theme so purchases, supplier entry, register dialogs, and similar windows no longer show bright white areas while Dark mode is enabled.
+Version 1.10.14 retains the dark-mode surface cleanup. Programmatically created dialogs, management popups, and Windows caption bars follow the active theme so purchases, supplier entry, register dialogs, and similar windows no longer show bright white areas while Dark mode is enabled.
 
-Version 1.10.13 keeps the Store Details editor resizable and vertically scrollable, keeping Code, Store Name, Address, Phone, and the action buttons reachable on smaller or display-scaled screens.
+Version 1.10.14 keeps the Store Details editor resizable and vertically scrollable, keeping Code, Store Name, Address, Phone, and the action buttons reachable on smaller or display-scaled screens.
 
-Version 1.10.13 keeps the **Require an open register before selling** option authoritative for cash and non-cash checkout. Stock-tracked checkout and item refunds insert immutable ledger rows only after final sale/item IDs exist, eliminating the append-only validation failure while retaining all-or-nothing database transactions.
+Version 1.10.14 keeps the **Require an open register before selling** option authoritative for cash and non-cash checkout. Stock-tracked checkout and item refunds insert immutable ledger rows only after final sale/item IDs exist, eliminating the append-only validation failure while retaining all-or-nothing database transactions.
 
-Version 1.10.13 retains the hardened second checkout phase by resolving persisted sale and sale-item rows through permanent sync identifiers before inserting stock-ledger records. This prevents SQLite from receiving stale or temporary numeric references and keeps the reference-integrity triggers enabled. Trigger errors identify the exact invalid product, sale, sale-item, transfer, transfer-item, or user reference.
+Version 1.10.14 retains the hardened second checkout phase by resolving persisted sale and sale-item rows through permanent sync identifiers before inserting stock-ledger records. This prevents SQLite from receiving stale or temporary numeric references and keeps the reference-integrity triggers enabled. Trigger errors identify the exact invalid product, sale, sale-item, transfer, transfer-item, or user reference.
 
 ## Tech Stack
 
@@ -146,7 +148,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then run:
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1
 ```
 
-The output is `artifacts\installer\PosApp-1.10.13-Setup.exe`. The branded wizard provides:
+The output is `artifacts\installer\PosApp-1.10.14-Setup.exe`. The branded wizard provides:
 
 1. License review and acceptance.
 2. Installation-folder selection (default: `Program Files\PosApp`).
@@ -172,21 +174,23 @@ This protection also runs before database migration when a newer installer is la
 
 The workflow at `.github/workflows/build.yml` triggers on:
 
-Development installers now retain the real application version in their filename and Windows metadata, for example `PosApp-1.10.13-dev.27-Setup.exe` with resource version `1.10.13.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+Development installers now retain the real application version in their filename and Windows metadata, for example `PosApp-1.10.14-dev.27-Setup.exe` with resource version `1.10.14.27`. This allows an installed older release to recognize the rolling development installer as a genuine upgrade. Legacy `PosApp-0.0.0-dev.*-Setup.exe` packages should not be used for in-app updates.
+
+Every Windows build also runs `tests/PosApp.SyncRegression`, which exercises stale-conflict closure, genuine-conflict retention, own-device rebasing, and applied-delete safeguards against a temporary SQLite database.
 
 1. **Push to `main`** — builds and uploads the installer, portable exe, and zip as CI artifacts (retained 90 days).
-2. **Tag push `v*`** (e.g. `v1.10.13`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
+2. **Tag push `v*`** (e.g. `v1.10.14`) — publishes a GitHub Release with `PosApp-<ver>-Setup.exe`, `PosApp-<ver>.exe`, and `PosApp-<ver>.zip` attached.
 3. **Manual dispatch** from the Actions tab — optional `version` input; if provided, also creates a release.
 4. **Pull request to `main`** — verify-only build (no artifact release).
 
 ### To release a new version
 
 ```bash
-git tag v1.10.13
-git push origin v1.10.13
+git tag v1.10.14
+git push origin v1.10.14
 ```
 
-The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.10.13`.
+The workflow will build the guided installer, portable exe, and zip, then create a public Release at `https://github.com/<you>/<repo>/releases/tag/v1.10.14`.
 
 For in-app updates, configure these GitHub Actions repository secrets:
 
@@ -223,7 +227,7 @@ The cloud component is self-hosted and is required for first-run onboarding. Aft
 5. Add the deployed HTTPS Worker URL as the GitHub Actions repository variable `POSAPP_CLOUD_API_URL`, then run **Build PosApp**. The URL is embedded in the app build.
 6. On first launch, choose **Sign in** or **Create organization**. Existing accounts restore their complete snapshots automatically; newly created organizations upload their complete initial snapshot automatically. PosApp subsequently synchronizes changes in the background; **Sync Now** forces an immediate cycle.
 
-The registration key is required only when creating the owner account. Keep it private. A full snapshot is limited to 15 MB per store, and the service retains the latest three versions. Existing v1.6.0 deployments must first apply `cloud/worker/migrations/v1.7.0.sql`. v1.10.13 has no new cloud schema migration. Deploy the Worker directly; installations upgrading from before v1.10.0 still need `cloud/worker/migrations/v1.10.0.sql` only when automatic schema initialization is disabled. See `cloud/worker/README.md` for scope.
+The registration key is required only when creating the owner account. Keep it private. A full snapshot is limited to 15 MB per store, and the service retains the latest three versions. Existing v1.6.0 deployments must first apply `cloud/worker/migrations/v1.7.0.sql`. v1.10.14 has no new cloud schema migration. Deploy the Worker directly; installations upgrading from before v1.10.0 still need `cloud/worker/migrations/v1.10.0.sql` only when automatic schema initialization is disabled. See `cloud/worker/README.md` for scope.
 
 ## Hardware Wiring Notes
 
@@ -259,31 +263,33 @@ This project is provided as-is for your personal/commercial use. The architectur
 
 **Build fails on `dotnet restore`** — make sure you have the .NET 8 SDK installed: `dotnet --version` should report `8.x.x`.
 
-**Build or release reports `Invalid ... version: V...`** — use the v1.10.13 workflow. Manual versions may be entered as `1.10.13`, `v1.10.13`, or `V1.10.13`; both Windows and Linux jobs remove one leading `v`/`V` before validation.
+**Build or release reports `Invalid ... version: V...`** — use the v1.10.14 workflow. Manual versions may be entered as `1.10.14`, `v1.10.14`, or `V1.10.14`; both Windows and Linux jobs remove one leading `v`/`V` before validation.
 
-**Cloud deployment fails** — use the v1.10.13 workflow. It runs Node.js 24 directly and does not use `cloudflare/wrangler-action` secret uploading. Ensure `CLOUDFLARE_ACCOUNT_ID` belongs to the same account selected by a token created from the **Edit Cloudflare Workers** template. Do not enable the insecure Node 20 compatibility variable.
+**Cloud deployment fails** — use the v1.10.14 workflow. It runs Node.js 24 directly and does not use `cloudflare/wrangler-action` secret uploading. Ensure `CLOUDFLARE_ACCOUNT_ID` belongs to the same account selected by a token created from the **Edit Cloudflare Workers** template. Do not enable the insecure Node 20 compatibility variable.
 
-**`POST /v1/sync/push` returns HTTP 500 and the Worker stack ends at `SELECT last_insert_rowid()` / `pipelineRaw`** — deploy the v1.10.13 Worker, confirm `/v1/health` reports `1.10.13`, then retry **Sync Now**. Push lookups and writes are pipeline-batched below the Cloudflare Free-plan external-subrequest limit. Keep the existing local and Turso databases; no reset or schema migration is required.
+**`POST /v1/sync/push` returns HTTP 500 and the Worker stack ends at `SELECT last_insert_rowid()` / `pipelineRaw`** — deploy the v1.10.14 Worker, confirm `/v1/health` reports `1.10.14`, then retry **Sync Now**. Push lookups and writes are pipeline-batched below the Cloudflare Free-plan external-subrequest limit. Keep the existing local and Turso databases; no reset or schema migration is required.
 
-**Setup sign-in reports `Cloud snapshot capture metadata does not match its backup set`** — install v1.10.13 or later and retry sign-in. Existing valid snapshots do not need to be deleted or uploaded again. Deploy the matching Worker to validate future snapshot metadata during upload.
+**Cloud status shows `Pending: 0` but still reports conflicts** — install v1.10.14 and refresh Cloud settings or press **Sync Now** once. PosApp closes stale records whose matching cloud revision is already present locally. Any conflict that remains has a pending or genuinely different revision and stays available in Sync Center for an explicit local/cloud decision. Do not delete either database.
 
-**The login form is clipped or does not scroll** — install v1.10.13 or later. The form card has its own mouse-wheel, touchpad, touch, and scrollbar viewport, and the window fits itself to the Windows work area.
+**Setup sign-in reports `Cloud snapshot capture metadata does not match its backup set`** — install v1.10.14 or later and retry sign-in. Existing valid snapshots do not need to be deleted or uploaded again. Deploy the matching Worker to validate future snapshot metadata during upload.
 
-**Creating a store reports `UNIQUE constraint failed: Categories.StoreId, Categories.Name`** — install v1.10.13 or later and retry. Store defaults are seeded idempotently using unfiltered target-store checks; existing categories and other defaults are reused instead of inserted again.
+**The login form is clipped or does not scroll** — install v1.10.14 or later. The form card has its own mouse-wheel, touchpad, touch, and scrollbar viewport, and the window fits itself to the Windows work area.
 
-**Category editor does not scroll or its color is not visible** — install v1.10.13 or later. Category windows expose scrollbars and saved `#RRGGBB` colors are rendered as live previews and POS accents.
+**Creating a store reports `UNIQUE constraint failed: Categories.StoreId, Categories.Name`** — install v1.10.14 or later and retry. Store defaults are seeded idempotently using unfiltered target-store checks; existing categories and other defaults are reused instead of inserted again.
 
-**Checkout says an open register is required while the setting is disabled, or reports `Stock ledger rows are append-only and cannot be edited`** — install v1.10.13 or later. The checkout service respects the stored register option and inserts sale/refund ledger rows once with final links. Keep the existing database; no reset or migration is required.
+**Category editor does not scroll or its color is not visible** — install v1.10.14 or later. Category windows expose scrollbars and saved `#RRGGBB` colors are rendered as live previews and POS accents.
 
-**Checkout fails with `SQLite Error 19: Stock transaction contains an invalid reference`** — install v1.10.13 or later. Checkout and item refunds re-read the persisted sale/item identifiers before writing the append-only stock ledger. The existing database is repaired at startup by recreating the reference guards; no reset or migration is required.
+**Checkout says an open register is required while the setting is disabled, or reports `Stock ledger rows are append-only and cannot be edited`** — install v1.10.14 or later. The checkout service respects the stored register option and inserts sale/refund ledger rows once with final links. Keep the existing database; no reset or migration is required.
 
-**Create Account returns `Internal server error` with `Pbkdf2 ... above 100000` in Worker logs** — deploy v1.10.13 or later. Cloud account passwords use 100,000 PBKDF2 iterations; local user PIN hashing remains unchanged.
+**Checkout fails with `SQLite Error 19: Stock transaction contains an invalid reference`** — install v1.10.14 or later. Checkout and item refunds re-read the persisted sale/item identifiers before writing the append-only stock ledger. The existing database is repaired at startup by recreating the reference guards; no reset or migration is required.
 
-**Dark mode still shows white dialog/title-bar areas** — install v1.10.13 or later. Window surfaces, programmatically created dialogs, and Windows 10/11 caption bars are re-themed when Dark mode is active.
+**Create Account returns `Internal server error` with `Pbkdf2 ... above 100000` in Worker logs** — deploy v1.10.14 or later. Cloud account passwords use 100,000 PBKDF2 iterations; local user PIN hashing remains unchanged.
 
-**Store Details fields are clipped and the form does not scroll** — install v1.10.13 or later. The editor is resizable, the form body scrolls vertically, and Save/Cancel remain fixed.
+**Dark mode still shows white dialog/title-bar areas** — install v1.10.14 or later. Window surfaces, programmatically created dialogs, and Windows 10/11 caption bars are re-themed when Dark mode is active.
 
-**Startup reports `No active store is available`** — install v1.10.13 or later. The app retains the v1.9.8 startup repair that creates the first `MAIN` store automatically and reactivates a valid store when necessary.
+**Store Details fields are clipped and the form does not scroll** — install v1.10.14 or later. The editor is resizable, the form body scrolls vertically, and Save/Cancel remain fixed.
+
+**Startup reports `No active store is available`** — install v1.10.14 or later. The app retains the v1.9.8 startup repair that creates the first `MAIN` store automatically and reactivates a valid store when necessary.
 
 **Database upgrade errors** — do not delete the database. Review `%LOCALAPPDATA%\PosApp\posapp.log`; update recovery copies are under `%LOCALAPPDATA%\PosApp\Backups\Updates`. Reinstall the previous PosApp version if necessary, then use **Settings → Database → Restore** with the newest `posapp-before-update-*.db` or `posapp-before-startup-*.db` file.
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.14 — Stale sync-conflict reconciliation
+
+- Fixed synchronization showing unresolved conflicts after this device's matching cloud revision had already been accepted or pulled.
+- Closed prior conflict records immediately when a push is accepted, this device pulls its own revision, or a quarantined cloud revision is later applied successfully.
+- Rebased and unblocked a later local edit when an own-device pull proves its earlier cloud base was accepted.
+- Added safe upgrade-time reconciliation for the existing `Pending: 0, Conflicts: N` state.
+- Reconciliation requires proof that no local edit remains queued and the local record has reached the conflict's cloud revision; genuinely divergent changes remain in Sync Center for review.
+- Preserved resolved conflict history until the existing **Clear Resolved** action is used.
+- Added an executable SQLite regression covering synchronized, lower-revision, pending, applied-delete, prohibited ledger-delete, and unsupported-entity conflict cases.
+- No SQLite or Turso schema migration is required, and neither database should be reset.
+
 ## 1.10.13 — Cloud sync push subrequest fix
 
 - Fixed `POST /v1/sync/push` returning HTTP 500 when a normal multi-record operation exhausted the Cloudflare Workers Free-plan external-subrequest allowance.

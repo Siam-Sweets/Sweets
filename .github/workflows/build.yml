@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (e.g. 1.10.13, v1.10.13, or V1.10.13) - leave empty for dev build'
+        description: 'Version (e.g. 1.10.14, v1.10.14, or V1.10.14) - leave empty for dev build'
         required: false
         default: ''
 
@@ -68,6 +68,9 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Restore sync regression
+        run: dotnet restore tests/PosApp.SyncRegression/PosApp.SyncRegression.csproj
 
       - name: Determine version
         id: ver
@@ -131,6 +134,13 @@ jobs:
           -p:FileVersion=${{ steps.ver.outputs.numeric_version }}
           -p:InformationalVersion=${{ steps.ver.outputs.version }}
           -p:PosAppCloudApiUrl="$env:POSAPP_CLOUD_API_URL_NORMALIZED"
+
+      - name: Test synchronized conflict reconciliation
+        run: >-
+          dotnet run
+          --project tests/PosApp.SyncRegression/PosApp.SyncRegression.csproj
+          --configuration Release
+          --no-restore
 
       - name: Publish single-file self-contained exe
         run: |

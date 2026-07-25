@@ -130,6 +130,10 @@ public sealed partial class CloudSyncService : ICloudSyncService
     public async Task<CloudSyncStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
         var credential = await _credentials.LoadAsync(cancellationToken);
+        // Older clients could pull a revision produced by this device and remove
+        // its final outbox row without closing the conflict created by the retry.
+        // Local cloud revisions let us repair those stale diagnostics safely.
+        await ResolveSynchronizedConflictsAsync(cancellationToken);
         var pending = await _db.SyncOutbox.CountAsync(cancellationToken);
         var conflicts = await _db.SyncConflicts.CountAsync(x => x.ResolvedAt == null, cancellationToken);
         var lastSuccess = await _db.SyncStates
@@ -166,6 +170,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
         {
             var credential = await RequireCredentialAsync(cancellationToken);
             syncRun = await StartSyncRunAsync(credential.DeviceId, cancellationToken);
+            await ResolveSynchronizedConflictsAsync(cancellationToken);
             var cloudStores = await GetCloudStoresAsync(credential, cancellationToken);
             if (credential.InitialSnapshotUploadedAt == null)
             {
@@ -227,6 +232,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
             if (needsSnapshotBaseline)
                 await _account.UploadInitialSnapshotsAsync(cancellationToken);
 
+            await ResolveSynchronizedConflictsAsync(cancellationToken);
             var conflictCount = await _db.SyncConflicts.CountAsync(x => x.ResolvedAt == null, cancellationToken);
             var pendingAfter = await _db.SyncOutbox.CountAsync(cancellationToken);
             await CompleteSyncRunAsync(syncRun, storeCount, pushed, pulled, conflictCount, pendingAfter, cancellationToken);
@@ -372,6 +378,10 @@ public sealed partial class CloudSyncService : ICloudSyncService
                 {
                     await UpdateEntityCloudVersionAsync(
                         item.StoreId, item.EntityType, item.EntitySyncId, result.CloudVersion, item.Id, cancellationToken);
+                    await ResolveEntityConflictsAsync(
+                        item.StoreId, item.EntityType, item.EntitySyncId, result.CloudVersion,
+                        "synchronized", item.Operation == "delete" ? "{}" : item.PayloadJson,
+                        cancellationToken);
                     _db.SyncOutbox.RemoveRange(rows);
                     acceptedTotal += rows.Count;
                     continue;
@@ -510,6 +520,9 @@ public sealed partial class CloudSyncService : ICloudSyncService
                     store.Id, change.EntityType, change.EntitySyncId,
                     change.CloudVersion, pending.ChangeId == change.ChangeId ? pending.Id : 0,
                     cancellationToken);
+                await ResolveEntityConflictsAsync(
+                    store.Id, change.EntityType, change.EntitySyncId, change.CloudVersion,
+                    "synchronized", GetChangePayloadJson(change), cancellationToken);
                 if (pending.ChangeId == change.ChangeId) _db.SyncOutbox.Remove(pending);
                 await _db.SaveChangesAsync(cancellationToken);
                 return;
@@ -544,6 +557,10 @@ public sealed partial class CloudSyncService : ICloudSyncService
                     await UpsertRemoteEntityAsync(store.Id, change, cancellationToken);
                 await _db.SaveChangesAsync(cancellationToken);
             }
+            await ResolveEntityConflictsAsync(
+                store.Id, change.EntityType, change.EntitySyncId, change.CloudVersion,
+                "cloud", GetChangePayloadJson(change), cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
             await _db.CommitExternalTransactionAsync(transaction, cancellationToken);
         }
         catch
@@ -965,7 +982,14 @@ public sealed partial class CloudSyncService : ICloudSyncService
             x.StoreId == storeId && x.EntityType == entityType && x.EntitySyncId == entitySyncId &&
             x.Id != acceptedOutboxId && x.BaseCloudVersion < cloudVersion);
         await later.ExecuteUpdateAsync(
-            updates => updates.SetProperty(x => x.BaseCloudVersion, cloudVersion), cancellationToken);
+            updates => updates
+                .SetProperty(x => x.BaseCloudVersion, cloudVersion)
+                .SetProperty(
+                    x => x.LastError,
+                    x => x.LastError != null && x.LastError.StartsWith("Conflict:")
+                        ? null
+                        : x.LastError),
+            cancellationToken);
         foreach (var tracked in _db.ChangeTracker.Entries<SyncOutboxItem>()
                      .Select(x => x.Entity)
                      .Where(x => x.StoreId == storeId && x.EntityType == entityType &&
@@ -973,6 +997,8 @@ public sealed partial class CloudSyncService : ICloudSyncService
                                  x.BaseCloudVersion < cloudVersion))
         {
             tracked.BaseCloudVersion = cloudVersion;
+            if (tracked.LastError?.StartsWith("Conflict:", StringComparison.Ordinal) == true)
+                tracked.LastError = null;
         }
     }
 
@@ -995,6 +1021,131 @@ public sealed partial class CloudSyncService : ICloudSyncService
         existing.Resolution = null;
         existing.ResolvedPayloadJson = null;
     }
+
+    private async Task<int> ResolveSynchronizedConflictsAsync(CancellationToken cancellationToken)
+    {
+        // Never make a local/cloud choice here. A conflict is closed only when no
+        // edit remains queued and local state proves that the cloud revision (or
+        // its tombstone) has already been applied.
+        var conflicts = await _db.SyncConflicts
+            .Where(x => x.ResolvedAt == null && x.RemoteCloudVersion > 0)
+            .OrderBy(x => x.Id)
+            .ToListAsync(cancellationToken);
+        if (conflicts.Count == 0) return 0;
+
+        var pendingRows = await _db.SyncOutbox.AsNoTracking()
+            .Select(x => new { x.StoreId, x.EntityType, x.EntitySyncId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var pendingKeys = pendingRows
+            .Select(x => EntityKey(x.StoreId, x.EntityType, x.EntitySyncId))
+            .ToHashSet(StringComparer.Ordinal);
+
+        var resolved = 0;
+        foreach (var conflict in conflicts)
+        {
+            if (pendingKeys.Contains(EntityKey(
+                    conflict.StoreId, conflict.EntityType, conflict.EntitySyncId)))
+            {
+                continue;
+            }
+            if (!TableNames.ContainsKey(conflict.EntityType)) continue;
+
+            var localCloudVersion = await GetLocalCloudVersionAsync(
+                conflict.StoreId, conflict.EntityType, conflict.EntitySyncId, cancellationToken);
+            var remoteDeleteWasApplied =
+                localCloudVersion == null &&
+                !ImmutableLedgerEntities.Contains(conflict.EntityType) &&
+                NormalizeRemoteOperation(conflict.RemoteOperation) == "delete";
+            if (!remoteDeleteWasApplied &&
+                (!localCloudVersion.HasValue || localCloudVersion.Value < conflict.RemoteCloudVersion))
+            {
+                continue;
+            }
+
+            MarkConflictResolved(conflict, "synchronized", conflict.RemotePayloadJson);
+            resolved++;
+        }
+
+        if (resolved > 0)
+            await _db.SaveChangesAsync(cancellationToken);
+        return resolved;
+    }
+
+    private async Task ResolveEntityConflictsAsync(
+        int storeId,
+        string entityType,
+        string entitySyncId,
+        long cloudVersion,
+        string resolution,
+        string resolvedPayloadJson,
+        CancellationToken cancellationToken)
+    {
+        var conflicts = await _db.SyncConflicts
+            .Where(x => x.ResolvedAt == null &&
+                        x.StoreId == storeId &&
+                        x.EntityType == entityType &&
+                        x.EntitySyncId == entitySyncId &&
+                        x.RemoteCloudVersion <= cloudVersion)
+            .ToListAsync(cancellationToken);
+        foreach (var conflict in conflicts)
+            MarkConflictResolved(conflict, resolution, resolvedPayloadJson);
+    }
+
+    private async Task<long?> GetLocalCloudVersionAsync(
+        int storeId,
+        string entityType,
+        string entitySyncId,
+        CancellationToken cancellationToken)
+    {
+        if (entityType == nameof(Store))
+        {
+            return await _db.Stores.AsNoTracking()
+                .Where(x => x.SyncId == entitySyncId)
+                .Select(x => (long?)x.CloudVersion)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (!EntityTypes.TryGetValue(entityType, out var type)) return null;
+        var method = typeof(CloudSyncService).GetMethod(
+            nameof(GetLocalCloudVersionGenericAsync), BindingFlags.Instance | BindingFlags.NonPublic)!
+            .MakeGenericMethod(type);
+        var task = (Task<long?>)method.Invoke(
+            this, new object[] { storeId, entitySyncId, cancellationToken })!;
+        return await task;
+    }
+
+    private async Task<long?> GetLocalCloudVersionGenericAsync<TEntity>(
+        int storeId,
+        string entitySyncId,
+        CancellationToken cancellationToken)
+        where TEntity : StoreScopedEntity
+        => await _db.Set<TEntity>()
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(x => x.StoreId == storeId && x.SyncId == entitySyncId)
+            .Select(x => (long?)x.CloudVersion)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static void MarkConflictResolved(
+        SyncConflict conflict,
+        string resolution,
+        string resolvedPayloadJson)
+    {
+        conflict.ResolvedAt = DateTime.UtcNow;
+        conflict.Resolution = resolution;
+        conflict.ResolvedPayloadJson = resolvedPayloadJson;
+    }
+
+    private static string EntityKey(int storeId, string entityType, string entitySyncId)
+        => storeId.ToString(CultureInfo.InvariantCulture) +
+           "\u001f" + entityType + "\u001f" + entitySyncId;
+
+    private static string GetChangePayloadJson(PullChange change)
+        => NormalizeRemoteOperation(change.Operation) == "delete" ||
+           change.Payload.ValueKind == JsonValueKind.Undefined
+            ? "{}"
+            : change.Payload.GetRawText();
 
     private async Task<SyncState> GetOrCreateStateAsync(
         int storeId,
