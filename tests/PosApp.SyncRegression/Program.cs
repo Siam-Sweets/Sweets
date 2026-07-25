@@ -219,9 +219,18 @@ static async Task AssertStoreSeedingAsync(AppDbContext db, Store sourceStore)
     db.Categories.Add(new Category
     {
         StoreId = targetStore.Id,
-        Name = "Beverages",
+        Name = "beverages",
         Color = "#000000",
         SortOrder = 99,
+        IsActive = true
+    });
+    await db.SaveChangesAsync();
+    db.Categories.Add(new Category
+    {
+        StoreId = targetStore.Id,
+        Name = "Beverages",
+        Color = "#111111",
+        SortOrder = 100,
         IsActive = true
     });
 
@@ -239,7 +248,7 @@ static async Task AssertStoreSeedingAsync(AppDbContext db, Store sourceStore)
     Assert(
         categories.Count(category =>
             string.Equals(category.Name, "Beverages", StringComparison.OrdinalIgnoreCase)) == 1,
-        "New-store seeding created duplicate Beverages categories.");
+        "New-store seeding did not collapse duplicate Beverages categories.");
     Assert(
         categories.Select(category => category.Name.ToUpperInvariant()).Distinct().Count() == 6,
         "New-store seeding did not create exactly the six default categories.");

@@ -1,3 +1,15 @@
+## 1.10.32 — New-store category duplicate retry fix
+
+- Fixed new-store creation still failing with `SQLite Error 19: UNIQUE constraint failed: Categories.StoreId, Categories.Name`.
+- New-store default category seeding now prefers the persisted category row, collapses pending duplicates, and matches names case-insensitively before saving.
+- Strengthened the sync regression to cover a persisted lowercase category plus a pending duplicate default category.
+
+## 1.10.31 — Setup settings duplicate fix
+
+- Fixed online account creation failing with `SQLite Error 19: UNIQUE constraint failed: Settings.StoreId, Settings.Key`.
+- Hardened setting writes so setup updates one existing row per store/key and removes duplicate pending or persisted setting rows before saving.
+- Kept setup markers and store configuration idempotent for retrying organization creation after a failed or partial attempt.
+
 ## 1.10.30 — Sync regression helper build fix
 
 - Fixed `tests/PosApp.SyncRegression` failing to compile after the store-seeding regression started invoking `StoreService`.

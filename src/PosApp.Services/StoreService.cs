@@ -379,27 +379,49 @@ public sealed class StoreService : IStoreService
         string color,
         int sortOrder)
     {
+        var normalizedName = name.Trim();
+        var normalizedNameLower = normalizedName.ToLowerInvariant();
         var tracked = _db.Categories.Local
             .Where(category =>
                 category.StoreId == storeId &&
-                string.Equals(category.Name, name, StringComparison.OrdinalIgnoreCase))
+                string.Equals(category.Name, normalizedName, StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var category = tracked.FirstOrDefault();
-        foreach (var duplicate in tracked.Skip(1).Where(duplicate => duplicate.Id == 0))
-            _db.Entry(duplicate).State = EntityState.Detached;
 
-        category ??= await _db.Categories
+        var persisted = await _db.Categories
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(candidate =>
+            .Where(candidate =>
                 candidate.StoreId == storeId &&
-                candidate.Name == name);
+                candidate.Name.ToLower() == normalizedNameLower)
+            .OrderBy(candidate => candidate.Id)
+            .ToListAsync();
+
+        var category = persisted.FirstOrDefault()
+                       ?? tracked
+                           .Where(candidate => candidate.Id > 0)
+                           .OrderBy(candidate => candidate.Id)
+                           .FirstOrDefault()
+                       ?? tracked.FirstOrDefault();
+
+        foreach (var duplicate in tracked.Where(duplicate => !ReferenceEquals(duplicate, category)))
+        {
+            if (duplicate.Id == 0)
+                _db.Entry(duplicate).State = EntityState.Detached;
+            else
+                _db.Categories.Remove(duplicate);
+        }
+
+        foreach (var duplicate in persisted.Skip(1)
+                     .Where(duplicate => !ReferenceEquals(duplicate, category)))
+        {
+            _db.Categories.Remove(duplicate);
+        }
 
         if (category == null)
         {
             _db.Categories.Add(new Category
             {
                 StoreId = storeId,
-                Name = name,
+                Name = normalizedName,
                 Color = color,
                 SortOrder = sortOrder,
                 IsActive = true
@@ -407,6 +429,8 @@ public sealed class StoreService : IStoreService
             return;
         }
 
+        category.StoreId = storeId;
+        category.Name = normalizedName;
         category.Color = color;
         category.SortOrder = sortOrder;
         category.IsActive = true;

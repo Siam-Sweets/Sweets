@@ -32,17 +32,10 @@ public class SettingsService : ISettingsService
         var normalizedKey = NormalizeKey(key);
         if (value?.Length > 8192)
             throw new InvalidOperationException("A setting value cannot exceed 8192 characters.");
-        var setting = await _db.Settings.FirstOrDefaultAsync(x => x.Key == normalizedKey);
-        if (setting == null)
-        {
-            setting = new Setting { Key = normalizedKey, Value = value };
-            _db.Settings.Add(setting);
-        }
-        else
-        {
-            setting.Value = value;
-            setting.UpdatedAt = DateTime.UtcNow;
-        }
+        UpsertSettingValue(
+            await FindOrCreateSettingAsync(normalizedKey),
+            normalizedKey,
+            value);
         await _db.SaveChangesAsync();
         if (normalizedKey == "store:config")
         {
@@ -110,14 +103,10 @@ public class SettingsService : ISettingsService
         await using var transaction = await _db.Database.BeginTransactionAsync();
         try
         {
-            var setting = await _db.Settings.FirstOrDefaultAsync(x => x.Key == "store:config");
-            if (setting == null)
-                _db.Settings.Add(new Setting { Key = "store:config", Value = json });
-            else
-            {
-                setting.Value = json;
-                setting.UpdatedAt = DateTime.UtcNow;
-            }
+            UpsertSettingValue(
+                await FindOrCreateSettingAsync("store:config"),
+                "store:config",
+                json);
 
             var store = await _db.Stores.FirstOrDefaultAsync(x => x.Id == _storeContext.StoreId)
                         ?? throw new InvalidOperationException("The selected store no longer exists.");
@@ -136,6 +125,74 @@ public class SettingsService : ISettingsService
         await CacheGate.WaitAsync();
         try { CachedJsonByStore[_storeContext.StoreId] = json; }
         finally { CacheGate.Release(); }
+    }
+
+    private async Task<Setting> FindOrCreateSettingAsync(string normalizedKey)
+    {
+        var storeId = _storeContext.StoreId;
+        var keyLower = normalizedKey.ToLowerInvariant();
+
+        var trackedMatches = _db.ChangeTracker.Entries<Setting>()
+            .Where(entry => entry.State != EntityState.Detached &&
+                            entry.State != EntityState.Deleted &&
+                            string.Equals(entry.Entity.Key, normalizedKey, StringComparison.OrdinalIgnoreCase) &&
+                            (entry.Entity.StoreId == storeId ||
+                             (entry.State == EntityState.Added && entry.Entity.StoreId <= 0)))
+            .ToList();
+
+        var persistedMatches = await _db.Settings
+            .IgnoreQueryFilters()
+            .Where(setting => setting.StoreId == storeId &&
+                              setting.Key.ToLower() == keyLower)
+            .OrderBy(setting => setting.Id)
+            .ToListAsync();
+
+        var setting = persistedMatches.FirstOrDefault()
+                      ?? trackedMatches
+                          .Where(entry => entry.State != EntityState.Added)
+                          .OrderBy(entry => entry.Entity.Id)
+                          .Select(entry => entry.Entity)
+                          .FirstOrDefault()
+                      ?? trackedMatches
+                          .Select(entry => entry.Entity)
+                          .FirstOrDefault();
+
+        foreach (var entry in trackedMatches.Where(entry => !ReferenceEquals(entry.Entity, setting)))
+        {
+            if (entry.State == EntityState.Added)
+                entry.State = EntityState.Detached;
+            else
+                _db.Settings.Remove(entry.Entity);
+        }
+
+        foreach (var duplicate in persistedMatches.Skip(1)
+                     .Where(duplicate => !ReferenceEquals(duplicate, setting)))
+        {
+            _db.Settings.Remove(duplicate);
+        }
+
+        if (setting != null)
+        {
+            if (setting.StoreId <= 0)
+                setting.StoreId = storeId;
+            return setting;
+        }
+
+        setting = new Setting
+        {
+            StoreId = storeId,
+            Key = normalizedKey
+        };
+        _db.Settings.Add(setting);
+        return setting;
+    }
+
+    private static void UpsertSettingValue(Setting setting, string normalizedKey, string? value)
+    {
+        if (setting.Id == 0)
+            setting.Key = normalizedKey;
+        setting.Value = value;
+        setting.UpdatedAt = DateTime.UtcNow;
     }
 
 
