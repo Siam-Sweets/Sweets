@@ -19,8 +19,10 @@ const changes = [];
 const stores = new Set();
 const snapshots = [];
 let capturedOwnerPasswordIterations = null;
+let pipelineRequestCount = 0;
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (_url, options) => {
+  pipelineRequestCount += 1;
   const body = JSON.parse(options.body);
   const results = body.requests.map((request) => {
     if (request.type === "close") return { type: "ok", response: { type: "close" } };
@@ -71,19 +73,28 @@ globalThis.fetch = async (_url, options) => {
       return executeResult(
         ["id", "name", "platform", "app_version", "created_at", "last_seen_at", "revoked_at", "store_cursor_count"],
         [
-          [textCell("device-one"), textCell("Front POS"), textCell("Windows"), textCell("1.10.11"), textCell("2026-07-24T00:00:00.000Z"), textCell("2026-07-24T01:00:00.000Z"), nullCell(), integerCell(1)],
-          [textCell("device-two"), textCell("Back POS"), textCell("Windows"), textCell("1.10.11"), textCell("2026-07-24T00:10:00.000Z"), textCell("2026-07-24T01:05:00.000Z"), nullCell(), integerCell(1)],
+          [textCell("device-one"), textCell("Front POS"), textCell("Windows"), textCell("1.10.13"), textCell("2026-07-24T00:00:00.000Z"), textCell("2026-07-24T01:00:00.000Z"), nullCell(), integerCell(1)],
+          [textCell("device-two"), textCell("Back POS"), textCell("Windows"), textCell("1.10.13"), textCell("2026-07-24T00:10:00.000Z"), textCell("2026-07-24T01:05:00.000Z"), nullCell(), integerCell(1)],
         ]);
     }
-    if (sql.startsWith("SELECT cloud_version, cursor, operation_id FROM sync_idempotency")) {
-      const prior = idempotency.get(args[1]);
-      return prior ? executeResult(["cloud_version", "cursor", "operation_id"],
-        [[integerCell(prior.cloudVersion), integerCell(prior.cursor), textCell(prior.operationId)]]) : executeResult([], []);
+    if (sql.startsWith("SELECT change_id, cloud_version, cursor, operation_id FROM sync_idempotency")) {
+      const rows = args.slice(1).flatMap((changeId) => {
+        const prior = idempotency.get(changeId);
+        return prior ? [[textCell(changeId), integerCell(prior.cloudVersion),
+          integerCell(prior.cursor), textCell(prior.operationId)]] : [];
+      });
+      return executeResult(["change_id", "cloud_version", "cursor", "operation_id"], rows);
     }
-    if (sql.startsWith("SELECT cloud_version, operation, payload_json FROM sync_records")) {
-      const rec = records.get(recordKey(args[1], args[2], args[3]));
-      return rec ? executeResult(["cloud_version", "operation", "payload_json"],
-        [[integerCell(rec.cloudVersion), textCell(rec.operation), textCell(rec.payloadJson)]]) : executeResult([], []);
+    if (sql.startsWith("SELECT entity_type, entity_sync_id, cloud_version, operation, payload_json FROM sync_records")) {
+      const rows = [];
+      for (let index = 2; index < args.length; index += 2) {
+        const entityType = args[index];
+        const entitySyncId = args[index + 1];
+        const rec = records.get(recordKey(args[1], entityType, entitySyncId));
+        if (rec) rows.push([textCell(entityType), textCell(entitySyncId), integerCell(rec.cloudVersion),
+          textCell(rec.operation), textCell(rec.payloadJson)]);
+      }
+      return executeResult(["entity_type", "entity_sync_id", "cloud_version", "operation", "payload_json"], rows);
     }
     if (sql.startsWith("SELECT cloud_version, entity_version, operation, payload_json")) {
       const rec = records.get(recordKey(args[1], args[2], args[3]));
@@ -116,10 +127,21 @@ globalThis.fetch = async (_url, options) => {
       return executeResult([], [], 1);
     }
     if (sql.startsWith("INSERT INTO sync_idempotency")) {
-      idempotency.set(args[1], { operationId: args[2], cloudVersion: Number(args[6]), cursor: Number(args[7]) });
+      const inserted = changes.find((change) => change.changeId === args[1]);
+      idempotency.set(args[1], {
+        operationId: args[2], cloudVersion: Number(args[6]), cursor: Number(inserted?.cursor || 0),
+      });
       return executeResult([], [], 1);
     }
-    if (sql.startsWith("SELECT last_insert_rowid() AS cursor")) return executeResult(["cursor"], [[integerCell(changes.length)]]);
+    if (sql.startsWith("SELECT last_insert_rowid() AS cursor")) {
+      throw new Error("The Worker must not spend a subrequest reading last_insert_rowid().");
+    }
+    if (sql.startsWith("SELECT change_id, cursor FROM sync_changes")) {
+      const requested = new Set(args.slice(1));
+      const rows = changes.filter((change) => requested.has(change.changeId))
+        .map((change) => [textCell(change.changeId), integerCell(change.cursor)]);
+      return executeResult(["change_id", "cursor"], rows);
+    }
     if (sql.startsWith("SELECT cursor, change_id, operation_id")) {
       const after = Number(args[2]);
       const limit = Number(args[3]);
@@ -141,7 +163,7 @@ globalThis.fetch = async (_url, options) => {
 try {
   const health = await worker.fetch(new Request("https://worker.test/v1/health"), env);
   assert.equal(health.status, 200);
-  assert.equal((await health.json()).version, "1.10.11");
+  assert.equal((await health.json()).version, "1.10.13");
   const unknown = await worker.fetch(new Request("https://worker.test/"), env);
   assert.equal(unknown.status, 404);
   const malformed = await worker.fetch(new Request("https://worker.test/v1/account", { headers: { Authorization: "Bearer broken" } }), env);
@@ -150,7 +172,7 @@ try {
   const signup = await worker.fetch(new Request("https://worker.test/v1/auth/signup", {
     method: "POST", headers: { "Content-Type": "application/json", "CF-Connecting-IP": "127.0.0.1" },
     body: JSON.stringify({ email: "owner@example.com", password: "correct-horse-battery", displayName: "Owner",
-      registrationKey, deviceKey: "device-key-1234567890", deviceName: "Test POS", platform: "Windows", appVersion: "1.10.11" }),
+      registrationKey, deviceKey: "device-key-1234567890", deviceName: "Test POS", platform: "Windows", appVersion: "1.10.13" }),
   }), env);
   assert.equal(signup.status, 200);
   assert.equal(capturedOwnerPasswordIterations, 100000);
@@ -161,7 +183,7 @@ try {
 
   const payload = {
     schemaVersion: 5,
-    appVersion: "1.10.11",
+    appVersion: "1.10.13",
     exportedAtUtc: "2026-07-24T01:00:00.0000000+00:00",
     store: { SyncId: "store-sync-id" },
     entities: {},
@@ -170,7 +192,7 @@ try {
     method: "POST", headers: { "Content-Type": "application/json", ...deviceOneAuth }, body: JSON.stringify({
       backupSetId: "backup-set-1", capturedAt: "2026-07-24T01:00:00Z",
       store: { syncId: "store-sync-id", code: "MAIN", name: "Main Store", isActive: true },
-      schemaVersion: 5, appVersion: "1.10.11", syncCursor: 0, rowCount: 1, payload,
+      schemaVersion: 5, appVersion: "1.10.13", syncCursor: 0, rowCount: 1, payload,
     }),
   }), env);
   assert.equal(upload.status, 201);
@@ -179,7 +201,7 @@ try {
     method: "POST", headers: { "Content-Type": "application/json", ...deviceOneAuth }, body: JSON.stringify({
       backupSetId: "backup-set-mismatch", capturedAt: "2026-07-24T01:00:00Z",
       store: { syncId: "store-sync-id", code: "MAIN", name: "Main Store", isActive: true },
-      schemaVersion: 5, appVersion: "1.10.11", syncCursor: 0, rowCount: 1,
+      schemaVersion: 5, appVersion: "1.10.13", syncCursor: 0, rowCount: 1,
       payload: { ...payload, exportedAtUtc: "2026-07-24T01:00:01Z" },
     }),
   }), env);
@@ -198,6 +220,22 @@ try {
   assert.equal(firstPush.committed, true);
   assert.equal(firstPush.results[0].cloudVersion, 1);
   assert.equal((await push(firstPushBody, deviceOneAuth)).results[0].duplicate, true);
+
+  const duplicateChangeId = await worker.fetch(new Request("https://worker.test/v1/sync/push", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...deviceOneAuth },
+    body: JSON.stringify({
+      storeSyncId: "store-sync-id",
+      operationId: "operation-duplicate-id",
+      changes: [
+        { ...firstPushBody.changes[0], operationId: "operation-duplicate-id", changeId: "duplicate-change" },
+        { ...firstPushBody.changes[0], operationId: "operation-duplicate-id", changeId: "duplicate-change",
+          entityType: "Customer", entitySyncId: "duplicate-customer" },
+      ],
+    }),
+  }), env);
+  assert.equal(duplicateChangeId.status, 400);
+  assert.match((await duplicateChangeId.json()).error, /change ID only once/i);
 
   const secondPush = await push({ ...firstPushBody, operationId: "operation-2", changes: [{ ...firstPushBody.changes[0],
     operationId: "operation-2", changeId: "change-2", baseCloudVersion: 1, payload: { Name: "Coffee" } }] }, deviceTwoAuth);
@@ -226,6 +264,26 @@ try {
     { headers: deviceOneAuth }), env);
   assert.equal((await recordResponse.json()).cloudVersion, 2);
 
+  const requestsBeforeLargePush = pipelineRequestCount;
+  const largePush = await push({
+    storeSyncId: "store-sync-id",
+    operationId: "operation-batched-250",
+    changes: Array.from({ length: 250 }, (_, index) => ({
+      changeId: `batched-change-${index}`,
+      operationId: "operation-batched-250",
+      entityType: "Customer",
+      entitySyncId: `batched-customer-${index}`,
+      operation: "upsert",
+      entityVersion: 1,
+      baseCloudVersion: 0,
+      payload: { Name: `Customer ${index}` },
+    })),
+  }, deviceOneAuth);
+  assert.equal(largePush.committed, true);
+  assert.equal(largePush.results.length, 250);
+  assert.ok(pipelineRequestCount - requestsBeforeLargePush <= 10,
+    "A 250-change push must remain well below Cloudflare's 50-subrequest Free-plan limit.");
+
   const devices = await worker.fetch(new Request("https://worker.test/v1/devices", { headers: deviceOneAuth }), env);
   assert.equal(devices.status, 200);
   assert.equal((await devices.json()).devices.length, 2);
@@ -235,7 +293,7 @@ try {
   }), env);
   assert.equal(logout.status, 200);
 
-  console.log("PosApp cloud Worker v1.10.11 atomic-sync smoke test passed.");
+  console.log("PosApp cloud Worker v1.10.13 atomic-sync smoke test passed.");
 } finally {
   globalThis.fetch = originalFetch;
 }

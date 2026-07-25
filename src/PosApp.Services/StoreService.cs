@@ -99,6 +99,7 @@ public sealed class StoreService : IStoreService
                 await _db.SaveChangesAsync();
                 await SeedNewStoreAsync(created);
                 await _db.CommitExternalTransactionAsync(transaction);
+                SettingsService.InvalidateStoreCache(created.Id);
                 return created;
             }
             catch
@@ -169,17 +170,41 @@ public sealed class StoreService : IStoreService
         if (sourceUser == null)
             throw new InvalidOperationException(
                 "An active administrator is required before another store can be created.");
-        _db.Users.Add(new User
+        var targetUsers = await _db.Users
+            .IgnoreQueryFilters()
+            .Where(user => user.StoreId == store.Id)
+            .ToListAsync();
+        var targetAdministrator = targetUsers.FirstOrDefault(user =>
+            user.IsActive && user.Role == UserRole.Admin);
+        if (targetAdministrator == null)
         {
-            StoreId = store.Id,
-            Username = sourceUser.Username,
-            FullName = sourceUser.FullName,
-            PasswordHash = sourceUser.PasswordHash,
-            PasswordSalt = sourceUser.PasswordSalt,
-            Role = UserRole.Admin,
-            IsActive = true,
-            Email = sourceUser.Email
-        });
+            targetAdministrator = targetUsers.FirstOrDefault(user =>
+                string.Equals(user.Username, sourceUser.Username, StringComparison.OrdinalIgnoreCase));
+            if (targetAdministrator == null)
+            {
+                _db.Users.Add(new User
+                {
+                    StoreId = store.Id,
+                    Username = sourceUser.Username,
+                    FullName = sourceUser.FullName,
+                    PasswordHash = sourceUser.PasswordHash,
+                    PasswordSalt = sourceUser.PasswordSalt,
+                    Role = UserRole.Admin,
+                    IsActive = true,
+                    Email = sourceUser.Email
+                });
+            }
+            else
+            {
+                targetAdministrator.FullName = sourceUser.FullName;
+                targetAdministrator.PasswordHash = sourceUser.PasswordHash;
+                targetAdministrator.PasswordSalt = sourceUser.PasswordSalt;
+                targetAdministrator.Role = UserRole.Admin;
+                targetAdministrator.IsActive = true;
+                targetAdministrator.Email = sourceUser.Email;
+                targetAdministrator.UpdatedAt = DateTime.UtcNow;
+            }
+        }
 
         var categories = new[]
         {
@@ -187,16 +212,91 @@ public sealed class StoreService : IStoreService
             ("Groceries", "#10B981", 3), ("Household", "#8B5CF6", 4),
             ("Personal Care", "#EC4899", 5), ("Produce", "#22C55E", 6)
         };
+        var existingCategoryNames = (await _db.Categories
+                .IgnoreQueryFilters()
+                .Where(category => category.StoreId == store.Id)
+                .Select(category => category.Name)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, color, sort) in categories)
-            _db.Categories.Add(new Category { StoreId = store.Id, Name = name, Color = color, SortOrder = sort });
+        {
+            if (existingCategoryNames.Add(name))
+                _db.Categories.Add(new Category
+                {
+                    StoreId = store.Id,
+                    Name = name,
+                    Color = color,
+                    SortOrder = sort
+                });
+        }
 
-        _db.Taxes.AddRange(
-            new Tax { StoreId = store.Id, Name = "VAT", Rate = 15m, IsDefault = true, IsActive = true },
-            new Tax { StoreId = store.Id, Name = "Service Charge", Rate = 5m, IsActive = true });
-        _db.Discounts.AddRange(
-            new Discount { StoreId = store.Id, Name = "5% Off", Type = DiscountType.Percentage, Value = 5m, Code = "SAVE5", IsActive = true },
-            new Discount { StoreId = store.Id, Name = "Senior Citizen", Type = DiscountType.Percentage, Value = 10m, IsActive = true },
-            new Discount { StoreId = store.Id, Name = "50 Off", Type = DiscountType.FixedAmount, Value = 50m, Code = "BD50", IsActive = true });
+        var existingTaxNames = (await _db.Taxes
+                .IgnoreQueryFilters()
+                .Where(tax => tax.StoreId == store.Id)
+                .Select(tax => tax.Name)
+                .ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (existingTaxNames.Add("VAT"))
+            _db.Taxes.Add(new Tax
+            {
+                StoreId = store.Id,
+                Name = "VAT",
+                Rate = 15m,
+                IsDefault = true,
+                IsActive = true
+            });
+        if (existingTaxNames.Add("Service Charge"))
+            _db.Taxes.Add(new Tax
+            {
+                StoreId = store.Id,
+                Name = "Service Charge",
+                Rate = 5m,
+                IsActive = true
+            });
+
+        var existingDiscounts = await _db.Discounts
+            .IgnoreQueryFilters()
+            .Where(discount => discount.StoreId == store.Id)
+            .Select(discount => new { discount.Name, discount.Code })
+            .ToListAsync();
+        var existingDiscountNames = existingDiscounts
+            .Select(discount => discount.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingDiscountCodes = existingDiscounts
+            .Where(discount => !string.IsNullOrWhiteSpace(discount.Code))
+            .Select(discount => discount.Code!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (existingDiscountNames.Add("5% Off") &&
+            existingDiscountCodes.Add("SAVE5"))
+            _db.Discounts.Add(new Discount
+            {
+                StoreId = store.Id,
+                Name = "5% Off",
+                Type = DiscountType.Percentage,
+                Value = 5m,
+                Code = "SAVE5",
+                IsActive = true
+            });
+        if (existingDiscountNames.Add("Senior Citizen"))
+            _db.Discounts.Add(new Discount
+            {
+                StoreId = store.Id,
+                Name = "Senior Citizen",
+                Type = DiscountType.Percentage,
+                Value = 10m,
+                IsActive = true
+            });
+        if (existingDiscountNames.Add("50 Off") &&
+            existingDiscountCodes.Add("BD50"))
+            _db.Discounts.Add(new Discount
+            {
+                StoreId = store.Id,
+                Name = "50 Off",
+                Type = DiscountType.FixedAmount,
+                Value = 50m,
+                Code = "BD50",
+                IsActive = true
+            });
 
         var settings = new StoreSettings
         {
@@ -204,9 +304,46 @@ public sealed class StoreService : IStoreService
             Address = store.Address ?? string.Empty,
             Phone = store.Phone ?? string.Empty
         };
-        _db.Settings.AddRange(
-            new Setting { StoreId = store.Id, Key = "store:config", Value = JsonSerializer.Serialize(settings) },
-            new Setting { StoreId = store.Id, Key = SettingSyncPolicy.SetupCompleteKey, Value = "true" });
+        var targetSettings = await _db.Settings
+            .IgnoreQueryFilters()
+            .Where(setting => setting.StoreId == store.Id)
+            .ToListAsync();
+        var storeConfiguration = targetSettings.FirstOrDefault(setting =>
+            string.Equals(setting.Key, "store:config", StringComparison.OrdinalIgnoreCase));
+        if (storeConfiguration == null)
+        {
+            _db.Settings.Add(new Setting
+            {
+                StoreId = store.Id,
+                Key = "store:config",
+                Value = JsonSerializer.Serialize(settings)
+            });
+        }
+        else
+        {
+            storeConfiguration.Value = JsonSerializer.Serialize(settings);
+            storeConfiguration.UpdatedAt = DateTime.UtcNow;
+        }
+
+        var setupComplete = targetSettings.FirstOrDefault(setting =>
+            string.Equals(
+                setting.Key,
+                SettingSyncPolicy.SetupCompleteKey,
+                StringComparison.OrdinalIgnoreCase));
+        if (setupComplete == null)
+        {
+            _db.Settings.Add(new Setting
+            {
+                StoreId = store.Id,
+                Key = SettingSyncPolicy.SetupCompleteKey,
+                Value = "true"
+            });
+        }
+        else
+        {
+            setupComplete.Value = "true";
+            setupComplete.UpdatedAt = DateTime.UtcNow;
+        }
         await _db.SaveChangesAsync();
     }
 

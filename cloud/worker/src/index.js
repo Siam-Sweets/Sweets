@@ -31,6 +31,9 @@ const AUTH_WINDOW_SECONDS = 15 * 60;
 const AUTH_ATTEMPT_LIMIT = 10;
 const MAX_SYNC_BATCH = 1000;
 const MAX_PULL_LIMIT = 2000;
+const SYNC_LOOKUP_CHUNK_SIZE = 200;
+const SYNC_WRITE_CHUNK_SIZE = 100;
+const SYNC_WRITE_CHUNK_BYTES = 1_250_000;
 const ALLOWED_ENTITY_TYPES = new Set([
   "Store", "Category", "Customer", "Discount", "Product", "Supplier", "Tax", "User",
   "CashSession", "PurchaseDocument", "Sale", "PurchaseItem", "SaleItem", "SalePayment",
@@ -58,7 +61,7 @@ async function route(request, env) {
 
   if (request.method === "GET" && path === "/v1/health") {
     await query(env, "SELECT 1 AS ok");
-    return json({ ok: true, service: "posapp-cloud", version: "1.10.11" });
+    return json({ ok: true, service: "posapp-cloud", version: "1.10.13" });
   }
   if (request.method === "POST" && path === "/v1/auth/signup") return signup(request, env);
   if (request.method === "POST" && path === "/v1/auth/login") return login(request, env);
@@ -431,22 +434,58 @@ async function pushChanges(request, claims, env) {
   }
   const changes = body.changes.map((raw) => normalizeSyncChange(raw, operationId));
   const entityKeys = new Set();
+  const changeIds = new Set();
   for (const change of changes) {
     if (change.entityType === "Store" && change.entitySyncId !== storeSyncId) {
       throw new HttpError(400, "A Store change must use the requested store sync ID.");
     }
-    const key = `${change.entityType}\u0000${change.entitySyncId}`;
+    if (changeIds.has(change.changeId)) {
+      throw new HttpError(400, "An operation may contain each change ID only once.");
+    }
+    changeIds.add(change.changeId);
+    const key = syncEntityKey(change.entityType, change.entitySyncId);
     if (entityKeys.has(key)) throw new HttpError(400, "An operation may contain only one final change per record.");
     entityKeys.add(key);
   }
 
   return json(await withTransaction(env, async (tx) => {
-    const prior = [];
-    for (const change of changes) {
-      prior.push(await tx.queryOne(
-        `SELECT cloud_version, cursor, operation_id FROM sync_idempotency
-         WHERE owner_id = ? AND change_id = ?`, [claims.sub, change.changeId]));
+    // A Turso pipeline is one Cloudflare subrequest even when it contains many
+    // SQL statements. Grouping the lookup phase prevents normal sync batches
+    // from exhausting the Workers Free plan's external-subrequest allowance.
+    const lookupChunks = chunkArray(changes, SYNC_LOOKUP_CHUNK_SIZE);
+    const readStatements = [statement(
+      "SELECT sync_id FROM stores WHERE owner_id = ? AND sync_id = ?", [claims.sub, storeSyncId])];
+    for (const chunk of lookupChunks) {
+      readStatements.push(statement(
+        `SELECT change_id, cloud_version, cursor, operation_id
+         FROM sync_idempotency
+         WHERE owner_id = ? AND change_id IN (${placeholders(chunk.length)})`,
+        [claims.sub, ...chunk.map((change) => change.changeId)]));
     }
+    for (const chunk of lookupChunks) {
+      readStatements.push(statement(
+        `SELECT entity_type, entity_sync_id, cloud_version, operation, payload_json
+         FROM sync_records
+         WHERE owner_id = ? AND store_sync_id = ? AND
+           (${chunk.map(() => "(entity_type = ? AND entity_sync_id = ?)").join(" OR ")})`,
+        [claims.sub, storeSyncId,
+         ...chunk.flatMap((change) => [change.entityType, change.entitySyncId])]));
+    }
+
+    const readResults = await tx.batch(readStatements);
+    let readIndex = 0;
+    const store = rowsFromResult(readResults[readIndex++])[0] || null;
+    const priorByChangeId = new Map();
+    for (let index = 0; index < lookupChunks.length; index++) {
+      for (const row of rowsFromResult(readResults[readIndex++])) priorByChangeId.set(row.change_id, row);
+    }
+    const currentByEntity = new Map();
+    for (let index = 0; index < lookupChunks.length; index++) {
+      for (const row of rowsFromResult(readResults[readIndex++])) {
+        currentByEntity.set(syncEntityKey(row.entity_type, row.entity_sync_id), row);
+      }
+    }
+    const prior = changes.map((change) => priorByChangeId.get(change.changeId) || null);
     const priorCount = prior.filter(Boolean).length;
     if (priorCount > 0 && priorCount !== changes.length) {
       throw new HttpError(409, "A partially replayed operation was rejected; retry the original complete operation.");
@@ -461,8 +500,6 @@ async function pushChanges(request, claims, env) {
       })) };
     }
 
-    const store = await tx.queryOne(
-      "SELECT sync_id FROM stores WHERE owner_id = ? AND sync_id = ?", [claims.sub, storeSyncId]);
     const createsStore = changes.some((x) => x.entityType === "Store" && x.operation === "upsert");
     if (!store && !createsStore) {
       throw new HttpError(404, "Store is not registered. Upload a snapshot or sync the store record first.");
@@ -471,10 +508,7 @@ async function pushChanges(request, claims, env) {
     const currentRows = [];
     const conflicts = [];
     for (const change of changes) {
-      const current = await tx.queryOne(
-        `SELECT cloud_version, operation, payload_json FROM sync_records
-         WHERE owner_id = ? AND store_sync_id = ? AND entity_type = ? AND entity_sync_id = ?`,
-        [claims.sub, storeSyncId, change.entityType, change.entitySyncId]);
+      const current = currentByEntity.get(syncEntityKey(change.entityType, change.entitySyncId)) || null;
       currentRows.push(current);
       const currentVersion = Number(current?.cloud_version || 0);
       if (change.baseCloudVersion !== currentVersion) {
@@ -497,40 +531,70 @@ async function pushChanges(request, claims, env) {
     }
 
     const now = new Date().toISOString();
-    const results = [];
-    for (let index = 0; index < changes.length; index++) {
-      const change = changes[index];
-      const cloudVersion = Number(currentRows[index]?.cloud_version || 0) + 1;
-      await tx.execute(
-        `INSERT INTO sync_records
-         (owner_id, store_sync_id, entity_type, entity_sync_id, cloud_version, entity_version,
-          operation, payload_json, origin_device_id, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(owner_id, store_sync_id, entity_type, entity_sync_id) DO UPDATE SET
-           cloud_version = excluded.cloud_version, entity_version = excluded.entity_version,
-           operation = excluded.operation, payload_json = excluded.payload_json,
-           origin_device_id = excluded.origin_device_id, updated_at = excluded.updated_at`,
-        [claims.sub, storeSyncId, change.entityType, change.entitySyncId, cloudVersion,
-         change.entityVersion, change.operation, change.payloadJson, claims.did, now]);
-      await tx.execute(
-        `INSERT INTO sync_changes
-         (owner_id, store_sync_id, change_id, operation_id, entity_type, entity_sync_id, cloud_version,
-          entity_version, operation, payload_json, origin_device_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [claims.sub, storeSyncId, change.changeId, operationId, change.entityType, change.entitySyncId,
-         cloudVersion, change.entityVersion, change.operation, change.payloadJson, claims.did, now]);
-      const cursorRow = await tx.queryOne("SELECT last_insert_rowid() AS cursor");
-      const cursor = Number(cursorRow?.cursor || 0);
-      await tx.execute(
-        `INSERT INTO sync_idempotency
-         (owner_id, change_id, operation_id, store_sync_id, entity_type, entity_sync_id, cloud_version, cursor, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [claims.sub, change.changeId, operationId, storeSyncId, change.entityType, change.entitySyncId,
-         cloudVersion, cursor, now]);
-      if (change.entityType === "Store") await applyStoreChange(tx, claims, storeSyncId, change, now);
-      results.push({ changeId: change.changeId, status: "accepted", cloudVersion, cursor, duplicate: false });
+    const cloudVersionByChangeId = new Map(changes.map((change, index) => [
+      change.changeId, Number(currentRows[index]?.cloud_version || 0) + 1,
+    ]));
+    const cursorByChangeId = new Map();
+    for (const chunk of chunkSyncWrites(changes)) {
+      const writeStatements = [];
+      const idempotencyStatementIndexes = [];
+      for (const change of chunk) {
+        const cloudVersion = cloudVersionByChangeId.get(change.changeId);
+        writeStatements.push(statement(
+          `INSERT INTO sync_records
+           (owner_id, store_sync_id, entity_type, entity_sync_id, cloud_version, entity_version,
+            operation, payload_json, origin_device_id, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(owner_id, store_sync_id, entity_type, entity_sync_id) DO UPDATE SET
+             cloud_version = excluded.cloud_version, entity_version = excluded.entity_version,
+             operation = excluded.operation, payload_json = excluded.payload_json,
+             origin_device_id = excluded.origin_device_id, updated_at = excluded.updated_at`,
+          [claims.sub, storeSyncId, change.entityType, change.entitySyncId, cloudVersion,
+           change.entityVersion, change.operation, change.payloadJson, claims.did, now]));
+        writeStatements.push(statement(
+          `INSERT INTO sync_changes
+           (owner_id, store_sync_id, change_id, operation_id, entity_type, entity_sync_id, cloud_version,
+            entity_version, operation, payload_json, origin_device_id, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [claims.sub, storeSyncId, change.changeId, operationId, change.entityType, change.entitySyncId,
+           cloudVersion, change.entityVersion, change.operation, change.payloadJson, claims.did, now]));
+        idempotencyStatementIndexes.push(writeStatements.length);
+        writeStatements.push(statement(
+          `INSERT INTO sync_idempotency
+           (owner_id, change_id, operation_id, store_sync_id, entity_type, entity_sync_id,
+            cloud_version, cursor, created_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, sc.cursor, ?
+           FROM sync_changes sc WHERE sc.owner_id = ? AND sc.change_id = ?`,
+          [claims.sub, change.changeId, operationId, storeSyncId, change.entityType, change.entitySyncId,
+           cloudVersion, now, claims.sub, change.changeId]));
+        if (change.entityType === "Store") {
+          writeStatements.push(storeChangeStatement(claims, storeSyncId, change, now));
+        }
+      }
+      writeStatements.push(statement(
+        `SELECT change_id, cursor FROM sync_changes
+         WHERE owner_id = ? AND change_id IN (${placeholders(chunk.length)})`,
+        [claims.sub, ...chunk.map((change) => change.changeId)]));
+
+      const writeResults = await tx.batch(writeStatements);
+      for (const index of idempotencyStatementIndexes) {
+        if (Number(writeResults[index].affected_row_count || 0) !== 1) {
+          throw new Error("The sync cursor could not be recorded atomically.");
+        }
+      }
+      for (const row of rowsFromResult(writeResults[writeResults.length - 1])) {
+        cursorByChangeId.set(row.change_id, Number(row.cursor));
+      }
+      if (chunk.some((change) => !cursorByChangeId.has(change.changeId))) {
+        throw new Error("A committed sync change did not return its cursor.");
+      }
     }
-    return { storeSyncId, operationId, committed: true, results };
+
+    return { storeSyncId, operationId, committed: true, results: changes.map((change) => ({
+      changeId: change.changeId, status: "accepted",
+      cloudVersion: cloudVersionByChangeId.get(change.changeId),
+      cursor: cursorByChangeId.get(change.changeId), duplicate: false,
+    })) };
   }));
 }
 
@@ -552,23 +616,24 @@ function normalizeSyncChange(raw, operationId) {
     throw new HttpError(400, "Upsert payload must be an object.");
   }
   const payloadJson = JSON.stringify(payload || {});
-  if (new TextEncoder().encode(payloadJson).byteLength > 500_000) {
+  const payloadBytes = new TextEncoder().encode(payloadJson).byteLength;
+  if (payloadBytes > 500_000) {
     throw new HttpError(413, "A single sync record exceeds the 500 KB limit.");
   }
   return { changeId, operationId, entityType, entitySyncId, operation, entityVersion,
-    baseCloudVersion, payload, payloadJson };
+    baseCloudVersion, payload, payloadJson, payloadBytes };
 }
 
-async function applyStoreChange(tx, claims, storeSyncId, change, now) {
+function storeChangeStatement(claims, storeSyncId, change, now) {
   if (change.operation === "delete") {
-    await tx.execute("UPDATE stores SET is_active = 0, updated_at = ? WHERE owner_id = ? AND sync_id = ?",
+    return statement(
+      "UPDATE stores SET is_active = 0, updated_at = ? WHERE owner_id = ? AND sync_id = ?",
       [now, claims.sub, storeSyncId]);
-    return;
   }
   const p = change.payload;
   const code = requiredText(p.Code ?? p.code, "Store code", 24);
   const name = requiredText(p.Name ?? p.name, "Store name", 100);
-  await tx.execute(
+  return statement(
     `INSERT INTO stores (sync_id, owner_id, code, name, address, phone, is_active, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(owner_id, sync_id) DO UPDATE SET
@@ -577,6 +642,38 @@ async function applyStoreChange(tx, claims, storeSyncId, change, now) {
     [storeSyncId, claims.sub, code, name, optionalText(p.Address ?? p.address, 500),
      optionalText(p.Phone ?? p.phone, 30), (p.IsActive ?? p.isActive) === false ? 0 : 1,
      p.CreatedAt ?? p.createdAt ?? now, p.UpdatedAt ?? p.updatedAt ?? now]);
+}
+
+function syncEntityKey(entityType, entitySyncId) {
+  return `${entityType}\u0000${entitySyncId}`;
+}
+
+function placeholders(count) {
+  return Array(count).fill("?").join(", ");
+}
+
+function chunkArray(values, size) {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
+  return chunks;
+}
+
+function chunkSyncWrites(changes) {
+  const chunks = [];
+  let current = [];
+  let bytes = 0;
+  for (const change of changes) {
+    if (current.length && (current.length >= SYNC_WRITE_CHUNK_SIZE ||
+        bytes + change.payloadBytes > SYNC_WRITE_CHUNK_BYTES)) {
+      chunks.push(current);
+      current = [];
+      bytes = 0;
+    }
+    current.push(change);
+    bytes += change.payloadBytes;
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
 }
 
 async function pullChanges(url, claims, env) {
@@ -918,16 +1015,22 @@ async function withTransaction(env, action) {
   let baseUrl = begin.data.base_url;
   if (!baton) throw new Error("Turso did not return a transaction baton.");
 
-  const run = async (sql, args = []) => {
-    const response = await pipelineRaw(env, [toRequest(statement(sql, args))], baton, baseUrl);
+  const runBatch = async (statements) => {
+    if (!statements.length) return [];
+    const response = await pipelineRaw(env, statements.map(toRequest), baton, baseUrl);
     baton = response.data.baton || baton;
     baseUrl = response.data.base_url || baseUrl;
-    return response.results[0].response.result;
+    return response.results.map((item) => item.response.result);
+  };
+  const run = async (sql, args = []) => {
+    const results = await runBatch([statement(sql, args)]);
+    return results[0];
   };
   const tx = {
     execute: async (sql, args = []) => Number((await run(sql, args)).affected_row_count || 0),
     query: async (sql, args = []) => rowsFromResult(await run(sql, args)),
     queryOne: async (sql, args = []) => (await tx.query(sql, args))[0] || null,
+    batch: runBatch,
   };
 
   try {
@@ -978,23 +1081,41 @@ async function pipeline(env, statements) {
 
 async function pipelineRaw(env, requests, baton = undefined, baseUrl = undefined) {
   const root = normalizeTursoUrl(baseUrl || env.TURSO_DATABASE_URL);
-  const response = await fetch(`${root}/v2/pipeline`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.TURSO_AUTH_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ...(baton ? { baton } : {}), requests }),
-  });
+  let response;
+  try {
+    response = await fetch(`${root}/v2/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.TURSO_AUTH_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ...(baton ? { baton } : {}), requests }),
+    });
+  } catch (error) {
+    throw new Error(
+      `Turso pipeline network request failed (${requests.length} request${requests.length === 1 ? "" : "s"}): ` +
+      safeErrorMessage(error));
+  }
   if (!response.ok) throw new Error(`Turso request failed (${response.status}).`);
   const data = await response.json();
-  for (const item of data.results || []) {
+  for (let index = 0; index < (data.results || []).length; index++) {
+    const item = data.results[index];
     if (item.type !== "ok") {
-      const message = item.error?.message || item.error || "Turso query failed.";
-      throw new Error(String(message));
+      throw new Error(
+        `Turso pipeline request ${index + 1}/${requests.length} failed: ${safeErrorMessage(item.error)}`);
     }
   }
   return { data, results: data.results || [] };
+}
+
+function safeErrorMessage(error) {
+  if (error instanceof Error && String(error.message || "").trim()) return error.message.trim();
+  if (typeof error === "string" && error.trim()) return error.trim();
+  try {
+    const serialized = JSON.stringify(error);
+    if (serialized && serialized !== "{}") return serialized.slice(0, 500);
+  } catch { /* use the stable fallback below */ }
+  return "No error detail was returned.";
 }
 
 function statement(sql, args = []) { return { sql, args }; }

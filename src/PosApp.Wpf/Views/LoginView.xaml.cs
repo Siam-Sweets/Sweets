@@ -19,6 +19,20 @@ public partial class LoginView : Window
         DataContext = _vm;
     }
 
+    private void LoginView_Loaded(object sender, RoutedEventArgs e)
+    {
+        var workArea = SystemParameters.WorkArea;
+        var availableWidth = Math.Max(360d, workArea.Width - 24d);
+        var availableHeight = Math.Max(460d, workArea.Height - 24d);
+        MinWidth = Math.Min(MinWidth, availableWidth);
+        MinHeight = Math.Min(MinHeight, availableHeight);
+        MaxWidth = availableWidth;
+        MaxHeight = availableHeight;
+        Width = Math.Min(Width, availableWidth);
+        Height = Math.Min(Height, availableHeight);
+        UsernameBox.Focus();
+    }
+
     private async void PinBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)

@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.10.13 — Cloud sync push subrequest fix
+
+- Fixed `POST /v1/sync/push` returning HTTP 500 when a normal multi-record operation exhausted the Cloudflare Workers Free-plan external-subrequest allowance.
+- Replaced per-record Turso HTTP round trips with batched idempotency, current-record, write, and cursor pipelines.
+- Removed the per-change `SELECT last_insert_rowid()` request identified by the production stack trace.
+- Kept each business operation atomic by retaining one Turso transaction baton across all bounded pipeline chunks.
+- Bounded write chunks by record count and encoded payload size to stay within Turso request and transaction constraints.
+- Added duplicate change-ID validation so malformed operations return HTTP 400 instead of reaching a database uniqueness failure.
+- Added stable Turso network and statement diagnostics so future Worker logs retain the actual failure context.
+- Added a 250-change regression test that completes comfortably below Cloudflare's 50-external-subrequest Free-plan limit.
+- No SQLite or Turso schema migration is required.
+
+## 1.10.12 — Login scrolling and duplicate store-category fix
+
+- Added a dedicated vertical `ScrollViewer` to the cashier login form so fields, buttons, errors, and setup guidance remain reachable on smaller and high-DPI screens.
+- Added mouse-wheel, touchpad, touch-panning, visible-scrollbar, and resizable-window support to login.
+- Constrained the login window to the usable Windows work area.
+- Fixed store creation failing with `SQLite Error 19: UNIQUE constraint failed: Categories.StoreId, Categories.Name`.
+- Made new-store seeding idempotent for the administrator, categories, taxes, discounts, store configuration, and device-local completion setting.
+- Queried destination-store defaults with `IgnoreQueryFilters()` and an explicit store ID so the active-store filter cannot hide existing rows.
+- Kept store creation transactional and added post-commit settings-cache invalidation.
+- No SQLite or Turso schema migration is required.
+
 ## 1.10.11 — Cloud snapshot capture-time compatibility fix
 
 - Fixed existing-account setup sign-in failing with `Cloud snapshot capture metadata does not match its backup set`.

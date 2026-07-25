@@ -1,4 +1,4 @@
-# PosApp Cloud Worker v1.10.11
+# PosApp Cloud Worker v1.10.13
 
 Self-hosted account, device, snapshot, and incremental-sync API for PosApp. Turso credentials and JWT signing material remain in Worker secrets; Windows devices receive only PosApp access/refresh tokens.
 
@@ -6,7 +6,7 @@ Self-hosted account, device, snapshot, and incremental-sync API for PosApp. Turs
 
 Use `.github/workflows/deploy-cloud-worker.yml` and follow `MOBILE_DEPLOY.md`. The workflow accepts GitHub variables/secrets, uses an existing Turso database or provisions one through the Platform API, and deploys the Worker without a local CLI.
 
-The v1.10.11 workflow explicitly uses Node.js 24 and Wrangler 4.81.0. It passes `POSAPP_CLOUD_CONFIG` through Wrangler `deploy --secrets-file`, so code and secrets are uploaded together and the former `wrangler-action` secret-upload failure is avoided.
+The v1.10.13 workflow explicitly uses Node.js 24 and Wrangler 4.81.0. It passes `POSAPP_CLOUD_CONFIG` through Wrangler `deploy --secrets-file`, so code and secrets are uploaded together and the former `wrangler-action` secret-upload failure is avoided.
 
 The recommended runtime configuration is one encrypted Cloudflare secret named `POSAPP_CLOUD_CONFIG`:
 
@@ -43,13 +43,15 @@ npx wrangler secret put REGISTRATION_KEY
 
 ### Upgrade
 
-- v1.10.11 has no new Turso schema migration. Deploy it directly.
+- v1.10.13 has no new Turso schema migration. Deploy it directly.
 - When upgrading from before v1.10.0 with automatic initialization disabled, apply `migrations/v1.10.0.sql` once before deployment.
 - Deployments still on v1.6.0 must also apply `migrations/v1.7.0.sql` first.
 
 ## Sync behavior
 
 - `POST /v1/sync/push`: accepts up to 1,000 idempotent changes per request.
+- Push lookups and writes use bounded Turso pipelines instead of one external HTTP request per SQL statement, keeping normal and large operations below Cloudflare's Free-plan subrequest ceiling.
+- Cursor and idempotency rows are derived inside the same transaction as each change; the former per-change `SELECT last_insert_rowid()` round trip is no longer used.
 - `GET /v1/sync/pull`: returns ordered changes after a per-device cursor.
 - `GET /v1/devices`: returns registered-device and last-seen diagnostics for the owner.
 - `POST /v1/sync/snapshot/upload`: stores a full restore baseline.
@@ -66,5 +68,8 @@ npx wrangler secret put REGISTRATION_KEY
 - Owner sign-up requires the private registration key.
 - Repeated sign-in attempts are rate-limited per email/IP window.
 - Push requests are limited to 1,000 changes; each record is limited to 500 KB.
+- Write pipelines are additionally bounded by change count and encoded payload size while retaining one atomic transaction.
 - Full snapshots are limited to 15 MB per store and retain the latest three versions.
 - Product/user image paths are excluded. No image files are uploaded or stored.
+
+If Turso rejects a network request or a statement, Worker logs now identify the pipeline request count or failing statement position without logging credentials or SQL arguments.
