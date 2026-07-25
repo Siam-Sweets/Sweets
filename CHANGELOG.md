@@ -1,3 +1,9 @@
+## 1.10.18 — Store filter build fix
+
+- Restored `StoreFilterOption` as a standalone WPF helper model used by Dashboard and Reports.
+- Fixes CS0246 build failures introduced when the Stock Transfers UI/service code was removed.
+- Keeps store filtering independent from the removed Stock Transfers feature.
+
 ## 1.10.17 — Complete cloud restore replay
 
 - Fixed restored Sales History rows showing `0` items even though the sale headers and totals were present.
