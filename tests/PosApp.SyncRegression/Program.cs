@@ -78,7 +78,7 @@ try
     await AssertResolutionAsync(db, "ledger-delete-conflict", expectedResolved: false);
     await AssertResolutionAsync(db, "unknown-conflict", expectedResolved: false);
 
-    await InvokeAsync(
+    await InvokeTaskAsync(
         service,
         "ResolveEntityConflictsAsync",
         store.Id,
@@ -91,7 +91,7 @@ try
     await db.SaveChangesAsync();
     await AssertResolutionAsync(db, "lower-conflict", expectedResolved: true);
 
-    await InvokeAsync(
+    await InvokeTaskAsync(
         service,
         "UpdateEntityCloudVersionAsync",
         store.Id,
@@ -100,7 +100,7 @@ try
         5L,
         0L,
         CancellationToken.None);
-    await InvokeAsync(
+    await InvokeTaskAsync(
         service,
         "ResolveEntityConflictsAsync",
         store.Id,
@@ -172,7 +172,7 @@ static async Task<T> InvokeAsync<T>(
     return await (Task<T>)method.Invoke(service, arguments)!;
 }
 
-static async Task InvokeAsync(
+static async Task InvokeTaskAsync(
     CloudSyncService service,
     string methodName,
     params object[] arguments)
