@@ -101,17 +101,6 @@ public interface ICustomerService
     Task<IReadOnlyList<Sale>> GetCustomerHistoryAsync(int customerId);
 }
 
-public interface IStockTransferService
-{
-    Task<IReadOnlyList<StockTransfer>> GetTransfersAsync(int? relatedStoreId = null, StockTransferStatus? status = null);
-    Task<StockTransfer?> GetTransferAsync(int id);
-    Task<StockTransfer> CreateDraftAsync(StockTransferDraft draft, int userId);
-    Task DispatchAsync(int transferId, int userId);
-    Task ReceiveAsync(int transferId, int userId);
-    Task CancelAsync(int transferId, int userId, string? reason = null);
-    Task<IReadOnlyList<StoreInventoryRow>> GetInventoryAcrossStoresAsync(int? storeId = null, string? query = null);
-}
-
 public interface IReportService
 {
     Task<DailySalesReport> GetDailyReportAsync(DateTime date);

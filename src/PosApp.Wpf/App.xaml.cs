@@ -325,7 +325,6 @@ public partial class App : Application
         services.AddSingleton<ICloudSyncCoordinator, CloudSyncCoordinator>();
         services.AddTransient<IAuthService, AuthService>();
         services.AddTransient<IInventoryService, InventoryService>();
-        services.AddTransient<IStockTransferService, StockTransferService>();
         services.AddTransient<ISaleService, SaleService>();
         services.AddTransient<ICustomerService, CustomerService>();
         services.AddTransient<IReportService, ReportService>();
@@ -356,7 +355,6 @@ public partial class App : Application
         services.AddTransient<PromotionsView>();
         services.AddTransient<ProductsView>();
         services.AddTransient<InventoryView>();
-        services.AddTransient<TransfersView>();
         services.AddTransient<CustomersView>();
         services.AddTransient<SalesView>();
         services.AddTransient<ReportsView>();

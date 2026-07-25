@@ -1,3 +1,17 @@
+## 1.10.17 — Complete cloud restore replay
+
+- Fixed restored Sales History rows showing `0` items even though the sale headers and totals were present.
+- Cloud restore now treats the full snapshot as a baseline and immediately replays every incremental cloud change after each snapshot cursor before setup completes.
+- Restored sale items, payments, stock ledger entries, and other post-snapshot records are materialized before the user reopens PosApp.
+- Kept the pre-restore safety backup and relational validation behavior unchanged.
+
+## 1.10.16 — Remove Stock Transfers
+
+- Removed the Stock Transfers page and navigation entry.
+- Removed transfer create/dispatch/receive/cancel UI and application service code.
+- Kept legacy transfer storage and sync compatibility internally to avoid breaking existing databases and older cloud data.
+- Decoupled Dashboard and Reports store-filter localization from transfer-specific resource names.
+
 # Changelog
 
 ## 1.10.14 — Stale sync-conflict reconciliation

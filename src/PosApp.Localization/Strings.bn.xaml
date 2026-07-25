@@ -650,34 +650,9 @@
     <sys:String x:Key="SyncCenter_ClearSummary">সমাধান করা {0}টি দ্বন্দ্ব রেকর্ড মুছে ফেলা হয়েছে।</sys:String>
     <sys:String x:Key="SyncCenter_ClearErrorTitle">সমাধান ইতিহাস মুছতে ব্যর্থ</sys:String>
 
-    <!-- Multi-store operations and stock transfers -->
-    <sys:String x:Key="Nav_Transfers">স্টক স্থানান্তর</sys:String>
-    <sys:String x:Key="Transfer_Title">স্টক স্থানান্তর</sys:String>
-    <sys:String x:Key="Transfer_Help">প্রেরণ, গ্রহণ, বাতিল ও অডিট ইতিহাসসহ স্টোরগুলোর মধ্যে ইনভেন্টরি স্থানান্তর করুন।</sys:String>
-    <sys:String x:Key="Transfer_Transfers">স্থানান্তরসমূহ</sys:String>
-    <sys:String x:Key="Transfer_New">নতুন স্থানান্তর</sys:String>
-    <sys:String x:Key="Transfer_Dispatch">প্রেরণ</sys:String>
-    <sys:String x:Key="Transfer_Receive">গ্রহণ</sys:String>
-    <sys:String x:Key="Transfer_Cancel">স্থানান্তর বাতিল</sys:String>
-    <sys:String x:Key="Transfer_Number">স্থানান্তর নং</sys:String>
-    <sys:String x:Key="Transfer_Source">উৎস</sys:String>
-    <sys:String x:Key="Transfer_Destination">গন্তব্য</sys:String>
-    <sys:String x:Key="Transfer_Status">অবস্থা</sys:String>
-    <sys:String x:Key="Transfer_Items">আইটেম</sys:String>
-    <sys:String x:Key="Transfer_Created">তৈরি</sys:String>
-    <sys:String x:Key="Transfer_Updated">সর্বশেষ কার্যক্রম</sys:String>
-    <sys:String x:Key="Transfer_Details">স্থানান্তরের আইটেম</sys:String>
-    <sys:String x:Key="Transfer_InventoryByStore">স্টোরভিত্তিক ইনভেন্টরি</sys:String>
-    <sys:String x:Key="Transfer_Store">স্টোর</sys:String>
-    <sys:String x:Key="Transfer_AllStores">সব স্টোর</sys:String>
-    <sys:String x:Key="Transfer_Stock">স্টক</sys:String>
-    <sys:String x:Key="Transfer_Low">কম</sys:String>
-    <sys:String x:Key="Transfer_Select">নির্বাচন</sys:String>
-    <sys:String x:Key="Transfer_Note">স্থানান্তরের নোট / রেফারেন্স</sys:String>
+    <!-- Multi-store operations -->
+    <sys:String x:Key="StoreFilter_Store">স্টোর</sys:String>
+    <sys:String x:Key="StoreFilter_AllStores">সব স্টোর</sys:String>
     <sys:String x:Key="Report_ByStore">স্টোরভিত্তিক কার্যক্ষমতা</sys:String>
 
-    <sys:String x:Key="Transfer_StatusDraft">খসড়া</sys:String>
-    <sys:String x:Key="Transfer_StatusDispatched">পাঠানো হয়েছে</sys:String>
-    <sys:String x:Key="Transfer_StatusReceived">গ্রহণ করা হয়েছে</sys:String>
-    <sys:String x:Key="Transfer_StatusCancelled">বাতিল</sys:String>
 </ResourceDictionary>

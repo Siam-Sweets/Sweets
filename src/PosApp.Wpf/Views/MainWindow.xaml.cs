@@ -13,7 +13,6 @@ public partial class MainWindow : Window
     private readonly ProductsView _products;
     private readonly PromotionsView _promotions;
     private readonly InventoryView _inventory;
-    private readonly TransfersView _transfers;
     private readonly CustomersView _customers;
     private readonly SalesView _sales;
     private readonly ReportsView _reports;
@@ -30,7 +29,7 @@ public partial class MainWindow : Window
     private Rect _windowedBounds;
 
     public MainWindow(PosView pos, DashboardView dashboard, ProductsView products, PromotionsView promotions,
-        InventoryView inventory, TransfersView transfers, CustomersView customers, SalesView sales,
+        InventoryView inventory, CustomersView customers, SalesView sales,
         ReportsView reports, UsersView users, SettingsView settings, StoresView stores,
         PurchasesView purchases, RegisterView register)
     {
@@ -45,7 +44,6 @@ public partial class MainWindow : Window
         _products = products;
         _promotions = promotions;
         _inventory = inventory;
-        _transfers = transfers;
         _customers = customers;
         _sales = sales;
         _reports = reports;
@@ -79,7 +77,6 @@ public partial class MainWindow : Window
         NavDashboard.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavProducts.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavInventory.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
-        NavTransfers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavPurchases.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavCustomers.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
         NavReports.Visibility = manager ? Visibility.Visible : Visibility.Collapsed;
@@ -121,7 +118,6 @@ public partial class MainWindow : Window
             "products" => _products,
             "promotions" => _promotions,
             "inventory" => _inventory,
-            "transfers" => _transfers,
             "purchases" => _purchases,
             "customers" => _customers,
             "sales" => _sales,
@@ -146,7 +142,6 @@ public partial class MainWindow : Window
             "products" => NavProducts,
             "promotions" => NavPromotions,
             "inventory" => NavInventory,
-            "transfers" => NavTransfers,
             "purchases" => NavPurchases,
             "customers" => NavCustomers,
             "sales" => NavSales,
@@ -186,7 +181,7 @@ public partial class MainWindow : Window
         return tag.ToLowerInvariant() switch
         {
             "pos" or "register" => true,
-            "dashboard" or "products" or "promotions" or "inventory" or "transfers" or
+            "dashboard" or "products" or "promotions" or "inventory" or
             "purchases" or "customers" or "sales" or "reports" => role >= UserRole.Manager,
             "users" or "stores" or "settings" => role >= UserRole.Admin,
             _ => false
@@ -198,7 +193,7 @@ public partial class MainWindow : Window
         var inactiveStyle = (Style)FindResource("NavButton");
         foreach (var button in new[]
                  {
-                     NavDashboard, NavSales, NavProducts, NavInventory, NavTransfers, NavPurchases,
+                     NavDashboard, NavSales, NavProducts, NavInventory, NavPurchases,
                      NavRegister, NavCustomers, NavReports, NavPromotions, NavUsers, NavStores, NavSettings
                  })
         {

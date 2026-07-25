@@ -327,20 +327,6 @@ public class PaymentBreakdownRow
 }
 
 
-public sealed class StockTransferDraft
-{
-    public string OperationId { get; set; } = Guid.NewGuid().ToString("N");
-    public int DestinationStoreId { get; set; }
-    public string? Note { get; set; }
-    public List<StockTransferDraftItem> Items { get; set; } = new();
-}
-
-public sealed class StockTransferDraftItem
-{
-    public int ProductId { get; set; }
-    public decimal Quantity { get; set; }
-}
-
 public sealed class StorePerformanceRow
 {
     public int StoreId { get; set; }

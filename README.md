@@ -29,7 +29,7 @@ This is an original POS implementation inspired by the publicly known feature se
 | **Customers & Suppliers** | Unified contact directory with Customer/Supplier selection, type-aware editing, customer sales history, supplier purchase integration, and search by type/name/phone/email |
 | **Sales / Transactions** | Filter by date and status, print the filtered sales-history page, view and reprint receipts, void (restores stock), repeatable partial refunds by item/quantity/payment method, refund tracking, suspend/recall, CSV export |
 | **Users & Roles**   | PIN-based login, three roles (Cashier, Manager, Admin) with sidebar access gated by role, last-admin protection, PIN reset |
-| **Multiple Stores** | Admin-only store management, create/edit/activate/deactivate/switch workflows, per-store sales, inventory, purchases, users, register sessions, settings, receipt numbers, combined owner reporting, and draft/dispatch/receive/cancel stock transfers with an audit trail |
+| **Multiple Stores** | Admin-only store management, create/edit/activate/deactivate/switch workflows, per-store sales, inventory, purchases, users, register sessions, settings, receipt numbers, combined owner reporting |
 | **Offline-First Cloud Sync** | Required first-run owner sign-in or organization creation, automatic outbox push/cursor pull, retries, idempotency, tombstones, conflict review/merge, device diagnostics, sync history, manual Sync Now, full snapshots, and fresh-device restore |
 | **Reports & Dashboard** | Store or All Stores scope for administrators, inclusive From/To date filter, KPIs, daily sales, store-performance table, top products, hourly activity, payment breakdown, detailed reports, and printable page summaries |
 | **Taxes & Discounts** | Per-product tax rate, reusable offline promotions with codes/dates/use limits, and percentage or fixed line discounts at the register |
@@ -49,7 +49,6 @@ This is an original POS implementation inspired by the publicly known feature se
 4. Cancelling a dispatched transfer restores source stock with compensating ledger entries. Received transfers cannot be cancelled.
 5. If the destination lacks the product, PosApp creates matching catalog/category records without copying any image path or image file.
 
-Version 1.10.14 retains the Stock Transfers Dark-mode fix. Both tabs use theme-aware headers and content surfaces instead of Windows default white tab chrome. The inventory store selector renders the store name rather than the `StoreFilterOption` object representation, while transfer and cross-store inventory data remain unchanged.
 
 Version 1.10.14 also retains the Cloudflare owner-signup fix by using the Workers-compatible PBKDF2 limit of 100,000 iterations for cloud passwords. Local desktop user PIN hashing remains at 120,000 iterations. It retains the comprehensive integrity and synchronization hardening release. It makes business operations idempotent and atomic, protects stock and promotion counters with optimistic concurrency, enforces an append-only stock ledger, validates coherent multi-store backup sets before restore, quarantines invalid remote rows, hardens device authentication/logout, and closes store-authorization and historical-reporting gaps. Product/user image paths and image files remain excluded from cloud payloads.
 

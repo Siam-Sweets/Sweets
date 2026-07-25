@@ -90,7 +90,7 @@ public partial class ReportsView : UserControl, IRefreshable
         var stores = await _stores.GetStoresAsync(false);
         var options = new List<StoreFilterOption>();
         if (App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin)
-            options.Add(new StoreFilterOption(0, FindResource("Transfer_AllStores")?.ToString() ?? "All stores"));
+            options.Add(new StoreFilterOption(0, FindResource("StoreFilter_AllStores")?.ToString() ?? "All stores"));
         options.AddRange(stores.Select(x => new StoreFilterOption(x.Id, x.Name)));
         StoreFilter.ItemsSource = options;
         StoreFilter.SelectedValue = App.CurrentUser?.Role == PosApp.Core.Entities.UserRole.Admin ? 0 : App.CurrentStore?.Id ?? 1;

@@ -278,6 +278,21 @@ public sealed partial class CloudSyncService : ICloudSyncService
 
             await _backup.CreateBackupAsync(retentionCount: 20);
             var restoredRows = await ReplaceLocalDataAsync(snapshotSet.Snapshots, cancellationToken);
+
+            // A full snapshot is only the baseline captured at its sync cursor.
+            // Sales, sale items, payments, and other records committed after that
+            // cursor live in the incremental change log. Replay those changes as
+            // part of restore so a newly signed-in device never opens with sale
+            // headers but missing historical line items.
+            var restoredStores = await _db.Stores.AsNoTracking()
+                .OrderBy(x => x.Id)
+                .ToListAsync(cancellationToken);
+            foreach (var store in restoredStores)
+            {
+                var state = await GetOrCreateStateAsync(store.Id, credential.DeviceId, cancellationToken);
+                restoredRows += await PullStoreAsync(store, state, credential, cancellationToken);
+            }
+
             credential.InitialSnapshotUploadedAt = DateTimeOffset.UtcNow;
             await _credentials.SaveAsync(credential, cancellationToken);
             return new CloudRestoreSummary

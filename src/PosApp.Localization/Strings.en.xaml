@@ -650,34 +650,9 @@
     <sys:String x:Key="SyncCenter_ClearSummary">Cleared {0} resolved conflict record(s).</sys:String>
     <sys:String x:Key="SyncCenter_ClearErrorTitle">Unable to clear resolved conflicts</sys:String>
 
-    <!-- Multi-store operations and stock transfers -->
-    <sys:String x:Key="Nav_Transfers">Stock Transfers</sys:String>
-    <sys:String x:Key="Transfer_Title">Stock Transfers</sys:String>
-    <sys:String x:Key="Transfer_Help">Move tracked inventory between stores with dispatch, receipt, cancellation, and audit history.</sys:String>
-    <sys:String x:Key="Transfer_Transfers">Transfers</sys:String>
-    <sys:String x:Key="Transfer_New">New Transfer</sys:String>
-    <sys:String x:Key="Transfer_Dispatch">Dispatch</sys:String>
-    <sys:String x:Key="Transfer_Receive">Receive</sys:String>
-    <sys:String x:Key="Transfer_Cancel">Cancel Transfer</sys:String>
-    <sys:String x:Key="Transfer_Number">Transfer No.</sys:String>
-    <sys:String x:Key="Transfer_Source">Source</sys:String>
-    <sys:String x:Key="Transfer_Destination">Destination</sys:String>
-    <sys:String x:Key="Transfer_Status">Status</sys:String>
-    <sys:String x:Key="Transfer_Items">Items</sys:String>
-    <sys:String x:Key="Transfer_Created">Created</sys:String>
-    <sys:String x:Key="Transfer_Updated">Last Action</sys:String>
-    <sys:String x:Key="Transfer_Details">Transfer Items</sys:String>
-    <sys:String x:Key="Transfer_InventoryByStore">Inventory by Store</sys:String>
-    <sys:String x:Key="Transfer_Store">Store</sys:String>
-    <sys:String x:Key="Transfer_AllStores">All Stores</sys:String>
-    <sys:String x:Key="Transfer_Stock">Stock</sys:String>
-    <sys:String x:Key="Transfer_Low">Low</sys:String>
-    <sys:String x:Key="Transfer_Select">Select</sys:String>
-    <sys:String x:Key="Transfer_Note">Transfer note / reference</sys:String>
+    <!-- Multi-store operations -->
+    <sys:String x:Key="StoreFilter_Store">Store</sys:String>
+    <sys:String x:Key="StoreFilter_AllStores">All Stores</sys:String>
     <sys:String x:Key="Report_ByStore">Performance by Store</sys:String>
 
-    <sys:String x:Key="Transfer_StatusDraft">Draft</sys:String>
-    <sys:String x:Key="Transfer_StatusDispatched">Dispatched</sys:String>
-    <sys:String x:Key="Transfer_StatusReceived">Received</sys:String>
-    <sys:String x:Key="Transfer_StatusCancelled">Cancelled</sys:String>
 </ResourceDictionary>
