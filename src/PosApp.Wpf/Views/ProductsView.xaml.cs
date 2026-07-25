@@ -347,7 +347,7 @@ public class ProductEditDialog : Window
         _skuBox.Text = _product.Sku ?? string.Empty;
         _barcodeBox.Text = _product.Barcode ?? string.Empty;
         _priceBox.Text = _product.Price.ToString("0.####", CultureInfo.CurrentCulture);
-        _costBox.Text = _product.CostPrice.ToString("0.####", CultureInfo.CurrentCulture);
+        _costBox.Text = CostPriceToEditorText(_product.CostPrice);
         _stockBox.Text = _product.StockQuantity?.ToString("0.###", CultureInfo.CurrentCulture) ?? string.Empty;
         _thresholdBox.Text = _product.LowStockThreshold?.ToString("0.###", CultureInfo.CurrentCulture) ?? string.Empty;
         _taxBox.Text = _product.TaxRate.ToString("0.###", CultureInfo.CurrentCulture);
@@ -436,7 +436,7 @@ public class ProductEditDialog : Window
             return;
         }
         if (!TryRequiredDecimal(_priceBox, "Price", out var price) || price < 0m) return;
-        if (!TryRequiredDecimal(_costBox, "Cost price", out var cost) || cost < 0m) return;
+        if (!TryOptionalCostDecimal(_costBox, out var cost)) return;
         if (!TryOptionalDecimal(_stockBox, "Stock quantity", out var stock) || stock < 0m) return;
         if (!TryOptionalDecimal(_thresholdBox, "Low stock threshold", out var threshold) || threshold < 0m) return;
         if (!TryRequiredDecimal(_taxBox, "Tax rate", out var tax) || tax is < 0m or > 100m)
@@ -506,6 +506,29 @@ public class ProductEditDialog : Window
         return false;
     }
 
+    private static bool TryOptionalCostDecimal(TextBox box, out decimal value)
+    {
+        if (string.IsNullOrWhiteSpace(box.Text))
+        {
+            value = 0m;
+            return true;
+        }
+
+        if (TryRequiredDecimal(box, "Cost price", out value) && value >= 0m)
+            return true;
+
+        if (value < 0m)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                "Cost price cannot be negative.",
+                "Invalid product",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            box.Focus();
+        }
+        return false;
+    }
+
     private static string? NormalizeOptional(string value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -570,7 +593,7 @@ public class ProductEditDialog : Window
         _priceLabel.Text = string.Format(
             DialogLayout.Text("Prod_PricePer", "Selling price per {0}"), symbol);
         _costLabel.Text = string.Format(
-            DialogLayout.Text("Prod_CostPer", "Cost price per {0}"), symbol);
+            DialogLayout.Text("Prod_CostPer", "Cost price per {0} (optional)"), symbol);
         _stockLabel.Text = string.Format(
             DialogLayout.Text("Prod_StockIn", "Stock quantity in {0} (blank = untracked)"), symbol);
         _thresholdLabel.Text = string.Format(
@@ -614,6 +637,11 @@ public class ProductEditDialog : Window
         CreatedAt = source.CreatedAt,
         UpdatedAt = source.UpdatedAt
     };
+
+    private static string CostPriceToEditorText(decimal costPrice)
+        => costPrice == 0m
+            ? string.Empty
+            : costPrice.ToString("0.####", CultureInfo.CurrentCulture);
 
     private static TextBlock CreateEditorLabel(string text) => new()
     {

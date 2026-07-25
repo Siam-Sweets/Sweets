@@ -57,14 +57,14 @@
             </Border>
         </UniformGrid>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,12">
+        <WrapPanel Grid.Row="2" Margin="0,0,0,12" VerticalAlignment="Center">
             <TextBlock Text="{DynamicResource Sales_From}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <DatePicker x:Name="FromPicker" Width="140"/>
+            <DatePicker x:Name="FromPicker" Width="220"/>
             <TextBlock Text="{DynamicResource Sales_To}" VerticalAlignment="Center" Margin="16,0,6,0"/>
-            <DatePicker x:Name="ToPicker" Width="140"/>
+            <DatePicker x:Name="ToPicker" Width="220"/>
             <Button Content="{DynamicResource Common_Refresh}" Style="{StaticResource OutlineButton}"
                     Click="Refresh_Click" Margin="12,0,0,0" Padding="14,7"/>
-        </StackPanel>
+        </WrapPanel>
 
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>

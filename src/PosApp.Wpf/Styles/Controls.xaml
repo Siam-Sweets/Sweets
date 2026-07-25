@@ -722,7 +722,7 @@
         </Setter>
     </Style>
 
-    <Style TargetType="Calendar">
+    <Style x:Key="ThemedCalendar" TargetType="Calendar">
         <Setter Property="Background" Value="{DynamicResource CardBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
@@ -730,12 +730,34 @@
         <Setter Property="CalendarDayButtonStyle" Value="{StaticResource ThemedCalendarDayButton}"/>
         <Setter Property="CalendarButtonStyle" Value="{StaticResource ThemedCalendarButton}"/>
         <Setter Property="CalendarItemStyle" Value="{StaticResource ThemedCalendarItem}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Calendar">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            TextElement.Foreground="{TemplateBinding Foreground}">
+                        <CalendarItem x:Name="PART_CalendarItem"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}"
+                                      BorderThickness="0"
+                                      CalendarButtonStyle="{TemplateBinding CalendarButtonStyle}"
+                                      CalendarDayButtonStyle="{TemplateBinding CalendarDayButtonStyle}"
+                                      Style="{TemplateBinding CalendarItemStyle}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
+
+    <Style TargetType="Calendar" BasedOn="{StaticResource ThemedCalendar}"/>
 
     <Style TargetType="DatePicker">
         <Setter Property="FontFamily" Value="{StaticResource DefaultFont}"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Padding" Value="10,7"/>
+        <Setter Property="MinWidth" Value="220"/>
         <Setter Property="MinHeight" Value="34"/>
         <Setter Property="Background" Value="{DynamicResource InputBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextDarkBrush}"/>
@@ -787,8 +809,13 @@
                                     BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="1" CornerRadius="6">
                                 <Calendar x:Name="PART_Calendar" BorderThickness="0"
+                                          Style="{StaticResource ThemedCalendar}"
                                           Background="{DynamicResource CardBrush}"
                                           Foreground="{DynamicResource TextDarkBrush}"
+                                          BorderBrush="{DynamicResource BorderBrush}"
+                                          CalendarDayButtonStyle="{StaticResource ThemedCalendarDayButton}"
+                                          CalendarButtonStyle="{StaticResource ThemedCalendarButton}"
+                                          CalendarItemStyle="{StaticResource ThemedCalendarItem}"
                                           DisplayDate="{TemplateBinding DisplayDate}"
                                           IsTodayHighlighted="{TemplateBinding IsTodayHighlighted}"
                                           FirstDayOfWeek="{TemplateBinding FirstDayOfWeek}"

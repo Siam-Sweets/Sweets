@@ -149,7 +149,8 @@
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" MinWidth="620"/>
-            <ColumnDefinition Width="430"/>
+            <ColumnDefinition Width="8"/>
+            <ColumnDefinition Width="430" MinWidth="320"/>
         </Grid.ColumnDefinitions>
 
         <!-- Receipt workspace -->
@@ -291,8 +292,30 @@
             </Border>
         </Grid>
 
+        <GridSplitter Grid.Column="1"
+                      Width="8"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      ResizeBehavior="PreviousAndNext"
+                      ResizeDirection="Columns"
+                      ShowsPreview="True"
+                      Cursor="SizeWE"
+                      Background="{DynamicResource BorderBrush}">
+            <GridSplitter.Template>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border Background="{TemplateBinding Background}">
+                        <Border Width="2"
+                                HorizontalAlignment="Center"
+                                Background="{DynamicResource PrimaryBrush}"
+                                Opacity="0.35"
+                                CornerRadius="1"/>
+                    </Border>
+                </ControlTemplate>
+            </GridSplitter.Template>
+        </GridSplitter>
+
         <!-- Fast command rail -->
-        <Border Grid.Column="1" Background="{DynamicResource CommandPanelBrush}"
+        <Border Grid.Column="2" Background="{DynamicResource CommandPanelBrush}"
                 BorderBrush="{DynamicResource CommandBorderBrush}" BorderThickness="1,0,0,0">
             <Grid Margin="8">
                 <Grid.RowDefinitions>
@@ -378,7 +401,7 @@
         </Border>
 
         <!-- Responsive product-search overlay; cards recalculate from the available viewport. -->
-        <Grid x:Name="SearchOverlay" Grid.ColumnSpan="2" Visibility="Collapsed" Panel.ZIndex="20">
+        <Grid x:Name="SearchOverlay" Grid.ColumnSpan="3" Visibility="Collapsed" Panel.ZIndex="20">
             <Border Background="{DynamicResource OverlayScrimBrush}" MouseLeftButtonDown="SearchScrim_MouseLeftButtonDown"/>
             <Border x:Name="ProductSearchPanel" Margin="24" MaxWidth="1100" MaxHeight="760"
                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch"

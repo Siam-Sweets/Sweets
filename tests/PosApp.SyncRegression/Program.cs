@@ -118,7 +118,9 @@ try
     Assert(rebased.LastError == null, "Own-device pull did not unblock the rebased edit.");
     await AssertResolutionAsync(db, "pending-conflict", expectedResolved: true);
 
-    Console.WriteLine("PosApp synchronized-conflict regression passed.");
+    await AssertStoreSeedingAsync(db, store);
+
+    Console.WriteLine("PosApp synchronized-conflict and store-seeding regressions passed.");
 }
 finally
 {
@@ -191,6 +193,58 @@ static void Assert(bool condition, string message)
     if (!condition) throw new InvalidOperationException(message);
 }
 
+static async Task AssertStoreSeedingAsync(AppDbContext db, Store sourceStore)
+{
+    var (hash, salt) = DbSeeder.HashPin("1234");
+    db.Users.Add(new User
+    {
+        StoreId = sourceStore.Id,
+        Username = "store-admin",
+        FullName = "Store Admin",
+        PasswordHash = hash,
+        PasswordSalt = salt,
+        Role = UserRole.Admin,
+        IsActive = true
+    });
+
+    var targetStore = new Store
+    {
+        Code = "BRANCH",
+        Name = "Branch Store",
+        SyncId = "branch-store-sync"
+    };
+    db.Stores.Add(targetStore);
+    await db.SaveChangesAsync();
+
+    db.Categories.Add(new Category
+    {
+        StoreId = targetStore.Id,
+        Name = "Beverages",
+        Color = "#000000",
+        SortOrder = 99,
+        IsActive = true
+    });
+
+    var service = new StoreService(
+        db,
+        new TestStoreContext(sourceStore.Id, sourceStore.SyncId),
+        new TestUserSessionContext(null));
+    await InvokeTaskAsync(service, "SeedNewStoreAsync", targetStore);
+
+    var categories = await db.Categories
+        .IgnoreQueryFilters()
+        .AsNoTracking()
+        .Where(category => category.StoreId == targetStore.Id)
+        .ToListAsync();
+    Assert(
+        categories.Count(category =>
+            string.Equals(category.Name, "Beverages", StringComparison.OrdinalIgnoreCase)) == 1,
+        "New-store seeding created duplicate Beverages categories.");
+    Assert(
+        categories.Select(category => category.Name.ToUpperInvariant()).Distinct().Count() == 6,
+        "New-store seeding did not create exactly the six default categories.");
+}
+
 file sealed class TestStoreContext(int storeId, string storeSyncId) : IStoreContext
 {
     public int StoreId { get; } = storeId;
@@ -205,4 +259,13 @@ file sealed class TestStoreContext(int storeId, string storeSyncId) : IStoreCont
         public static readonly EmptyScope Instance = new();
         public void Dispose() { }
     }
+}
+
+file sealed class TestUserSessionContext(int? userId) : IUserSessionContext
+{
+    public int? UserId { get; } = userId;
+    public int? StoreId => null;
+    public UserRole? Role => null;
+    public bool IsAdmin => false;
+    public void SetCurrentUser(User? user) { }
 }

@@ -5,4 +5,7 @@ namespace PosApp.Wpf.Helpers;
 /// Kept independent from inventory-transfer UI so Dashboard and Reports
 /// continue to work when Stock Transfers is not part of the application.
 /// </summary>
-public sealed record StoreFilterOption(int Id, string Name);
+public sealed record StoreFilterOption(int Id, string Name)
+{
+    public override string ToString() => Name;
+}

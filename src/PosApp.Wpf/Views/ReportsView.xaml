@@ -6,6 +6,9 @@
     <UserControl.Resources>
         <conv:MoneyConverter x:Key="Money"/>
         <conv:PaymentMethodToStringConverter x:Key="PayStr"/>
+        <DataTemplate x:Key="StoreFilterItemTemplate">
+            <TextBlock Text="{Binding Name}"/>
+        </DataTemplate>
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="{StaticResource PagePadding}">
@@ -30,7 +33,7 @@
             </Grid>
 
             <!-- Period selector -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,16">
+            <WrapPanel Grid.Row="1" Margin="0,0,0,16" VerticalAlignment="Center">
                 <Button x:Name="BtnToday" Style="{StaticResource PrimaryButton}" Content="{DynamicResource Rpt_Today}"
                         Click="Period_Click" Tag="today" Margin="0,0,4,0" Padding="16,8"/>
                 <Button x:Name="BtnWeek" Style="{StaticResource OutlineButton}" Content="{DynamicResource Rpt_Week}"
@@ -38,15 +41,15 @@
                 <Button x:Name="BtnMonth" Style="{StaticResource OutlineButton}" Content="{DynamicResource Rpt_Month}"
                         Click="Period_Click" Tag="month" Margin="4,0" Padding="16,8"/>
                 <TextBlock Text="{DynamicResource Rpt_From}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                <DatePicker x:Name="FromDate" Width="140"/>
+                <DatePicker x:Name="FromDate" Width="220"/>
                 <TextBlock Text="{DynamicResource Rpt_To}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                <DatePicker x:Name="ToDate" Width="140"/>
+                <DatePicker x:Name="ToDate" Width="220"/>
                 <Button Content="{DynamicResource Rpt_Apply}" Style="{StaticResource PrimaryButton}" Click="Apply_Click"
                         Margin="8,0,0,0" Padding="16,8"/>
                 <TextBlock Text="{DynamicResource StoreFilter_Store}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                <ComboBox x:Name="StoreFilter" Width="200" DisplayMemberPath="Name" SelectedValuePath="Id"
+                <ComboBox x:Name="StoreFilter" Width="220" ItemTemplate="{StaticResource StoreFilterItemTemplate}" SelectedValuePath="Id"
                           SelectionChanged="StoreFilter_Changed"/>
-            </StackPanel>
+            </WrapPanel>
 
             <!-- KPI cards -->
             <UniformGrid Grid.Row="2" Columns="4" Margin="0,0,0,16">

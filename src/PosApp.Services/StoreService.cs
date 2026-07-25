@@ -89,6 +89,7 @@ public sealed class StoreService : IStoreService
             {
                 var created = new Store
                 {
+                    SyncId = NormalizeSyncId(store.SyncId),
                     Name = name,
                     Code = code,
                     Address = address,
@@ -212,23 +213,8 @@ public sealed class StoreService : IStoreService
             ("Groceries", "#10B981", 3), ("Household", "#8B5CF6", 4),
             ("Personal Care", "#EC4899", 5), ("Produce", "#22C55E", 6)
         };
-        var existingCategoryNames = (await _db.Categories
-                .IgnoreQueryFilters()
-                .Where(category => category.StoreId == store.Id)
-                .Select(category => category.Name)
-                .ToListAsync())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, color, sort) in categories)
-        {
-            if (existingCategoryNames.Add(name))
-                _db.Categories.Add(new Category
-                {
-                    StoreId = store.Id,
-                    Name = name,
-                    Color = color,
-                    SortOrder = sort
-                });
-        }
+            await EnsureDefaultCategoryAsync(store.Id, name, color, sort);
 
         var existingTaxNames = (await _db.Taxes
                 .IgnoreQueryFilters()
@@ -385,5 +371,51 @@ public sealed class StoreService : IStoreService
         if (required && text.Length == 0) throw new InvalidOperationException($"{field} is required.");
         if (text.Length > max) throw new InvalidOperationException($"{field} cannot exceed {max} characters.");
         return text;
+    }
+
+    private async Task EnsureDefaultCategoryAsync(
+        int storeId,
+        string name,
+        string color,
+        int sortOrder)
+    {
+        var tracked = _db.Categories.Local
+            .Where(category =>
+                category.StoreId == storeId &&
+                string.Equals(category.Name, name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var category = tracked.FirstOrDefault();
+        foreach (var duplicate in tracked.Skip(1).Where(duplicate => duplicate.Id == 0))
+            _db.Entry(duplicate).State = EntityState.Detached;
+
+        category ??= await _db.Categories
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(candidate =>
+                candidate.StoreId == storeId &&
+                candidate.Name == name);
+
+        if (category == null)
+        {
+            _db.Categories.Add(new Category
+            {
+                StoreId = storeId,
+                Name = name,
+                Color = color,
+                SortOrder = sortOrder,
+                IsActive = true
+            });
+            return;
+        }
+
+        category.Color = color;
+        category.SortOrder = sortOrder;
+        category.IsActive = true;
+        category.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static string NormalizeSyncId(string? value)
+    {
+        var syncId = value?.Trim() ?? string.Empty;
+        return syncId.Length is > 0 and <= 32 ? syncId : Guid.NewGuid().ToString("N");
     }
 }

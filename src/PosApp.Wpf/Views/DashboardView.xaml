@@ -5,6 +5,9 @@
              Background="{DynamicResource BackgroundBrush}">
     <UserControl.Resources>
         <conv:MoneyConverter x:Key="Money"/>
+        <DataTemplate x:Key="StoreFilterItemTemplate">
+            <TextBlock Text="{Binding Name}"/>
+        </DataTemplate>
     </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="24">
@@ -34,13 +37,13 @@
             <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12" Margin="0,0,0,18">
                 <WrapPanel VerticalAlignment="Center">
                     <TextBlock Text="{DynamicResource Rpt_From}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <DatePicker x:Name="FromDate" Width="150"/>
+                    <DatePicker x:Name="FromDate" Width="220"/>
                     <TextBlock Text="{DynamicResource Rpt_To}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                    <DatePicker x:Name="ToDate" Width="150"/>
+                    <DatePicker x:Name="ToDate" Width="220"/>
                     <Button Content="{DynamicResource Rpt_Apply}" Style="{StaticResource PrimaryButton}"
                             Click="ApplyDateFilter_Click" Margin="10,0,0,0" Padding="18,8"/>
                     <TextBlock Text="{DynamicResource StoreFilter_Store}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                    <ComboBox x:Name="StoreFilter" Width="220" DisplayMemberPath="Name" SelectedValuePath="Id"
+                    <ComboBox x:Name="StoreFilter" Width="220" ItemTemplate="{StaticResource StoreFilterItemTemplate}" SelectedValuePath="Id"
                               SelectionChanged="StoreFilter_Changed"/>
                 </WrapPanel>
             </Border>

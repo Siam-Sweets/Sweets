@@ -1,3 +1,66 @@
+## 1.10.28 — Sync Center dark tabs fix
+
+- Fixed the Synchronization Center tabs and selected tab content area opening as a white/light surface in Dark mode.
+- Added dark-aware local styles for the Sync Center tab strip, tab headers, hover state, and content host.
+- Kept the existing sync tables, buttons, and conflict-resolution behavior unchanged.
+
+## 1.10.27 — Dark calendar popup fix
+
+- Fixed DatePicker calendar popups opening with a white surface in Dark mode.
+- Made the shared Calendar style explicit so DatePicker popups use the dark-aware calendar, month, and day templates everywhere.
+- Kept the existing date input sizing and calendar behavior unchanged.
+
+## 1.10.26 — Dark sidebar hover fix
+
+- Fixed the PosApp sidebar header turning into a light/white default button surface on hover in Dark mode.
+- Added a theme-aware sidebar header button template that uses the sidebar hover and active brushes.
+- Kept the Back to receipt header clickable while matching the dark sidebar palette.
+
+## 1.10.25 — Store filter selected-name fix
+
+- Fixed the Reporting and Dashboard store filters showing raw `StoreFilterOption { ... }` text after a store is selected.
+- Store filter dropdowns and selected values now render the store `Name` through an explicit item template.
+- Kept the previous `ToString()` fallback for store-filter options.
+
+## 1.10.24 — Reporting date visibility fix
+
+- Widened DatePicker controls to `220px` so full dates remain visible on high-DPI/scaled displays.
+- Applied the stronger date width to Reporting, Dashboard, and Purchases filters.
+- Added a store-filter display fallback so dropdowns show the store name instead of `StoreFilterOption { ... }`.
+
+## 1.10.23 — Simplified Stores list
+
+- Removed the Active and Current checkbox columns from the Stores page.
+- Removed the Activate / Deactivate action from the Stores page.
+- The Stores list now shows active stores only, keeping the table focused on code, name, address, and phone.
+
+## 1.10.22 — Date filter visibility fix
+
+- Increased the default DatePicker minimum width so full short dates remain visible with the calendar button and Windows display scaling.
+- Widened the Purchases, Reports, and Dashboard date filters.
+- Let Purchases and Reports filter rows wrap instead of clipping controls on narrower screens.
+
+## 1.10.21 — Optional product cost price
+
+- Product Cost Price is now optional in the Add/Edit Product dialog.
+- Leaving Cost Price blank saves the product with a `0` cost instead of blocking the save.
+- Existing products with `0` cost now show a blank Cost Price field, while non-zero costs still show their saved value.
+- Updated English and Bengali labels to mark Cost Price as optional.
+
+## 1.10.20 — Resizable POS command rail
+
+- Added a draggable splitter between the receipt workspace and the right POS command rail.
+- The cashier can now resize the right-side receipt/action panel with the mouse.
+- Kept minimum widths so the receipt grid and command buttons remain usable while resizing.
+
+## 1.10.19 — Store creation category fix
+
+- Fixed new-store creation failing with `SQLite Error 19: UNIQUE constraint failed: Categories.StoreId, Categories.Name`.
+- New-store default category seeding now reuses or repairs already tracked/default rows before adding missing ones.
+- Preserved the new store's sync identity when saving from the Store Details dialog.
+- Blocked repeated Store save actions while one save is already in progress.
+- Added a regression that protects default category seeding from duplicate tracked rows.
+
 ## 1.10.18 — Store filter build fix
 
 - Restored `StoreFilterOption` as a standalone WPF helper model used by Dashboard and Reports.

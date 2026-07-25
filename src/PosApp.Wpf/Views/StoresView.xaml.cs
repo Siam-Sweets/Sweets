@@ -9,6 +9,7 @@ public partial class StoresView : UserControl, IRefreshable
 {
     private readonly IStoreService _stores;
     private readonly ISettingsService _settings;
+    private bool _isSaving;
 
     public StoresView(IStoreService stores, ISettingsService settings)
     {
@@ -20,7 +21,7 @@ public partial class StoresView : UserControl, IRefreshable
     public async Task RefreshAsync()
     {
         var currentId = App.CurrentStore?.Id ?? 0;
-        var rows = (await _stores.GetStoresAsync())
+        var rows = (await _stores.GetStoresAsync(includeInactive: false))
             .Select(store => new StoreRow(store, store.Id == currentId))
             .ToList();
         StoresGrid.ItemsSource = rows;
@@ -46,6 +47,9 @@ public partial class StoresView : UserControl, IRefreshable
 
     private async Task SaveAsync(Store store)
     {
+        if (_isSaving) return;
+        _isSaving = true;
+        IsEnabled = false;
         try
         {
             var saved = await _stores.SaveStoreAsync(store);
@@ -61,20 +65,10 @@ public partial class StoresView : UserControl, IRefreshable
             Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to save store",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
-    }
-
-    private async void ToggleActive_Click(object sender, RoutedEventArgs e)
-    {
-        if (Selected == null) return;
-        try
+        finally
         {
-            await _stores.SetStoreActiveAsync(Selected.Store.Id, !Selected.Store.IsActive);
-            await RefreshAsync();
-        }
-        catch (Exception ex)
-        {
-            Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to update store",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            IsEnabled = true;
+            _isSaving = false;
         }
     }
 
@@ -116,7 +110,6 @@ public partial class StoresView : UserControl, IRefreshable
         public string Name => Store.Name;
         public string? Address => Store.Address;
         public string? Phone => Store.Phone;
-        public bool IsActive => Store.IsActive;
         public bool IsCurrent { get; }
     }
 }

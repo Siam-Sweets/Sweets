@@ -250,7 +250,7 @@
     <sys:String x:Key="Prod_SoldByVolume">By volume</sys:String>
     <sys:String x:Key="Prod_SoldByLength">By length</sys:String>
     <sys:String x:Key="Prod_PricePer">Selling price per {0}</sys:String>
-    <sys:String x:Key="Prod_CostPer">Cost price per {0}</sys:String>
+    <sys:String x:Key="Prod_CostPer">Cost price per {0} (optional)</sys:String>
     <sys:String x:Key="Prod_StockIn">Stock quantity in {0} (blank = untracked)</sys:String>
     <sys:String x:Key="Prod_ThresholdIn">Low-stock threshold in {0} (blank = none)</sys:String>
     <sys:String x:Key="Prod_PerItemHelp">The price applies to one piece or pack.</sys:String>

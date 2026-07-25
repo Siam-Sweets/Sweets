@@ -250,7 +250,7 @@
     <sys:String x:Key="Prod_SoldByVolume">আয়তন অনুযায়ী</sys:String>
     <sys:String x:Key="Prod_SoldByLength">দৈর্ঘ্য অনুযায়ী</sys:String>
     <sys:String x:Key="Prod_PricePer">প্রতি {0}-এর বিক্রয়মূল্য</sys:String>
-    <sys:String x:Key="Prod_CostPer">প্রতি {0}-এর ক্রয়মূল্য</sys:String>
+    <sys:String x:Key="Prod_CostPer">প্রতি {0}-এর ক্রয়মূল্য (ঐচ্ছিক)</sys:String>
     <sys:String x:Key="Prod_StockIn">{0} এককে স্টক (ট্র্যাক না করলে ফাঁকা রাখুন)</sys:String>
     <sys:String x:Key="Prod_ThresholdIn">{0} এককে কম-স্টক সীমা (না থাকলে ফাঁকা)</sys:String>
     <sys:String x:Key="Prod_PerItemHelp">মূল্যটি একটি পিস বা প্যাকের জন্য প্রযোজ্য।</sys:String>
