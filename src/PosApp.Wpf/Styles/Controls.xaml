@@ -742,8 +742,6 @@
                                       Background="{TemplateBinding Background}"
                                       BorderBrush="{TemplateBinding BorderBrush}"
                                       BorderThickness="0"
-                                      CalendarButtonStyle="{TemplateBinding CalendarButtonStyle}"
-                                      CalendarDayButtonStyle="{TemplateBinding CalendarDayButtonStyle}"
                                       Style="{TemplateBinding CalendarItemStyle}"/>
                     </Border>
                 </ControlTemplate>

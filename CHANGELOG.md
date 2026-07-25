@@ -1,3 +1,9 @@
+## 1.10.29 — Calendar template build fix
+
+- Fixed the WPF build failure `MC3072` caused by assigning `CalendarButtonStyle` and `CalendarDayButtonStyle` directly to `CalendarItem`.
+- Kept the dark calendar popup styles applied at the parent `Calendar` level where WPF supports them.
+- Preserved the v1.10.28 Sync Center dark tab styling.
+
 ## 1.10.28 — Sync Center dark tabs fix
 
 - Fixed the Synchronization Center tabs and selected tab content area opening as a white/light surface in Dark mode.
