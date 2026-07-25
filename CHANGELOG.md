@@ -1,3 +1,9 @@
+## 1.10.30 — Sync regression helper build fix
+
+- Fixed `tests/PosApp.SyncRegression` failing to compile after the store-seeding regression started invoking `StoreService`.
+- Generalized the private-method reflection helper so the regression runner can call private async methods on both `CloudSyncService` and `StoreService`.
+- Preserved the stale-conflict and new-store category seeding regression coverage.
+
 ## 1.10.29 — Calendar template build fix
 
 - Fixed the WPF build failure `MC3072` caused by assigning `CalendarButtonStyle` and `CalendarDayButtonStyle` directly to `CalendarItem`.

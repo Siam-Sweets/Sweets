@@ -166,27 +166,27 @@ static async Task AssertResolutionAsync(
 }
 
 static async Task<T> InvokeAsync<T>(
-    CloudSyncService service,
+    object service,
     string methodName,
     params object[] arguments)
 {
-    var method = FindMethod(methodName);
+    var method = FindMethod(service.GetType(), methodName);
     return await (Task<T>)method.Invoke(service, arguments)!;
 }
 
 static async Task InvokeTaskAsync(
-    CloudSyncService service,
+    object service,
     string methodName,
     params object[] arguments)
 {
-    var method = FindMethod(methodName);
+    var method = FindMethod(service.GetType(), methodName);
     await (Task)method.Invoke(service, arguments)!;
 }
 
-static MethodInfo FindMethod(string methodName)
-    => typeof(CloudSyncService).GetMethod(
+static MethodInfo FindMethod(Type serviceType, string methodName)
+    => serviceType.GetMethod(
            methodName, BindingFlags.Instance | BindingFlags.NonPublic)
-       ?? throw new InvalidOperationException($"CloudSyncService.{methodName} was not found.");
+       ?? throw new InvalidOperationException($"{serviceType.Name}.{methodName} was not found.");
 
 static void Assert(bool condition, string message)
 {
