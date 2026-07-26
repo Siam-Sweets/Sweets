@@ -14,7 +14,7 @@ public class CatalogTransferService : ICatalogTransferService
     private readonly AppDbContext _db;
     private static readonly string[] Headers =
     {
-        "Name", "SKU", "Barcode", "Category", "Price", "CostPrice", "TaxRate",
+        "Name", "Barcode", "Category", "Price", "CostPrice", "TaxRate",
         "StockQuantity", "LowStockThreshold", "SaleMode", "Unit", "IsWeighted", "AllowDiscount", "IsActive"
     };
 
@@ -35,7 +35,6 @@ public class CatalogTransferService : ICatalogTransferService
             var values = new[]
             {
                 product.Name,
-                product.Sku ?? "",
                 product.Barcode ?? "",
                 product.Category?.Name ?? "Uncategorized",
                 Format(product.Price),
@@ -71,26 +70,24 @@ public class CatalogTransferService : ICatalogTransferService
             .ToDictionary(group => group.Key, group => group.First().Index);
         if (!headerMap.ContainsKey("name"))
             throw new InvalidOperationException("CSV must contain a Name column.");
-        var hasSkuColumn = headerMap.ContainsKey("sku");
         var hasBarcodeColumn = headerMap.ContainsKey("barcode");
         var hasUnitColumn = headerMap.ContainsKey("unit");
         var hasSaleModeColumn = headerMap.ContainsKey("salemode");
 
-        // Validate the entire scanner-identifier namespace before any database
-        // mutation. This turns late unique-index failures into precise row errors.
+        // Validate barcodes before any database mutation. This turns late
+        // unique-index failures into precise row errors.
         var identifiers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var rowNumber = 1; rowNumber < records.Count; rowNumber++)
         {
             foreach (var value in new[]
                      {
-                         EmptyToNull(Field(records[rowNumber], headerMap, "sku")),
                          EmptyToNull(Field(records[rowNumber], headerMap, "barcode"))
                      }.Where(value => value != null).Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 if (identifiers.TryGetValue(value!, out var firstRow) && firstRow != rowNumber + 1)
                     throw new InvalidOperationException(
-                        $"Rows {firstRow} and {rowNumber + 1}: identifier '{value}' is repeated. " +
-                        "Each SKU/barcode may identify only one CSV row.");
+                        $"Rows {firstRow} and {rowNumber + 1}: barcode '{value}' is repeated. " +
+                        "Each barcode may identify only one CSV row.");
                 identifiers[value!] = rowNumber + 1;
             }
         }
@@ -122,9 +119,7 @@ public class CatalogTransferService : ICatalogTransferService
                 }
                 ValidateLength(name, 100, "Name", rowNumber + 1);
 
-                var sku = EmptyToNull(Field(row, headerMap, "sku"));
                 var barcode = EmptyToNull(Field(row, headerMap, "barcode"));
-                ValidateLength(sku, 64, "SKU", rowNumber + 1);
                 ValidateLength(barcode, 64, "Barcode", rowNumber + 1);
                 var rowPrice = DecimalField(row, headerMap, "price");
                 var rowCost = DecimalField(row, headerMap, "costprice");
@@ -152,22 +147,20 @@ public class CatalogTransferService : ICatalogTransferService
                 Category? category = categories.FirstOrDefault(item =>
                     string.Equals(item.Name, categoryName, StringComparison.OrdinalIgnoreCase));
 
-                // SKU and barcode share the scanner's identifier namespace. Resolve
-                // every supplied identifier across both fields and reject an import
-                // row that would otherwise update an arbitrary product.
+                // Resolve by barcode first, then name for rows without a barcode.
                 var identifierMatches = products.Where(item =>
-                        IdentifierMatches(item, sku) || IdentifierMatches(item, barcode))
+                        IdentifierMatches(item, barcode))
                     .ToList();
                 if (identifierMatches.Count > 1)
                     throw new InvalidOperationException(
-                        $"Row {rowNumber + 1}: SKU and barcode identify different products. Correct the identifiers and try again.");
+                        $"Row {rowNumber + 1}: barcode identifies multiple products. Correct the barcode and try again.");
                 var product = identifierMatches.SingleOrDefault();
-                if (product == null && string.IsNullOrEmpty(sku) && string.IsNullOrEmpty(barcode))
+                if (product == null && string.IsNullOrEmpty(barcode))
                 {
                     var nameMatches = products.Where(item =>
                         string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase)).ToList();
                     if (nameMatches.Count > 1)
-                        throw new InvalidOperationException($"Row {rowNumber + 1}: multiple products are named '{name}'. Add an SKU or barcode to identify the correct product.");
+                        throw new InvalidOperationException($"Row {rowNumber + 1}: multiple products are named '{name}'. Add a barcode to identify the correct product.");
                     product = nameMatches.SingleOrDefault();
                 }
                 var isNew = product == null;
@@ -187,7 +180,7 @@ public class CatalogTransferService : ICatalogTransferService
                     product = new Product
                     {
                         Name = name,
-                        Sku = sku,
+                        Sku = null,
                         Barcode = barcode,
                         Category = category!,
                         Price = rowPrice ?? 0m,
@@ -228,11 +221,10 @@ public class CatalogTransferService : ICatalogTransferService
                 }
 
                 var oldQuantity = product!.StockQuantity;
-                var oldCost = product.CostPrice;
                 if (mode == ProductImportMode.CatalogOnly)
                 {
                     product.Name = name;
-                    if (hasSkuColumn) product.Sku = sku;
+                    product.Sku = null;
                     if (hasBarcodeColumn) product.Barcode = barcode;
                     product.Category = category!;
                     SetDecimal(row, headerMap, "price", value => product.Price = value);
@@ -268,10 +260,8 @@ public class CatalogTransferService : ICatalogTransferService
                             throw new InvalidOperationException($"Row {rowNumber + 1}: purchase quantity cannot be negative.");
                         stockDelta = importedStock.Value;
                         var newQuantity = oldStock + stockDelta;
-                        var incomingCost = importedCost ?? oldCost;
-                        if (newQuantity > 0m)
-                            product.CostPrice =
-                                (Math.Max(0m, oldStock) * oldCost + stockDelta * incomingCost) / newQuantity;
+                        if (importedCost.HasValue)
+                            product.CostPrice = importedCost.Value;
                         product.StockQuantity = newQuantity;
                     }
 
@@ -334,8 +324,7 @@ public class CatalogTransferService : ICatalogTransferService
 
     private static bool IdentifierMatches(Product product, string? identifier) =>
         !string.IsNullOrEmpty(identifier) &&
-        (string.Equals(product.Sku, identifier, StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(product.Barcode, identifier, StringComparison.OrdinalIgnoreCase));
+        string.Equals(product.Barcode, identifier, StringComparison.OrdinalIgnoreCase);
 
     private static void ValidateLength(string? value, int maximum, string field, int rowNumber)
     {

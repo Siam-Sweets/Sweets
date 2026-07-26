@@ -12,10 +12,9 @@
     <sys:String x:Key="Common_View">View</sys:String>
     <sys:String x:Key="Common_Edit">Edit</sys:String>
     <sys:String x:Key="Common_Print">Print</sys:String>
-    <sys:String x:Key="Prod_Subtitle">Manage your product catalog, prices, and identifiers</sys:String>
+    <sys:String x:Key="Prod_Subtitle">Manage your product catalog, prices, and barcodes</sys:String>
     <sys:String x:Key="Prod_ImportCsv">Import CSV</sys:String>
     <sys:String x:Key="Prod_ExportCsv">Export CSV</sys:String>
-    <sys:String x:Key="Prod_SkuOnly">SKU</sys:String>
     <sys:String x:Key="Prod_Barcode">Barcode</sys:String>
     <sys:String x:Key="Prod_WeightedHint">Click to change whether this product is sold by weight</sys:String>
     <sys:String x:Key="Inv_Subtitle">Track stock levels, make adjustments, and review movement history</sys:String>
@@ -27,7 +26,7 @@
     <sys:String x:Key="Inv_RecentMovements">Recent Stock Movements</sys:String>
     <sys:String x:Key="Inv_CountTitle">Physical Inventory Count</sys:String>
     <sys:String x:Key="Inv_CountSubtitle">Enter only the products you counted. Saving posts all differences as one audited stock adjustment.</sys:String>
-    <sys:String x:Key="Inv_CountSearchHint">Search by product, SKU, or barcode</sys:String>
+    <sys:String x:Key="Inv_CountSearchHint">Search by product or barcode</sys:String>
     <sys:String x:Key="Inv_SystemQty">System Qty</sys:String>
     <sys:String x:Key="Inv_CountedQty">Counted Qty</sys:String>
     <sys:String x:Key="Inv_Difference">Difference</sys:String>
@@ -236,7 +235,6 @@
     <sys:String x:Key="Prod_Edit">Edit</sys:String>
     <sys:String x:Key="Prod_Delete">Delete</sys:String>
     <sys:String x:Key="Prod_Name">Name</sys:String>
-    <sys:String x:Key="Prod_Sku">SKU / Barcode</sys:String>
     <sys:String x:Key="Prod_Category">Category</sys:String>
     <sys:String x:Key="Prod_Price">Price</sys:String>
     <sys:String x:Key="Prod_Cost">Cost</sys:String>
@@ -327,7 +325,7 @@
     <sys:String x:Key="Rpt_Custom">Custom</sys:String>
     <sys:String x:Key="Rpt_GrossSales">Gross Sales</sys:String>
     <sys:String x:Key="Rpt_NetSales">Net Sales</sys:String>
-    <sys:String x:Key="Rpt_Profit">Gross Profit</sys:String>
+    <sys:String x:Key="Rpt_Profit">Net Profit</sys:String>
     <sys:String x:Key="Rpt_TaxCollected">Tax Collected</sys:String>
     <sys:String x:Key="Rpt_Transactions">Transactions</sys:String>
     <sys:String x:Key="Rpt_Items">Items Sold</sys:String>
@@ -390,15 +388,13 @@
     <sys:String x:Key="Set_Discounts">Discounts</sys:String>
 
     <!-- Receipt-first POS workflow -->
-    <sys:String x:Key="POS_SearchReceipt">Scan barcode, enter code, or search products…</sys:String>
+    <sys:String x:Key="POS_SearchReceipt">Scan barcode or search products…</sys:String>
     <sys:String x:Key="POS_SearchButton">Find products (F3)</sys:String>
     <sys:String x:Key="POS_SearchField">Search by</sys:String>
     <sys:String x:Key="POS_SearchAllFields">All fields</sys:String>
     <sys:String x:Key="POS_SearchProductName">Product name</sys:String>
-    <sys:String x:Key="POS_SearchProductCode">Product code</sys:String>
     <sys:String x:Key="POS_SearchBarcode">Barcode</sys:String>
-    <sys:String x:Key="POS_SearchFilterHint">Enter a product name, code, or barcode…</sys:String>
-    <sys:String x:Key="POS_CodeLabel">Code</sys:String>
+    <sys:String x:Key="POS_SearchFilterHint">Enter a product name or barcode…</sys:String>
     <sys:String x:Key="POS_BarcodeLabel">Barcode</sys:String>
     <sys:String x:Key="POS_LineDiscount">Line discount</sys:String>
     <sys:String x:Key="POS_DiscountPromotion">Promotion (optional)</sys:String>
@@ -436,7 +432,7 @@
     <sys:String x:Key="POS_More">More</sys:String>
     <sys:String x:Key="POS_VoidOrder">Void order</sys:String>
     <sys:String x:Key="POS_FindProducts">Find products</sys:String>
-    <sys:String x:Key="POS_FindProductsHint">Type a name, SKU, or barcode. Results stay in a fixed, touch-friendly grid.</sys:String>
+    <sys:String x:Key="POS_FindProductsHint">Type a name or barcode. Results stay in a fixed, touch-friendly grid.</sys:String>
 
     <!-- Management shell -->
     <sys:String x:Key="Shell_BackToPOS">Back to receipt</sys:String>

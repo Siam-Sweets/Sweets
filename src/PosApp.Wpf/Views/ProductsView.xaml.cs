@@ -80,7 +80,6 @@ public partial class ProductsView : UserControl, IRefreshable
             (_selectedCategoryId == 0 || p.CategoryId == _selectedCategoryId) &&
             (string.IsNullOrEmpty(term) ||
              p.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-             (p.Sku?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
              (p.Barcode?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
              (p.Category?.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)))
             .ToList();
@@ -250,7 +249,7 @@ public sealed class CatalogImportModeDialog : Window
         panel.Children.Add(new TextBlock { Text = "How should StockQuantity be handled?", Style = (Style)FindResource("Heading2") });
         panel.Children.Add(new TextBlock
         {
-            Text = "All modes create missing products and categories. Existing products are matched by SKU, barcode, then name.",
+            Text = "All modes create missing products and categories. Existing products are matched by barcode, then name.",
             TextWrapping = TextWrapping.Wrap,
             Style = (Style)FindResource("Muted"),
             Margin = new Thickness(0, 0, 0, 18)
@@ -297,7 +296,7 @@ public sealed class CatalogImportModeDialog : Window
         ProductImportMode.InventoryCount =>
             "This will replace existing stock balances with the quantities in the CSV and record every difference. Continue?",
         ProductImportMode.Purchase =>
-            "This will add the CSV quantities to existing stock and update moving-average cost. Continue?",
+            "This will add the CSV quantities to existing stock and update product cost from each CSV cost. Continue?",
         _ => "This will update catalog fields. Existing stock balances will not be changed. Continue?"
     };
 }
@@ -308,7 +307,6 @@ public class ProductEditDialog : Window
     private readonly Product _product;
     private readonly bool _isNew;
     private readonly TextBox _nameBox = new();
-    private readonly TextBox _skuBox = new();
     private readonly TextBox _barcodeBox = new();
     private readonly TextBox _priceBox = new();
     private readonly TextBox _costBox = new();
@@ -344,7 +342,6 @@ public class ProductEditDialog : Window
         Background = (System.Windows.Media.Brush)Application.Current.FindResource("BackgroundBrush");
 
         _nameBox.Text = _product.Name;
-        _skuBox.Text = _product.Sku ?? string.Empty;
         _barcodeBox.Text = _product.Barcode ?? string.Empty;
         _priceBox.Text = _product.Price.ToString("0.####", CultureInfo.CurrentCulture);
         _costBox.Text = CostPriceToEditorText(_product.CostPrice);
@@ -379,7 +376,6 @@ public class ProductEditDialog : Window
 
         var panel = new StackPanel { Margin = new Thickness(24) };
         panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_Name", "Name"), _nameBox));
-        panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_SkuOnly", "SKU"), _skuBox));
         panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_Barcode", "Barcode"), _barcodeBox));
         panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_Category", "Category"), _categoryBox));
         panel.Children.Add(MakeRowForExternal(DialogLayout.Text("Prod_SaleMode", "Sale mode"), _saleModeBox));
@@ -447,7 +443,7 @@ public class ProductEditDialog : Window
         }
 
         _product.Name = name;
-        _product.Sku = NormalizeOptional(_skuBox.Text);
+        _product.Sku = null;
         _product.Barcode = NormalizeOptional(_barcodeBox.Text);
         _product.CategoryId = category.Id;
         _product.Category = null;
@@ -621,7 +617,7 @@ public class ProductEditDialog : Window
         Id = source.Id,
         Name = source.Name,
         Description = source.Description,
-        Sku = source.Sku,
+        Sku = null,
         Barcode = source.Barcode,
         CategoryId = source.CategoryId,
         Price = source.Price,

@@ -838,7 +838,7 @@ public sealed partial class CloudSyncService : ICloudSyncService
             SyncId = productSyncId,
             Name = source.Name,
             Description = source.Description,
-            Sku = source.Sku,
+            Sku = null,
             Barcode = source.Barcode,
             CategoryId = category.Id,
             Price = source.Price,

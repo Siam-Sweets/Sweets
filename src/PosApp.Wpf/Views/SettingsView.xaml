@@ -161,10 +161,6 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="{DynamicResource Set_EmailSection}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="22"><Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="{DynamicResource Set_EmailSection}" Style="{StaticResource Heading2}"/><TextBlock Text="{DynamicResource Set_OfflineEmail}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border></StackPanel></ScrollViewer>
-            </TabItem>
-
             <TabItem Header="{DynamicResource Set_Cloud}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="22">

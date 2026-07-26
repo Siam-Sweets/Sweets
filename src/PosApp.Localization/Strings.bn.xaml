@@ -12,10 +12,9 @@
     <sys:String x:Key="Common_View">দেখুন</sys:String>
     <sys:String x:Key="Common_Edit">সম্পাদনা</sys:String>
     <sys:String x:Key="Common_Print">প্রিন্ট</sys:String>
-    <sys:String x:Key="Prod_Subtitle">পণ্যের তালিকা, মূল্য ও শনাক্তকারী পরিচালনা করুন</sys:String>
+    <sys:String x:Key="Prod_Subtitle">পণ্যের তালিকা, মূল্য ও বারকোড পরিচালনা করুন</sys:String>
     <sys:String x:Key="Prod_ImportCsv">CSV আমদানি</sys:String>
     <sys:String x:Key="Prod_ExportCsv">CSV রপ্তানি</sys:String>
-    <sys:String x:Key="Prod_SkuOnly">SKU</sys:String>
     <sys:String x:Key="Prod_Barcode">বারকোড</sys:String>
     <sys:String x:Key="Prod_WeightedHint">পণ্যটি ওজন অনুযায়ী বিক্রি হবে কি না পরিবর্তন করতে ক্লিক করুন</sys:String>
     <sys:String x:Key="Inv_Subtitle">স্টক পর্যায়, সমন্বয় ও চলাচলের ইতিহাস পরিচালনা করুন</sys:String>
@@ -27,7 +26,7 @@
     <sys:String x:Key="Inv_RecentMovements">সাম্প্রতিক স্টক চলাচল</sys:String>
     <sys:String x:Key="Inv_CountTitle">শারীরিক ইনভেন্টরি গণনা</sys:String>
     <sys:String x:Key="Inv_CountSubtitle">শুধু গণনা করা পণ্য লিখুন। সংরক্ষণ করলে সব পার্থক্য একটি নিরীক্ষিত স্টক সমন্বয় হিসেবে যোগ হবে।</sys:String>
-    <sys:String x:Key="Inv_CountSearchHint">পণ্য, SKU বা বারকোড দিয়ে খুঁজুন</sys:String>
+    <sys:String x:Key="Inv_CountSearchHint">পণ্য বা বারকোড দিয়ে খুঁজুন</sys:String>
     <sys:String x:Key="Inv_SystemQty">সিস্টেম পরিমাণ</sys:String>
     <sys:String x:Key="Inv_CountedQty">গণনা করা পরিমাণ</sys:String>
     <sys:String x:Key="Inv_Difference">পার্থক্য</sys:String>
@@ -236,7 +235,6 @@
     <sys:String x:Key="Prod_Edit">সম্পাদনা</sys:String>
     <sys:String x:Key="Prod_Delete">মুছুন</sys:String>
     <sys:String x:Key="Prod_Name">নাম</sys:String>
-    <sys:String x:Key="Prod_Sku">এসকেইউ / বারকোড</sys:String>
     <sys:String x:Key="Prod_Category">বিভাগ</sys:String>
     <sys:String x:Key="Prod_Price">মূল্য</sys:String>
     <sys:String x:Key="Prod_Cost">ক্রয়মূল্য</sys:String>
@@ -327,7 +325,7 @@
     <sys:String x:Key="Rpt_Custom">কাস্টম</sys:String>
     <sys:String x:Key="Rpt_GrossSales">মোট বিক্রয়</sys:String>
     <sys:String x:Key="Rpt_NetSales">নিট বিক্রয়</sys:String>
-    <sys:String x:Key="Rpt_Profit">মোট লাভ</sys:String>
+    <sys:String x:Key="Rpt_Profit">নিট লাভ</sys:String>
     <sys:String x:Key="Rpt_TaxCollected">আদায়কৃত ট্যাক্স</sys:String>
     <sys:String x:Key="Rpt_Transactions">লেনদেন</sys:String>
     <sys:String x:Key="Rpt_Items">বিক্রিত পণ্য</sys:String>
@@ -390,15 +388,13 @@
     <sys:String x:Key="Set_Discounts">ছাড়</sys:String>
 
     <!-- রসিদ-কেন্দ্রিক পিওএস -->
-    <sys:String x:Key="POS_SearchReceipt">বারকোড স্ক্যান, কোড লিখুন বা পণ্য খুঁজুন…</sys:String>
+    <sys:String x:Key="POS_SearchReceipt">বারকোড স্ক্যান করুন বা পণ্য খুঁজুন…</sys:String>
     <sys:String x:Key="POS_SearchButton">পণ্য খুঁজুন (F3)</sys:String>
     <sys:String x:Key="POS_SearchField">অনুসন্ধানের ধরন</sys:String>
     <sys:String x:Key="POS_SearchAllFields">সব ক্ষেত্র</sys:String>
     <sys:String x:Key="POS_SearchProductName">পণ্যের নাম</sys:String>
-    <sys:String x:Key="POS_SearchProductCode">পণ্য কোড</sys:String>
     <sys:String x:Key="POS_SearchBarcode">বারকোড</sys:String>
-    <sys:String x:Key="POS_SearchFilterHint">পণ্যের নাম, কোড বা বারকোড লিখুন…</sys:String>
-    <sys:String x:Key="POS_CodeLabel">কোড</sys:String>
+    <sys:String x:Key="POS_SearchFilterHint">পণ্যের নাম বা বারকোড লিখুন…</sys:String>
     <sys:String x:Key="POS_BarcodeLabel">বারকোড</sys:String>
     <sys:String x:Key="POS_LineDiscount">আইটেম ছাড়</sys:String>
     <sys:String x:Key="POS_DiscountPromotion">প্রমোশন (ঐচ্ছিক)</sys:String>
@@ -436,7 +432,7 @@
     <sys:String x:Key="POS_More">আরও</sys:String>
     <sys:String x:Key="POS_VoidOrder">অর্ডার বাতিল</sys:String>
     <sys:String x:Key="POS_FindProducts">পণ্য খুঁজুন</sys:String>
-    <sys:String x:Key="POS_FindProductsHint">নাম, এসকেইউ বা বারকোড লিখুন। ফলাফল নির্দিষ্ট আকারের টাচ-বান্ধব গ্রিডে থাকবে।</sys:String>
+    <sys:String x:Key="POS_FindProductsHint">নাম বা বারকোড লিখুন। ফলাফল নির্দিষ্ট আকারের টাচ-বান্ধব গ্রিডে থাকবে।</sys:String>
 
     <!-- ব্যবস্থাপনা -->
     <sys:String x:Key="Shell_BackToPOS">রসিদে ফিরুন</sys:String>

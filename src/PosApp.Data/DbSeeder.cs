@@ -47,15 +47,7 @@ public static class DbSeeder
         // A restored or manually repaired database can contain only some of the
         // built-in categories. Ensure each category independently so setup-time
         // sample-product creation can always resolve every required category.
-        var categoryDefinitions = new[]
-        {
-            (Name: "Beverages", Color: "#2D7FF9", SortOrder: 1),
-            (Name: "Snacks", Color: "#F59E0B", SortOrder: 2),
-            (Name: "Groceries", Color: "#10B981", SortOrder: 3),
-            (Name: "Household", Color: "#8B5CF6", SortOrder: 4),
-            (Name: "Personal Care", Color: "#EC4899", SortOrder: 5),
-            (Name: "Produce", Color: "#22C55E", SortOrder: 6)
-        };
+        var categoryDefinitions = DefaultCategoryDefinitions;
         var categories = await db.Categories.ToListAsync();
         var categoriesAdded = false;
         foreach (var definition in categoryDefinitions)
@@ -107,16 +99,22 @@ public static class DbSeeder
     /// Adds the built-in sample catalog once. This is called only after the
     /// first-run setup toggle has been explicitly enabled by the store owner.
     /// </summary>
-    public static async Task<bool> SeedSampleProductsAsync(AppDbContext db)
+    public static async Task<bool> SeedSampleProductsAsync(AppDbContext db, int? storeId = null)
     {
         ArgumentNullException.ThrowIfNull(db);
 
-        if (await db.Products.AnyAsync())
+        var targetStoreId = storeId.GetValueOrDefault(db.CurrentStoreId);
+        if (targetStoreId <= 0)
+            throw new InvalidOperationException("A valid store is required before sample products can be added.");
+
+        if (await db.Products.IgnoreQueryFilters().AnyAsync(product => product.StoreId == targetStoreId))
             return false;
 
-        var categories = await db.Categories.ToListAsync();
-        if (categories.Count == 0)
-            throw new InvalidOperationException("Default categories must exist before sample products can be added.");
+        await EnsureDefaultCategoriesAsync(db, targetStoreId);
+        var categories = await db.Categories
+            .IgnoreQueryFilters()
+            .Where(category => category.StoreId == targetStoreId)
+            .ToListAsync();
 
         Category CategoryNamed(string name) => categories.First(category =>
             string.Equals(category.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -128,21 +126,21 @@ public static class DbSeeder
 
         var products = new[]
         {
-            new Product { Name = "Mineral Water 500ml", Sku = "BV-001", CategoryId = beverages.Id, Price = 20m, CostPrice = 12m, StockQuantity = 100, LowStockThreshold = 10 },
-            new Product { Name = "Cola 330ml", Sku = "BV-002", CategoryId = beverages.Id, Price = 40m, CostPrice = 28m, StockQuantity = 80, LowStockThreshold = 10 },
-            new Product { Name = "Orange Juice 1L", Sku = "BV-003", CategoryId = beverages.Id, Price = 180m, CostPrice = 140m, StockQuantity = 24, LowStockThreshold = 5 },
-            new Product { Name = "Green Tea 25bag", Sku = "BV-004", CategoryId = beverages.Id, Price = 120m, CostPrice = 85m, StockQuantity = 30, LowStockThreshold = 5 },
-            new Product { Name = "Potato Chips 50g", Sku = "SN-001", CategoryId = snacks.Id, Price = 35m, CostPrice = 22m, StockQuantity = 60, LowStockThreshold = 10 },
-            new Product { Name = "Chocolate Bar", Sku = "SN-002", CategoryId = snacks.Id, Price = 60m, CostPrice = 40m, StockQuantity = 50, LowStockThreshold = 10 },
-            new Product { Name = "Cookies Pack", Sku = "SN-003", CategoryId = snacks.Id, Price = 75m, CostPrice = 50m, StockQuantity = 40, LowStockThreshold = 5 },
-            new Product { Name = "Rice 5kg", Sku = "GR-001", CategoryId = groceries.Id, Price = 520m, CostPrice = 460m, StockQuantity = 20, LowStockThreshold = 5 },
-            new Product { Name = "Cooking Oil 1L", Sku = "GR-002", CategoryId = groceries.Id, Price = 180m, CostPrice = 155m, StockQuantity = 25, LowStockThreshold = 5 },
-            new Product { Name = "Sugar 1kg", Sku = "GR-003", CategoryId = groceries.Id, Price = 110m, CostPrice = 95m, StockQuantity = 30, LowStockThreshold = 5 },
-            new Product { Name = "Salt 500g", Sku = "GR-004", CategoryId = groceries.Id, Price = 35m, CostPrice = 25m, StockQuantity = 40, LowStockThreshold = 5 },
-            new Product { Name = "Banana (per kg)", Sku = "PR-001", CategoryId = produce.Id, Price = 80m, CostPrice = 55m, StockQuantity = 50, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
-            new Product { Name = "Tomato (per kg)", Sku = "PR-002", CategoryId = produce.Id, Price = 60m, CostPrice = 40m, StockQuantity = 40, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
-            new Product { Name = "Potato (per kg)", Sku = "PR-003", CategoryId = produce.Id, Price = 45m, CostPrice = 30m, StockQuantity = 60, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
-            new Product { Name = "Onion (per kg)", Sku = "PR-004", CategoryId = produce.Id, Price = 70m, CostPrice = 50m, StockQuantity = 50, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram }
+            new Product { StoreId = targetStoreId, Name = "Mineral Water 500ml", CategoryId = beverages.Id, Price = 20m, CostPrice = 12m, StockQuantity = 100, LowStockThreshold = 10 },
+            new Product { StoreId = targetStoreId, Name = "Cola 330ml", CategoryId = beverages.Id, Price = 40m, CostPrice = 28m, StockQuantity = 80, LowStockThreshold = 10 },
+            new Product { StoreId = targetStoreId, Name = "Orange Juice 1L", CategoryId = beverages.Id, Price = 180m, CostPrice = 140m, StockQuantity = 24, LowStockThreshold = 5 },
+            new Product { StoreId = targetStoreId, Name = "Green Tea 25bag", CategoryId = beverages.Id, Price = 120m, CostPrice = 85m, StockQuantity = 30, LowStockThreshold = 5 },
+            new Product { StoreId = targetStoreId, Name = "Potato Chips 50g", CategoryId = snacks.Id, Price = 35m, CostPrice = 22m, StockQuantity = 60, LowStockThreshold = 10 },
+            new Product { StoreId = targetStoreId, Name = "Chocolate Bar", CategoryId = snacks.Id, Price = 60m, CostPrice = 40m, StockQuantity = 50, LowStockThreshold = 10 },
+            new Product { StoreId = targetStoreId, Name = "Cookies Pack", CategoryId = snacks.Id, Price = 75m, CostPrice = 50m, StockQuantity = 40, LowStockThreshold = 5 },
+            new Product { StoreId = targetStoreId, Name = "Rice 5kg", CategoryId = groceries.Id, Price = 520m, CostPrice = 460m, StockQuantity = 20, LowStockThreshold = 5 },
+            new Product { StoreId = targetStoreId, Name = "Cooking Oil 1L", CategoryId = groceries.Id, Price = 180m, CostPrice = 155m, StockQuantity = 25, LowStockThreshold = 5 },
+            new Product { StoreId = targetStoreId, Name = "Sugar 1kg", CategoryId = groceries.Id, Price = 110m, CostPrice = 95m, StockQuantity = 30, LowStockThreshold = 5 },
+            new Product { StoreId = targetStoreId, Name = "Salt 500g", CategoryId = groceries.Id, Price = 35m, CostPrice = 25m, StockQuantity = 40, LowStockThreshold = 5 },
+            new Product { StoreId = targetStoreId, Name = "Banana (per kg)", CategoryId = produce.Id, Price = 80m, CostPrice = 55m, StockQuantity = 50, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
+            new Product { StoreId = targetStoreId, Name = "Tomato (per kg)", CategoryId = produce.Id, Price = 60m, CostPrice = 40m, StockQuantity = 40, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
+            new Product { StoreId = targetStoreId, Name = "Potato (per kg)", CategoryId = produce.Id, Price = 45m, CostPrice = 30m, StockQuantity = 60, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram },
+            new Product { StoreId = targetStoreId, Name = "Onion (per kg)", CategoryId = produce.Id, Price = 70m, CostPrice = 50m, StockQuantity = 50, LowStockThreshold = 5, IsWeighted = true, Unit = UnitOfMeasure.Kilogram }
         };
 
         db.Products.AddRange(products);
@@ -153,6 +151,7 @@ public static class DbSeeder
             {
                 db.StockTransactions.Add(new StockTransaction
                 {
+                    StoreId = targetStoreId,
                     // Use the navigation property so EF propagates the generated
                     // product key to the stock transaction during SaveChanges.
                     Product = product,
@@ -167,6 +166,45 @@ public static class DbSeeder
 
         await db.SaveChangesAsync();
         return true;
+    }
+
+    private static readonly (string Name, string Color, int SortOrder)[] DefaultCategoryDefinitions =
+    {
+        ("Beverages", "#2D7FF9", 1),
+        ("Snacks", "#F59E0B", 2),
+        ("Groceries", "#10B981", 3),
+        ("Household", "#8B5CF6", 4),
+        ("Personal Care", "#EC4899", 5),
+        ("Produce", "#22C55E", 6)
+    };
+
+    private static async Task EnsureDefaultCategoriesAsync(AppDbContext db, int storeId)
+    {
+        var categories = await db.Categories
+            .IgnoreQueryFilters()
+            .Where(category => category.StoreId == storeId)
+            .ToListAsync();
+        var added = false;
+        foreach (var definition in DefaultCategoryDefinitions)
+        {
+            if (categories.Any(category =>
+                    string.Equals(category.Name, definition.Name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var category = new Category
+            {
+                StoreId = storeId,
+                Name = definition.Name,
+                Color = definition.Color,
+                SortOrder = definition.SortOrder
+            };
+            db.Categories.Add(category);
+            categories.Add(category);
+            added = true;
+        }
+
+        if (added)
+            await db.SaveChangesAsync();
     }
 
     private const int Pbkdf2Iterations = 120_000;

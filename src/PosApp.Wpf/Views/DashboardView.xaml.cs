@@ -91,7 +91,7 @@ public partial class DashboardView : UserControl, IRefreshable
             PeriodText.Text = $"{from:dd MMM yyyy} – {to:dd MMM yyyy}";
             SalesText.Text = FormattingUtilities.Money(range.NetSales, App.StoreSettings);
             TransactionsText.Text = range.TransactionCount.ToString();
-            ProfitText.Text = FormattingUtilities.Money(range.GrossProfit, App.StoreSettings);
+            ProfitText.Text = FormattingUtilities.Money(range.NetProfit, App.StoreSettings);
             TodayText.Text = FormattingUtilities.Money(today.NetSales, App.StoreSettings);
             DailyGrid.ItemsSource = range.Daily.OrderByDescending(row => row.Date).ToList();
             TopProductsGrid.ItemsSource = _topProducts;
@@ -153,7 +153,7 @@ public partial class DashboardView : UserControl, IRefreshable
             $"Period: {range.From:dd MMM yyyy} - {range.To:dd MMM yyyy}");
         PageReportPrinter.AppendMetric(builder, "Sales", PageReportPrinter.Money(range.NetSales));
         PageReportPrinter.AppendMetric(builder, "Transactions", range.TransactionCount.ToString());
-        PageReportPrinter.AppendMetric(builder, "Gross profit", PageReportPrinter.Money(range.GrossProfit));
+        PageReportPrinter.AppendMetric(builder, "Net profit", PageReportPrinter.Money(range.NetProfit));
         PageReportPrinter.AppendMetric(builder, "Today", PageReportPrinter.Money(today.NetSales));
 
         PageReportPrinter.AppendSection(builder, "Daily sales");
@@ -161,14 +161,14 @@ public partial class DashboardView : UserControl, IRefreshable
         foreach (var row in range.Daily.OrderBy(item => item.Date))
             PageReportPrinter.AppendEntry(builder, row.Date.ToString("dd MMM yyyy"),
                 $"Txns {row.TransactionCount} | Net {PageReportPrinter.Money(row.NetSales)}",
-                $"Gross profit {PageReportPrinter.Money(row.GrossProfit)}");
+                $"Net profit {PageReportPrinter.Money(row.NetProfit)}");
 
         PageReportPrinter.AppendSection(builder, "Store performance");
         if (_storePerformance.Count == 0) PageReportPrinter.AppendWrapped(builder, "No store sales in the selected period.");
         foreach (var row in _storePerformance)
             PageReportPrinter.AppendEntry(builder, $"{row.StoreCode} - {row.StoreName}",
                 $"Transactions {row.TransactionCount} | Net {PageReportPrinter.Money(row.NetSales)}",
-                $"Gross profit {PageReportPrinter.Money(row.GrossProfit)}");
+                $"Net profit {PageReportPrinter.Money(row.NetProfit)}");
 
         PageReportPrinter.AppendSection(builder, "Payment breakdown");
         if (_payments.Count == 0) PageReportPrinter.AppendWrapped(builder, "No payments in the selected period.");

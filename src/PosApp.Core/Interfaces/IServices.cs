@@ -19,7 +19,7 @@ public interface IInventoryService
         int? categoryId = null,
         ProductSearchField searchField = ProductSearchField.All,
         bool includeInactive = false);
-    Task<Product?> GetProductBySkuAsync(string sku);
+    Task<Product?> GetProductByBarcodeAsync(string barcode);
     Task<Product> CreateOrUpdateProductAsync(Product product, int? userId = null);
     Task SetProductActiveAsync(int productId, bool isActive);
     Task AdjustStockAsync(int productId, decimal delta, StockTransactionType type, string? note = null, int? userId = null, decimal? unitCost = null);
@@ -38,6 +38,7 @@ public interface IPurchaseService
     Task SetSupplierActiveAsync(int supplierId, bool isActive);
     Task<IReadOnlyList<PurchaseDocument>> GetPurchasesAsync(DateTime from, DateTime to);
     Task<PurchaseDocument> PostPurchaseAsync(PurchaseDraft draft);
+    Task<PurchaseDocument> UpdatePurchaseItemUnitCostAsync(int purchaseItemId, decimal unitCost);
 }
 
 public interface IRegisterService

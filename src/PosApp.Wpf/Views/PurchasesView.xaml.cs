@@ -182,7 +182,9 @@ public partial class PurchasesView : UserControl, IRefreshable
 
     private void ShowDetails(PurchaseDocument purchase)
     {
-        new PurchaseDetailsDialog(purchase) { Owner = Window.GetWindow(this) }.ShowDialog();
+        var dialog = new PurchaseDetailsDialog(_purchases, purchase) { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() == true)
+            _ = RefreshAsync();
     }
 }
 
@@ -222,9 +224,7 @@ public sealed class PurchaseEditDialog : Window
         foreach (var product in products)
             _productCombo.Items.Add(new ComboBoxItem
             {
-                Content = string.IsNullOrWhiteSpace(product.Sku)
-                    ? product.Name
-                    : $"{product.Name}  ·  {product.Sku}",
+                Content = product.Name,
                 Tag = product
             });
         _productCombo.SelectionChanged += Product_SelectionChanged;
@@ -235,7 +235,6 @@ public sealed class PurchaseEditDialog : Window
         _linesGrid.AutoGenerateColumns = false;
         _linesGrid.IsReadOnly = true;
         _linesGrid.Columns.Add(new DataGridTextColumn { Header = "Product", Binding = new System.Windows.Data.Binding("ProductName"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-        _linesGrid.Columns.Add(new DataGridTextColumn { Header = "SKU", Binding = new System.Windows.Data.Binding("Sku"), Width = 100 });
         _linesGrid.Columns.Add(new DataGridTextColumn { Header = "Qty", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "0.###" }, Width = 75 });
         _linesGrid.Columns.Add(new DataGridTextColumn { Header = "Cost", Binding = new System.Windows.Data.Binding("UnitCost") { StringFormat = "0.00" }, Width = 90 });
         _linesGrid.Columns.Add(new DataGridTextColumn { Header = "Tax %", Binding = new System.Windows.Data.Binding("TaxRate") { StringFormat = "0.###" }, Width = 70 });
@@ -380,7 +379,7 @@ public sealed class PurchaseEditDialog : Window
             !FormattingUtilities.TryParseDecimal(_costBox.Text, out var cost) || cost < 0m ||
             !FormattingUtilities.TryParseDecimal(_taxBox.Text, out var tax) || tax is < 0m or > 100m)
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter a positive quantity and valid cost/tax values.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Enter a positive quantity, a cost of 0 or higher, and valid tax.", "Purchase", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -392,7 +391,6 @@ public sealed class PurchaseEditDialog : Window
             {
                 ProductId = product.Id,
                 ProductName = product.Name,
-                Sku = product.Sku,
                 Quantity = quantity,
                 UnitCost = cost,
                 TaxRate = tax
@@ -405,7 +403,6 @@ public sealed class PurchaseEditDialog : Window
             {
                 ProductId = existing.ProductId,
                 ProductName = existing.ProductName,
-                Sku = existing.Sku,
                 Quantity = existing.Quantity + quantity,
                 UnitCost = cost,
                 TaxRate = tax
@@ -588,8 +585,16 @@ public sealed class SupplierEditDialog : Window
 
 public sealed class PurchaseDetailsDialog : Window
 {
-    public PurchaseDetailsDialog(PurchaseDocument purchase)
+    private readonly IPurchaseService _service;
+    private readonly PurchaseDocument _purchase;
+    private readonly DataGrid _grid = new();
+    private readonly Dictionary<int, decimal> _originalUnitCosts;
+
+    public PurchaseDetailsDialog(IPurchaseService service, PurchaseDocument purchase)
     {
+        _service = service;
+        _purchase = purchase;
+        _originalUnitCosts = purchase.Items.ToDictionary(item => item.Id, item => item.UnitCost);
         Title = $"Purchase {purchase.DocumentNumber}";
         Width = 760;
         Height = 540;
@@ -610,19 +615,75 @@ public sealed class PurchaseDetailsDialog : Window
             FontSize = 14
         };
         root.Children.Add(summary);
-        var grid = new DataGrid { ItemsSource = purchase.Items, IsReadOnly = true, AutoGenerateColumns = false };
-        grid.Columns.Add(new DataGridTextColumn { Header = "Product", Binding = new System.Windows.Data.Binding("ProductName"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
-        grid.Columns.Add(new DataGridTextColumn { Header = "SKU", Binding = new System.Windows.Data.Binding("Sku"), Width = 110 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Qty", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "0.###" }, Width = 80 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Unit cost", Binding = new System.Windows.Data.Binding("UnitCost") { StringFormat = "0.00" }, Width = 100 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Tax %", Binding = new System.Windows.Data.Binding("TaxRate") { StringFormat = "0.###" }, Width = 75 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Line total", Binding = new System.Windows.Data.Binding("LineTotal") { StringFormat = "0.00" }, Width = 105 });
-        Grid.SetRow(grid, 1);
-        root.Children.Add(grid);
-        var close = new Button { Content = "Close", Style = (Style)FindResource("PrimaryButton"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
+        _grid.ItemsSource = purchase.Items;
+        _grid.IsReadOnly = false;
+        _grid.AutoGenerateColumns = false;
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Product", Binding = new System.Windows.Data.Binding("ProductName"), Width = new DataGridLength(1, DataGridLengthUnitType.Star), IsReadOnly = true });
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Qty", Binding = new System.Windows.Data.Binding("Quantity") { StringFormat = "0.###" }, Width = 80, IsReadOnly = true });
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Unit cost", Binding = new System.Windows.Data.Binding("UnitCost") { StringFormat = "0.00", UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged }, Width = 100 });
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Tax %", Binding = new System.Windows.Data.Binding("TaxRate") { StringFormat = "0.###" }, Width = 75, IsReadOnly = true });
+        _grid.Columns.Add(new DataGridTextColumn { Header = "Line total", Binding = new System.Windows.Data.Binding("LineTotal") { StringFormat = "0.00" }, Width = 105, IsReadOnly = true });
+        Grid.SetRow(_grid, 1);
+        root.Children.Add(_grid);
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 14, 0, 0)
+        };
+        var save = new Button { Content = "Save Cost Changes", Style = (Style)FindResource("PrimaryButton"), Margin = new Thickness(0, 0, 8, 0) };
+        save.Click += SaveCostChanges_Click;
+        var close = new Button { Content = "Close", Style = (Style)FindResource("OutlineButton") };
         close.Click += (_, _) => Close();
-        Grid.SetRow(close, 2);
-        root.Children.Add(close);
+        actions.Children.Add(save);
+        actions.Children.Add(close);
+        Grid.SetRow(actions, 2);
+        root.Children.Add(actions);
         Content = root;
+    }
+
+    private async void SaveCostChanges_Click(object sender, RoutedEventArgs e)
+    {
+        _grid.CommitEdit(DataGridEditingUnit.Cell, true);
+        _grid.CommitEdit(DataGridEditingUnit.Row, true);
+
+        var changed = _purchase.Items
+            .Where(item => _originalUnitCosts.TryGetValue(item.Id, out var original) && item.UnitCost != original)
+            .ToList();
+        if (changed.Count == 0)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("No cost changes to save.", "Purchase",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (changed.Any(item => item.UnitCost < 0m))
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show("Cost cannot be negative.", "Purchase",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            IsEnabled = false;
+            foreach (var item in changed)
+                await _service.UpdatePurchaseItemUnitCostAsync(item.Id, item.UnitCost);
+
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                "Purchase cost changes saved and product costs updated where this is the latest purchase.",
+                "Purchase", MessageBoxButton.OK, MessageBoxImage.Information);
+            DialogResult = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message,
+                "Unable to save purchase cost", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 }

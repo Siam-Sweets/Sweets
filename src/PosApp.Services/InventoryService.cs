@@ -29,13 +29,10 @@ public class InventoryService : IInventoryService
                 // of the name, so "ba" finds "Banana" but not "25bag".
                 ProductSearchField.Name => q.Where(p =>
                     p.Name.ToLower().StartsWith(term)),
-                ProductSearchField.Code => q.Where(p =>
-                    p.Sku != null && p.Sku.ToLower().Contains(term)),
                 ProductSearchField.Barcode => q.Where(p =>
                     p.Barcode != null && p.Barcode.ToLower().Contains(term)),
                 _ => q.Where(p =>
                     p.Name.ToLower().StartsWith(term) ||
-                    (p.Sku != null && p.Sku.ToLower().Contains(term)) ||
                     (p.Barcode != null && p.Barcode.ToLower().Contains(term)))
             };
         }
@@ -44,16 +41,15 @@ public class InventoryService : IInventoryService
         return await q.OrderBy(p => p.Name).ToListAsync();
     }
 
-    public async Task<Product?> GetProductBySkuAsync(string sku)
+    public async Task<Product?> GetProductByBarcodeAsync(string barcode)
     {
-        if (string.IsNullOrWhiteSpace(sku)) return null;
-        var term = sku.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(barcode)) return null;
+        var term = barcode.Trim().ToLowerInvariant();
         return await _db.Products.AsNoTracking()
             .Include(p => p.Category)
             .FirstOrDefaultAsync(p =>
                 p.IsActive &&
-                ((p.Sku != null && p.Sku.ToLower() == term) ||
-                 (p.Barcode != null && p.Barcode.ToLower() == term)));
+                p.Barcode != null && p.Barcode.ToLower() == term);
     }
 
     public async Task<Product> CreateOrUpdateProductAsync(Product product, int? userId = null)
@@ -157,7 +153,7 @@ public class InventoryService : IInventoryService
     {
         target.Name = source.Name;
         target.Description = source.Description;
-        target.Sku = source.Sku;
+        target.Sku = null;
         target.Barcode = source.Barcode;
         target.CategoryId = source.CategoryId;
         target.Price = source.Price;
@@ -174,22 +170,16 @@ public class InventoryService : IInventoryService
 
     private async Task EnsureIdentifiersUniqueAsync(Product product)
     {
-        if (!string.IsNullOrWhiteSpace(product.Sku) && await _db.Products.AnyAsync(p =>
-                p.Id != product.Id &&
-                ((p.Sku != null && p.Sku.ToLower() == product.Sku.ToLower()) ||
-                 (p.Barcode != null && p.Barcode.ToLower() == product.Sku.ToLower()))))
-            throw new InvalidOperationException("SKU is already used as an SKU or barcode by another product.");
         if (!string.IsNullOrWhiteSpace(product.Barcode) && await _db.Products.AnyAsync(p =>
                 p.Id != product.Id &&
-                ((p.Barcode != null && p.Barcode.ToLower() == product.Barcode.ToLower()) ||
-                 (p.Sku != null && p.Sku.ToLower() == product.Barcode.ToLower()))))
-            throw new InvalidOperationException("Barcode is already used as a barcode or SKU by another product.");
+                p.Barcode != null && p.Barcode.ToLower() == product.Barcode.ToLower()))
+            throw new InvalidOperationException("Barcode is already used by another product.");
     }
 
     private static void NormalizeAndValidateProduct(Product product)
     {
         product.Name = product.Name?.Trim() ?? string.Empty;
-        product.Sku = string.IsNullOrWhiteSpace(product.Sku) ? null : product.Sku.Trim();
+        product.Sku = null;
         product.Barcode = string.IsNullOrWhiteSpace(product.Barcode) ? null : product.Barcode.Trim();
         product.Description = string.IsNullOrWhiteSpace(product.Description) ? null : product.Description.Trim();
         product.ImagePath = string.IsNullOrWhiteSpace(product.ImagePath) ? null : product.ImagePath.Trim();
@@ -205,8 +195,8 @@ public class InventoryService : IInventoryService
             throw new InvalidOperationException("Tax must be between 0 and 100.");
         if (product.StockQuantity < 0m || product.LowStockThreshold < 0m)
             throw new InvalidOperationException("Stock and low-stock threshold cannot be negative.");
-        if (product.Sku?.Length > 64 || product.Barcode?.Length > 64)
-            throw new InvalidOperationException("SKU and barcode cannot exceed 64 characters.");
+        if (product.Barcode?.Length > 64)
+            throw new InvalidOperationException("Barcode cannot exceed 64 characters.");
         if (product.Description?.Length > 1000)
             throw new InvalidOperationException("Product description cannot exceed 1000 characters.");
         if (product.ImagePath?.Length > 2048)

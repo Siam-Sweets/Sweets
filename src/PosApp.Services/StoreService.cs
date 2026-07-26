@@ -381,60 +381,126 @@ public sealed class StoreService : IStoreService
     {
         var normalizedName = name.Trim();
         var normalizedNameLower = normalizedName.ToLowerInvariant();
+
+        DetachTrackedDefaultCategories(storeId, normalizedName);
+        await MergeDuplicateDefaultCategoriesAsync(storeId, normalizedNameLower);
+
+        var now = DateTime.UtcNow;
+        var syncId = Guid.NewGuid().ToString("N");
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT OR IGNORE INTO "Categories"
+                ("StoreId", "SyncId", "Name", "Description", "Color", "SortOrder", "IsActive",
+                 "CreatedAt", "UpdatedAt", "SyncVersion", "SyncUpdatedAt", "CloudVersion")
+            SELECT {storeId}, {syncId}, {normalizedName}, NULL, {color}, {sortOrder}, 1,
+                   {now}, NULL, 1, {now}, 0
+            WHERE NOT EXISTS (
+                SELECT 1 FROM "Categories"
+                WHERE "StoreId" = {storeId}
+                  AND LOWER(TRIM("Name")) = {normalizedNameLower}
+            );
+            """);
+
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE "Categories"
+            SET "Name" = {normalizedName},
+                "Color" = {color},
+                "SortOrder" = {sortOrder},
+                "IsActive" = 1,
+                "UpdatedAt" = {now},
+                "SyncVersion" = CASE WHEN "SyncVersion" < 1 THEN 1 ELSE "SyncVersion" + 1 END,
+                "SyncUpdatedAt" = {now}
+            WHERE "Id" = (
+                SELECT "Id" FROM "Categories"
+                WHERE "StoreId" = {storeId}
+                  AND LOWER(TRIM("Name")) = {normalizedNameLower}
+                ORDER BY "Id"
+                LIMIT 1
+            );
+            """);
+
+        if (_context.IsCloudSyncEnabled)
+            await QueueCategoryUpsertAsync(storeId, normalizedNameLower);
+    }
+
+    private void DetachTrackedDefaultCategories(int storeId, string normalizedName)
+    {
         var tracked = _db.Categories.Local
             .Where(category =>
                 category.StoreId == storeId &&
                 string.Equals(category.Name, normalizedName, StringComparison.OrdinalIgnoreCase))
             .ToList();
+        foreach (var category in tracked)
+            _db.Entry(category).State = EntityState.Detached;
+    }
 
-        var persisted = await _db.Categories
+    private async Task MergeDuplicateDefaultCategoriesAsync(int storeId, string normalizedNameLower)
+    {
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            WITH ranked AS (
+                SELECT "Id",
+                       FIRST_VALUE("Id") OVER (
+                           PARTITION BY "StoreId", LOWER(TRIM("Name"))
+                           ORDER BY "Id"
+                       ) AS "KeeperId",
+                       ROW_NUMBER() OVER (
+                           PARTITION BY "StoreId", LOWER(TRIM("Name"))
+                           ORDER BY "Id"
+                       ) AS "Rank"
+                FROM "Categories"
+                WHERE "StoreId" = {storeId}
+                  AND LOWER(TRIM("Name")) = {normalizedNameLower}
+            )
+            UPDATE "Products"
+            SET "CategoryId" = (
+                SELECT "KeeperId" FROM ranked
+                WHERE ranked."Id" = "Products"."CategoryId"
+            )
+            WHERE "CategoryId" IN (
+                SELECT "Id" FROM ranked WHERE "Rank" > 1
+            );
+            """);
+
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            WITH ranked AS (
+                SELECT "Id",
+                       ROW_NUMBER() OVER (
+                           PARTITION BY "StoreId", LOWER(TRIM("Name"))
+                           ORDER BY "Id"
+                       ) AS "Rank"
+                FROM "Categories"
+                WHERE "StoreId" = {storeId}
+                  AND LOWER(TRIM("Name")) = {normalizedNameLower}
+            )
+            DELETE FROM "Categories"
+            WHERE "Id" IN (
+                SELECT "Id" FROM ranked WHERE "Rank" > 1
+            );
+            """);
+    }
+
+    private async Task QueueCategoryUpsertAsync(int storeId, string normalizedNameLower)
+    {
+        var category = await _db.Categories
             .IgnoreQueryFilters()
+            .AsNoTracking()
             .Where(candidate =>
                 candidate.StoreId == storeId &&
                 candidate.Name.ToLower() == normalizedNameLower)
             .OrderBy(candidate => candidate.Id)
-            .ToListAsync();
+            .FirstOrDefaultAsync();
+        if (category == null) return;
 
-        var category = persisted.FirstOrDefault()
-                       ?? tracked
-                           .Where(candidate => candidate.Id > 0)
-                           .OrderBy(candidate => candidate.Id)
-                           .FirstOrDefault()
-                       ?? tracked.FirstOrDefault();
-
-        foreach (var duplicate in tracked.Where(duplicate => !ReferenceEquals(duplicate, category)))
+        _db.SyncOutbox.Add(new SyncOutboxItem
         {
-            if (duplicate.Id == 0)
-                _db.Entry(duplicate).State = EntityState.Detached;
-            else
-                _db.Categories.Remove(duplicate);
-        }
-
-        foreach (var duplicate in persisted.Skip(1)
-                     .Where(duplicate => !ReferenceEquals(duplicate, category)))
-        {
-            _db.Categories.Remove(duplicate);
-        }
-
-        if (category == null)
-        {
-            _db.Categories.Add(new Category
-            {
-                StoreId = storeId,
-                Name = normalizedName,
-                Color = color,
-                SortOrder = sortOrder,
-                IsActive = true
-            });
-            return;
-        }
-
-        category.StoreId = storeId;
-        category.Name = normalizedName;
-        category.Color = color;
-        category.SortOrder = sortOrder;
-        category.IsActive = true;
-        category.UpdatedAt = DateTime.UtcNow;
+            StoreId = category.StoreId,
+            EntityType = nameof(Category),
+            EntitySyncId = category.SyncId,
+            Operation = "upsert",
+            EntityVersion = category.SyncVersion,
+            BaseCloudVersion = category.CloudVersion,
+            OperationId = SyncOperationScope.CurrentOperationId ?? Guid.NewGuid().ToString("N"),
+            PayloadJson = SyncPayloadSerializer.SerializeForSync(category, _db)
+        });
     }
 
     private static string NormalizeSyncId(string? value)

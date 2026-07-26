@@ -117,7 +117,7 @@ public class PurchaseService : IPurchaseService
         if (draft.Lines.Any(line => line.ProductId <= 0 || line.Quantity <= 0m ||
                                     line.UnitCost < 0m || line.TaxRate is < 0m or > 100m))
             throw new InvalidOperationException(
-                "Purchase products and quantities must be valid, costs cannot be negative, and tax must be between 0 and 100.");
+                "Purchase products and quantities must be valid, cost can be 0 but cannot be negative, and tax must be between 0 and 100.");
 
         using var operation = SyncOperationScope.Begin(draft.OperationId);
         _db.ChangeTracker.Clear();
@@ -161,17 +161,13 @@ public class PurchaseService : IPurchaseService
 
                 var oldQuantity = product.StockQuantity.Value;
                 var newQuantity = oldQuantity + line.Quantity;
-                var oldValue = Math.Max(0m, oldQuantity) * product.CostPrice;
-                var incomingValue = line.Quantity * line.UnitCost;
                 product.StockQuantity = newQuantity;
-                product.CostPrice = newQuantity == 0m ? line.UnitCost :
-                    (oldValue + incomingValue) / newQuantity;
                 product.UpdatedAt = now;
 
                 var purchaseItem = new PurchaseItem
                 {
                     PurchaseDocument = document, Product = product,
-                    ProductName = product.Name, Sku = product.Sku,
+                    ProductName = product.Name,
                     Quantity = line.Quantity, UnitCost = line.UnitCost, TaxRate = line.TaxRate
                 };
                 document.Items.Add(purchaseItem);
@@ -187,6 +183,9 @@ public class PurchaseService : IPurchaseService
             }
 
             _db.PurchaseDocuments.Add(document);
+            await _db.SaveChangesAsync();
+            foreach (var productId in draft.Lines.Select(line => line.ProductId).Distinct())
+                await ApplyLatestPurchaseCostAsync(productId, now);
             await _db.SaveChangesAsync();
             await _db.CommitExternalTransactionAsync(transaction);
             _db.ChangeTracker.Clear();
@@ -214,6 +213,76 @@ public class PurchaseService : IPurchaseService
             await _db.RollbackExternalTransactionAsync(transaction);
             throw;
         }
+    }
+
+    public async Task<PurchaseDocument> UpdatePurchaseItemUnitCostAsync(int purchaseItemId, decimal unitCost)
+    {
+        if (purchaseItemId <= 0)
+            throw new InvalidOperationException("Select a valid purchase line.");
+        if (unitCost < 0m)
+            throw new InvalidOperationException("Cost cannot be negative.");
+
+        _db.ChangeTracker.Clear();
+        await using var transaction = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var item = await _db.PurchaseItems
+                .Include(purchaseItem => purchaseItem.PurchaseDocument)
+                    .ThenInclude(document => document!.Items)
+                .FirstOrDefaultAsync(purchaseItem => purchaseItem.Id == purchaseItemId)
+                ?? throw new InvalidOperationException("Purchase line not found.");
+            var document = item.PurchaseDocument
+                ?? throw new InvalidOperationException("Purchase document not found.");
+            if (document.Status != PurchaseStatus.Posted)
+                throw new InvalidOperationException("Only posted purchases can update product cost.");
+
+            item.UnitCost = unitCost;
+            document.Subtotal = document.Items.Sum(line => line.LineSubtotal);
+            document.TaxTotal = document.Items.Sum(line => line.LineTax);
+            document.Total = document.Subtotal + document.TaxTotal;
+            document.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            await ApplyLatestPurchaseCostAsync(item.ProductId, document.UpdatedAt.Value);
+            await _db.SaveChangesAsync();
+            await _db.CommitExternalTransactionAsync(transaction);
+            _db.ChangeTracker.Clear();
+
+            return await _db.PurchaseDocuments.AsNoTracking()
+                .Include(x => x.Supplier).Include(x => x.Items)
+                .FirstAsync(x => x.Id == document.Id);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw new InvalidOperationException(
+                "Purchase or product cost changed on another screen or device. Reload and try again.", ex);
+        }
+        catch
+        {
+            await _db.RollbackExternalTransactionAsync(transaction);
+            throw;
+        }
+    }
+
+    private async Task ApplyLatestPurchaseCostAsync(int productId, DateTime updatedAt)
+    {
+        var latest = await _db.PurchaseItems.AsNoTracking()
+            .Where(item => item.ProductId == productId &&
+                           item.PurchaseDocument != null &&
+                           item.PurchaseDocument.Status == PurchaseStatus.Posted)
+            .OrderByDescending(item => item.PurchaseDocument!.DocumentDate)
+            .ThenByDescending(item => item.PurchaseDocumentId)
+            .ThenByDescending(item => item.Id)
+            .Select(item => new { item.UnitCost })
+            .FirstOrDefaultAsync();
+        if (latest == null) return;
+
+        var product = await _db.Products.FirstOrDefaultAsync(item => item.Id == productId);
+        if (product == null) return;
+
+        product.CostPrice = latest.UnitCost;
+        product.UpdatedAt = updatedAt;
     }
 
     private static string NormalizeOperationId(string? value)

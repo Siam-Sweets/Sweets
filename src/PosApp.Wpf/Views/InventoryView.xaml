@@ -61,7 +61,6 @@
                     <DataGrid x:Name="StockGrid" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="{DynamicResource Rpt_Product}" Binding="{Binding Name}" Width="*"/>
-                            <DataGridTextColumn Header="{DynamicResource Prod_SkuOnly}" Binding="{Binding Sku}" Width="100"/>
                             <DataGridTextColumn Header="{DynamicResource Prod_Stock}" Binding="{Binding StockQuantity, StringFormat=' {0:0.###}'}" Width="80"/>
                             <DataGridTextColumn Header="{DynamicResource Inv_Threshold}" Binding="{Binding LowStockThreshold, StringFormat=' {0}'}" Width="80"/>
                             <DataGridTemplateColumn Header="{DynamicResource Inv_Adjust}" Width="100">

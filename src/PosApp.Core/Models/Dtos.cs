@@ -34,7 +34,6 @@ public class SaleDraftLine : INotifyPropertyChanged
 
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public string? Sku { get; set; }
     public string CategoryName { get; set; } = "Uncategorized";
     public decimal Quantity
     {
@@ -211,7 +210,6 @@ public class PurchaseDraftLine
 {
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public string? Sku { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitCost { get; set; }
     public decimal TaxRate { get; set; }
@@ -268,9 +266,10 @@ public class DailySalesReport
     public decimal TaxTotal { get; set; }
     public decimal NetSales { get; set; }
     public decimal CostOfGoods { get; set; }
-    // Collected tax belongs to the tax authority, not to the store. Profit is
-    // therefore based on merchandise revenue after discounts, before tax.
-    public decimal GrossProfit => GrossSales - DiscountTotal - CostOfGoods;
+    // Collected tax belongs to the tax authority, not to the store. Net profit
+    // is therefore based on merchandise revenue after discounts, before tax.
+    public decimal NetProfit => GrossSales - DiscountTotal - CostOfGoods;
+    public decimal GrossProfit => NetProfit;
     public Dictionary<PaymentMethod, decimal> ByPaymentMethod { get; set; } = new();
     public int RefundCount { get; set; }
     public decimal RefundTotal { get; set; }
@@ -289,7 +288,8 @@ public class DateRangeReport
     public decimal CostOfGoods { get; set; }
     // NetSales includes tax for receipt reconciliation; do not report that tax
     // as profit.
-    public decimal GrossProfit => GrossSales - DiscountTotal - CostOfGoods;
+    public decimal NetProfit => GrossSales - DiscountTotal - CostOfGoods;
+    public decimal GrossProfit => NetProfit;
     public List<DailySalesReport> Daily { get; set; } = new();
 }
 
@@ -299,7 +299,6 @@ public class TopProductRow
     public string StoreName { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public string? Sku { get; set; }
     public decimal QuantitySold { get; set; }
     public decimal Revenue { get; set; }
     public decimal Profit { get; set; }
@@ -334,7 +333,12 @@ public sealed class StorePerformanceRow
     public string StoreName { get; set; } = string.Empty;
     public int TransactionCount { get; set; }
     public decimal NetSales { get; set; }
-    public decimal GrossProfit { get; set; }
+    public decimal NetProfit { get; set; }
+    public decimal GrossProfit
+    {
+        get => NetProfit;
+        set => NetProfit = value;
+    }
 }
 
 public sealed class StoreInventoryRow
@@ -344,7 +348,6 @@ public sealed class StoreInventoryRow
     public string StoreName { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public string ProductName { get; set; } = string.Empty;
-    public string? Sku { get; set; }
     public UnitOfMeasure Unit { get; set; }
     public decimal? StockQuantity { get; set; }
     public decimal? LowStockThreshold { get; set; }

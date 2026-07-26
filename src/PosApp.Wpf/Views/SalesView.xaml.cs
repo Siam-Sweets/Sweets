@@ -19,6 +19,8 @@ public partial class SalesView : UserControl, IRefreshable
     private readonly SemaphoreSlim _loadGate = new(1, 1);
     private List<Sale> _all = new();
     private int _loadVersion;
+    private bool _dateRangeEditedByUser;
+    private bool _settingDateRange;
 
     public SalesView(ISaleService sales, IHardwareService hardware, Data.AppDbContext db)
     {
@@ -26,15 +28,42 @@ public partial class SalesView : UserControl, IRefreshable
         _sales = sales;
         _hardware = hardware;
         _db = db;
-        FromDate.SelectedDate = DateTime.Today.AddDays(-7);
-        ToDate.SelectedDate = DateTime.Today;
+        SetDefaultDateRange();
+        FromDate.SelectedDateChanged += DateFilter_SelectedDateChanged;
+        ToDate.SelectedDateChanged += DateFilter_SelectedDateChanged;
     }
 
     public async Task RefreshAsync()
     {
         IsEnabled = false;
-        try { await LoadAsync(); }
+        try
+        {
+            if (!_dateRangeEditedByUser)
+                SetDefaultDateRange();
+            await LoadAsync();
+        }
         finally { IsEnabled = true; }
+    }
+
+    private void SetDefaultDateRange()
+    {
+        _settingDateRange = true;
+        try
+        {
+            var today = DateTime.Today;
+            FromDate.SelectedDate = today.AddDays(-7);
+            ToDate.SelectedDate = today;
+        }
+        finally
+        {
+            _settingDateRange = false;
+        }
+    }
+
+    private void DateFilter_SelectedDateChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!_settingDateRange)
+            _dateRangeEditedByUser = true;
     }
 
     private async Task LoadAsync()
@@ -71,7 +100,10 @@ public partial class SalesView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(ex.Message, "Unable to load sales", MessageBoxButton.OK, MessageBoxImage.Error);
+            App.LogError($"Unable to load sales history. From={from:yyyy-MM-dd}; To={to:yyyy-MM-dd}; Status={statusFilter}", ex);
+            PosApp.Wpf.Helpers.LocalizedMessageBox.Show(
+                $"{ex.GetBaseException().Message}\n\nTechnical details were written to:\n{App.LogFilePath}",
+                "Unable to load sales", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {

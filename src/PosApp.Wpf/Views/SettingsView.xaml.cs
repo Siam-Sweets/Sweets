@@ -56,12 +56,11 @@ public partial class SettingsView : UserControl, IRefreshable
             "tax" => 1,
             "products" => 2,
             "documents" => 3,
-            "email" => 4,
-            "cloud" => 5,
-            "print" => 6,
-            "database" => 7,
-            "update" => 8,
-            "about" => 9,
+            "cloud" => 4,
+            "print" => 5,
+            "database" => 6,
+            "update" => 7,
+            "about" => 8,
             _ => 0
         };
     }

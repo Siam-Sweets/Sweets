@@ -289,8 +289,12 @@ public partial class SetupView : Window
         }
         catch (Exception ex)
         {
+            App.LogError(
+                $"Online account setup failed. Email='{email}'; Store='{request.StoreSettings.StoreName}'; IncludeSampleProducts={request.IncludeSampleProducts}",
+                ex);
             ShowCreateStatus(
-                RuntimeUiText.Translate(ex.GetBaseException().Message),
+                RuntimeUiText.Translate(
+                    $"{ex.GetBaseException().Message} Technical details were written to: {App.LogFilePath}"),
                 isError: true);
         }
         finally

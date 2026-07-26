@@ -73,7 +73,7 @@
                                 <DataGridTextColumn Header="{DynamicResource Sales_Date}" Binding="{Binding Date, StringFormat='{}{0:dd MMM}'}" Width="*"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Transactions}" Binding="{Binding TransactionCount}" Width="120"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_NetSales}" Binding="{Binding NetSales, Converter={StaticResource Money}}" Width="150"/>
-                                <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding GrossProfit, Converter={StaticResource Money}}" Width="150"/>
+                                <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding NetProfit, Converter={StaticResource Money}}" Width="150"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </DockPanel>
@@ -129,7 +129,7 @@
                             <DataGridTextColumn Header="{DynamicResource StoreFilter_Store}" Binding="{Binding StoreName}" Width="*"/>
                             <DataGridTextColumn Header="{DynamicResource Rpt_Transactions}" Binding="{Binding TransactionCount}" Width="120"/>
                             <DataGridTextColumn Header="{DynamicResource Rpt_NetSales}" Binding="{Binding NetSales, Converter={StaticResource Money}}" Width="150"/>
-                            <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding GrossProfit, Converter={StaticResource Money}}" Width="150"/>
+                            <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding NetProfit, Converter={StaticResource Money}}" Width="150"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

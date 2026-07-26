@@ -58,19 +58,18 @@ public class ReportService : IReportService
         if (storeId.HasValue) query = query.Where(i => i.StoreId == storeId.Value);
         var items = await query.Select(i => new
         {
-            i.StoreId, i.ProductId, i.ProductName, i.Sku, i.Quantity,
+            i.StoreId, i.ProductId, i.ProductName, i.Quantity,
             i.UnitPrice, i.CostPrice, i.DiscountAmount
         }).ToListAsync();
         var stores = await _db.Stores.AsNoTracking().ToDictionaryAsync(x => x.Id);
 
-        return items.GroupBy(i => new { i.StoreId, i.ProductId, i.ProductName, Sku = i.Sku ?? string.Empty })
+        return items.GroupBy(i => new { i.StoreId, i.ProductId, i.ProductName })
             .Select(g => new TopProductRow
             {
                 StoreId = g.Key.StoreId,
                 StoreName = stores.GetValueOrDefault(g.Key.StoreId)?.Name ?? $"Store {g.Key.StoreId}",
                 ProductId = g.Key.ProductId,
                 ProductName = g.Key.ProductName,
-                Sku = string.IsNullOrEmpty(g.Key.Sku) ? null : g.Key.Sku,
                 QuantitySold = g.Sum(i => i.Quantity),
                 Revenue = g.Sum(i => i.UnitPrice * i.Quantity - i.DiscountAmount),
                 Profit = g.Sum(i => (i.UnitPrice - i.CostPrice) * i.Quantity - i.DiscountAmount)
@@ -177,7 +176,7 @@ public class ReportService : IReportService
                 StoreName = store?.Name ?? $"Store {group.Key}",
                 TransactionCount = row.TransactionCount,
                 NetSales = row.NetSales,
-                GrossProfit = row.GrossProfit
+                NetProfit = row.NetProfit
             };
         }).OrderByDescending(x => x.NetSales).ThenBy(x => x.StoreName).ToList();
     }

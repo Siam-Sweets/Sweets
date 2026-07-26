@@ -62,7 +62,12 @@ public partial class StoresView : UserControl, IRefreshable
         }
         catch (Exception ex)
         {
-            Helpers.LocalizedMessageBox.Show(ex.GetBaseException().Message, "Unable to save store",
+            App.LogError(
+                $"Unable to save store. Id={store.Id}; Code='{store.Code}'; Name='{store.Name}'; Address='{store.Address}'; Phone='{store.Phone}'",
+                ex);
+            Helpers.LocalizedMessageBox.Show(
+                $"{ex.GetBaseException().Message}\n\nTechnical details were written to:\n{App.LogFilePath}",
+                "Unable to save store",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally

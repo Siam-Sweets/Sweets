@@ -349,7 +349,6 @@ public class AppDbContext : DbContext
             b.Property(p => p.StockQuantity).HasColumnType("decimal(18,4)");
             b.Property(p => p.StockVersion).IsConcurrencyToken();
             b.Property(p => p.LowStockThreshold).HasColumnType("decimal(18,4)");
-            b.HasIndex(p => new { p.StoreId, p.Sku }).IsUnique();
             b.HasIndex(p => new { p.StoreId, p.Barcode }).IsUnique();
             b.HasOne(p => p.Category).WithMany(c => c.Products)
                 .HasForeignKey(p => p.CategoryId).OnDelete(DeleteBehavior.Restrict);

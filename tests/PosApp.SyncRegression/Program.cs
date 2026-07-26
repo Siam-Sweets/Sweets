@@ -252,6 +252,13 @@ static async Task AssertStoreSeedingAsync(AppDbContext db, Store sourceStore)
     Assert(
         categories.Select(category => category.Name.ToUpperInvariant()).Distinct().Count() == 6,
         "New-store seeding did not create exactly the six default categories.");
+
+    var seededSamples = await DbSeeder.SeedSampleProductsAsync(db, targetStore.Id);
+    Assert(seededSamples, "Sample product seeding reported that no products were added.");
+    var productCount = await db.Products
+        .IgnoreQueryFilters()
+        .CountAsync(product => product.StoreId == targetStore.Id);
+    Assert(productCount == 15, $"Expected 15 sample products for the target store, found {productCount}.");
 }
 
 file sealed class TestStoreContext(int storeId, string storeSyncId) : IStoreContext

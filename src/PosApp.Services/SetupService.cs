@@ -184,7 +184,16 @@ public sealed class SetupService : ISetupService
 
                 await _db.SaveChangesAsync();
                 if (request.IncludeSampleProducts)
-                    await DbSeeder.SeedSampleProductsAsync(_db);
+                {
+                    var targetStoreId = currentStore?.Id ?? _db.CurrentStoreId;
+                    await DbSeeder.SeedSampleProductsAsync(_db, targetStoreId);
+                    var sampleCount = await _db.Products
+                        .IgnoreQueryFilters()
+                        .CountAsync(product => product.StoreId == targetStoreId);
+                    if (sampleCount == 0)
+                        throw new InvalidOperationException(
+                            "Sample products were enabled, but no products were created for the setup store.");
+                }
 
                 await _db.CommitExternalTransactionAsync(transaction);
             }

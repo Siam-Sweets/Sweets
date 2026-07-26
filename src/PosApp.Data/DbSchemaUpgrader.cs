@@ -492,7 +492,7 @@ public static class DbSchemaUpgrader
             await db.Database.ExecuteSqlRawAsync($"DROP INDEX IF EXISTS \"{index}\";");
 
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Users_Store_Username_NOCASE", "Users", "Username");
-        await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Store_Sku_NOCASE", "Products", "Sku");
+        await db.Database.ExecuteSqlRawAsync("DROP INDEX IF EXISTS \"UX_Products_Store_Sku_NOCASE\";");
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Products_Store_Barcode_NOCASE", "Products", "Barcode");
         await CreateNoCaseUniqueIndexIfSafeAsync(db, "UX_Discounts_Store_Code_NOCASE", "Discounts", "Code");
         await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Categories_StoreId_Name\" ON \"Categories\" (\"StoreId\", \"Name\" COLLATE NOCASE);");
@@ -563,6 +563,10 @@ public static class DbSchemaUpgrader
             // Duplicate catalog identifiers were already ambiguous. Preserve the first
             // product and clear later copies so they can be assigned deliberately.
             """
+            UPDATE "Products" SET "Sku" = NULL
+            WHERE "Sku" IS NOT NULL AND TRIM("Sku") <> '';
+            """,
+            """
             WITH ranked AS (
                 SELECT "Id", ROW_NUMBER() OVER (
                     PARTITION BY "StoreId", LOWER(TRIM("Sku")) ORDER BY "Id") AS rn
@@ -580,10 +584,8 @@ public static class DbSchemaUpgrader
             UPDATE "Products" SET "Barcode" = NULL
             WHERE "Id" IN (SELECT "Id" FROM ranked WHERE rn > 1);
             """,
-            // SKU and barcode are both accepted by the scanner, so they share one
-            // namespace even though SQLite can only put a unique index on each
-            // individual column. Preserve the oldest occurrence of an identifier
-            // across both fields and clear every later ambiguous copy.
+            // Legacy SKU values are cleared above. Barcode is now the only
+            // product identifier enforced by the app.
             """
             WITH identifiers AS (
                 SELECT "Id", "StoreId", 'Sku' AS field, LOWER(TRIM("Sku")) AS value, 0 AS priority
@@ -862,7 +864,7 @@ public static class DbSchemaUpgrader
 
     private static async Task CreateProductIdentifierGuardsAsync(AppDbContext db)
     {
-        // SKU and barcode share one identifier namespace inside each store.
+        // Barcode is the only product identifier enforced by the app.
         var commands = new[]
         {
             "DROP TRIGGER IF EXISTS \"TR_Products_IdentifierNamespace_Insert\";",
@@ -873,33 +875,25 @@ public static class DbSchemaUpgrader
             WHEN EXISTS (
                 SELECT 1 FROM "Products" AS existing
                 WHERE existing."StoreId" = NEW."StoreId" AND
-                      ((NEW."Sku" IS NOT NULL AND TRIM(NEW."Sku") <> '' AND
-                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Sku")) OR
-                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Sku"))))
-                       OR (NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> '' AND
-                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Barcode")) OR
-                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode")))))
+                      NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> '' AND
+                      LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode"))
             )
             BEGIN
-                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product in this store');
+                SELECT RAISE(ABORT, 'Barcode is already used by another product in this store');
             END;
             """,
             """
             CREATE TRIGGER "TR_Products_IdentifierNamespace_Update"
-            BEFORE UPDATE OF "Sku", "Barcode", "StoreId" ON "Products"
+            BEFORE UPDATE OF "Barcode", "StoreId" ON "Products"
             WHEN EXISTS (
                 SELECT 1 FROM "Products" AS existing
                 WHERE existing."Id" <> NEW."Id"
                   AND existing."StoreId" = NEW."StoreId"
-                  AND ((NEW."Sku" IS NOT NULL AND TRIM(NEW."Sku") <> '' AND
-                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Sku")) OR
-                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Sku"))))
-                       OR (NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> '' AND
-                        (LOWER(TRIM(existing."Sku")) = LOWER(TRIM(NEW."Barcode")) OR
-                         LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode")))))
+                  AND NEW."Barcode" IS NOT NULL AND TRIM(NEW."Barcode") <> ''
+                  AND LOWER(TRIM(existing."Barcode")) = LOWER(TRIM(NEW."Barcode"))
             )
             BEGIN
-                SELECT RAISE(ABORT, 'SKU or barcode is already used by another product in this store');
+                SELECT RAISE(ABORT, 'Barcode is already used by another product in this store');
             END;
             """
         };

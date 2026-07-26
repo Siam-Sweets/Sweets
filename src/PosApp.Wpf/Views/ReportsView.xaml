@@ -132,7 +132,7 @@
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Txns}" Binding="{Binding TransactionCount}" Width="60"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Items}" Binding="{Binding ItemCount}" Width="60"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Net}" Binding="{Binding NetSales, Converter={StaticResource Money}}" Width="100"/>
-                                <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding GrossProfit, Converter={StaticResource Money}}" Width="100"/>
+                                <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding NetProfit, Converter={StaticResource Money}}" Width="100"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </StackPanel>
@@ -162,7 +162,7 @@
                                 <DataGridTextColumn Header="{DynamicResource StoreFilter_Store}" Binding="{Binding StoreName}" Width="*"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_Transactions}" Binding="{Binding TransactionCount}" Width="120"/>
                                 <DataGridTextColumn Header="{DynamicResource Rpt_NetSales}" Binding="{Binding NetSales, Converter={StaticResource Money}}" Width="140"/>
-                                <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding GrossProfit, Converter={StaticResource Money}}" Width="140"/>
+                                <DataGridTextColumn Header="{DynamicResource Rpt_Profit}" Binding="{Binding NetProfit, Converter={StaticResource Money}}" Width="140"/>
                             </DataGrid.Columns>
                         </DataGrid>
                     </StackPanel>

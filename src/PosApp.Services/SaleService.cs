@@ -214,7 +214,6 @@ public class SaleService : ISaleService
 
                 var item = BuildSaleItem(line, sale);
                 item.ProductName = product.Name;
-                item.Sku = product.Sku;
                 item.CategoryName = product.Category?.Name ?? "Uncategorized";
                 item.CostPrice = product.CostPrice;
                 item.Unit = product.EffectiveUnit;
@@ -560,7 +559,6 @@ public class SaleService : ISaleService
                     Sale = refund,
                     ProductId = item.ProductId,
                     ProductName = item.ProductName,
-                    Sku = item.Sku,
                     CategoryName = item.CategoryName,
                     Quantity = -selection.Quantity,
                     Unit = item.Unit,
@@ -753,7 +751,6 @@ public class SaleService : ISaleService
         Sale = sale,
         ProductId = line.ProductId,
         ProductName = line.ProductName,
-        Sku = line.Sku,
         CategoryName = string.IsNullOrWhiteSpace(line.CategoryName)
             ? "Uncategorized" : line.CategoryName.Trim(),
         Quantity = line.Quantity,
@@ -778,7 +775,7 @@ public class SaleService : ISaleService
             throw new InvalidOperationException(
                 "The cart contains an invalid product, quantity, price, tax, or discount.");
         if (draft.Lines.Any(line => string.IsNullOrWhiteSpace(line.ProductName) ||
-                                    line.ProductName.Length > 100 || line.Sku?.Length > 64 ||
+                                    line.ProductName.Length > 100 ||
                                     line.CategoryName?.Length > 100))
             throw new InvalidOperationException("The cart contains invalid product snapshot data.");
     }

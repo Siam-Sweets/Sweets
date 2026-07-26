@@ -36,7 +36,6 @@ public partial class InventoryCountDialog : Window
             ? _rows
             : _rows.Where(row =>
                     row.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                    (row.Sku?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     (row.Barcode?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false))
                 .ToList();
     }
@@ -106,14 +105,12 @@ public sealed class InventoryCountRow : INotifyPropertyChanged
     {
         ProductId = product.Id;
         Name = product.Name;
-        Sku = product.Sku;
         Barcode = product.Barcode;
         SystemQuantity = product.StockQuantity.GetValueOrDefault();
     }
 
     public int ProductId { get; }
     public string Name { get; }
-    public string? Sku { get; }
     public string? Barcode { get; }
     public decimal SystemQuantity { get; }
     public decimal? CountedQuantity

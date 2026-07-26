@@ -1,3 +1,58 @@
+## 1.10.41 — Net profit dashboard label
+
+- Changed Dashboard and Reports profit labels from Gross Profit to Net Profit.
+- Added NetProfit report properties and moved dashboard/report bindings to the new metric name.
+- Kept the profit calculation as sales after discounts minus cost of goods, excluding collected tax from profit.
+
+## 1.10.40 — Latest purchase cost rule
+
+- Changed Purchases & Suppliers posting so product Cost is updated from the newest completed purchase line instead of weighted-average cost.
+- Confirmed zero-cost purchase lines are valid and can update product Cost to 0.
+- Added purchase detail unit-cost editing; saving a changed unit cost recalculates the purchase totals and updates product Cost when that purchase is the latest applicable purchase.
+
+## 1.10.39 — Remove SKU from product workflow
+
+- Removed SKU from product lists, product editing, inventory count, purchase entry/details, POS product search, and product tiles.
+- CSV export no longer writes a SKU column; CSV import ignores legacy SKU columns and matches products by barcode, then name.
+- New sample products no longer receive SKU values, and schema upgrades clear old product SKU values so hidden legacy data cannot block barcode entry.
+
+## 1.10.38 — Sales History default range refresh
+
+- Fixed Sales History staying on an old default date range after the app remains open across days.
+- The default Sales History range now refreshes through today whenever the page reloads, unless the user manually edits the date range.
+- Added Sales History load failure logging to `%LOCALAPPDATA%\PosApp\posapp.log`.
+
+## 1.10.37 — Sales History calendar picker visibility
+
+- Fixed the Sales History date fields clipping the calendar selection button.
+- Changed the filter bar to a wrapping layout so From, To, Status, Filter, Export, and Print stay usable at smaller widths.
+- Matched the Sales History date picker width with the other calendar filter pages.
+
+## 1.10.36 — Setup sample product seeding fix
+
+- Fixed online account creation completing without loading the enabled sample products.
+- Sample product seeding now targets the exact setup store id instead of relying on the current DbContext store filter.
+- Setup now verifies that sample products were created when the sample-products toggle is enabled.
+- Added setup failure logging to the app log so account creation problems include full technical details.
+
+## 1.10.35 — Store creation duplicate category hardening
+
+- Reworked new-store default category seeding to use database-level upserts instead of tracked EF inserts.
+- Merged duplicate default-category rows before seeding so `Categories.StoreId, Categories.Name` cannot fail during new-store creation.
+- Added Store save failure logging to the app log, including the full exception and store values being saved.
+
+## 1.10.34 — Removed Email settings page
+
+- Removed the unused Email tab from the Settings section.
+- Kept cloud account email fields and customer/supplier email fields unchanged where they are still part of real workflows.
+- Updated Settings section navigation so Cloud, Print, Database, Update & recovery, and About still open the correct pages.
+
+## 1.10.33 — Sync Center rounded tab edges
+
+- Rounded the Sync Center tab headers so they look softer in Dark mode.
+- Separated the tab strip from the content panel and rounded the content panel border to remove the clipped-looking edge.
+- Kept the existing Sync Center tab behavior and data grids unchanged.
+
 ## 1.10.32 — New-store category duplicate retry fix
 
 - Fixed new-store creation still failing with `SQLite Error 19: UNIQUE constraint failed: Categories.StoreId, Categories.Name`.

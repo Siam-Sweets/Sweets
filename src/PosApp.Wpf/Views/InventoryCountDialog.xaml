@@ -23,7 +23,6 @@
                   IsReadOnly="False" CanUserAddRows="False">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="{DynamicResource Rpt_Product}" Binding="{Binding Name}" Width="*" IsReadOnly="True"/>
-                <DataGridTextColumn Header="{DynamicResource Prod_SkuOnly}" Binding="{Binding Sku}" Width="130" IsReadOnly="True"/>
                 <DataGridTextColumn Header="{DynamicResource Inv_SystemQty}" Binding="{Binding SystemQuantity, StringFormat='{}{0:0.###}'}"
                                     Width="110" IsReadOnly="True"/>
                 <DataGridTextColumn Header="{DynamicResource Inv_CountedQty}" Binding="{Binding CountedQuantity, UpdateSourceTrigger=PropertyChanged}"

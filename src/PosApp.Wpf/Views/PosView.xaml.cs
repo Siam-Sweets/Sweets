@@ -97,7 +97,7 @@ public partial class PosView : UserControl, IRefreshable
         try
         {
             vm.SearchText = BarcodeBox.Text;
-            await vm.SearchBySkuOrTextAsync(identifierOnly: true);
+            await vm.SearchByBarcodeOrTextAsync(identifierOnly: true);
             if (string.IsNullOrWhiteSpace(vm.SearchText))
             {
                 BarcodeBox.Clear();
@@ -121,7 +121,7 @@ public partial class PosView : UserControl, IRefreshable
         if (!string.IsNullOrWhiteSpace(BarcodeBox.Text))
         {
             // The always-visible receipt input doubles as the scanner target.
-            // Scanner/code entry must search every identifier regardless of the
+            // Scanner/barcode entry must search every identifier regardless of the
             // field filter last selected inside the F3 search panel.
             if (SearchAllFilter.IsChecked != true)
                 SearchAllFilter.IsChecked = true;
@@ -166,7 +166,7 @@ public partial class PosView : UserControl, IRefreshable
         _searchTimer.Stop();
         try
         {
-            await vm.SearchBySkuOrTextAsync();
+            await vm.SearchByBarcodeOrTextAsync();
             if (string.IsNullOrWhiteSpace(vm.SearchText))
             {
                 BarcodeBox.Clear();
@@ -650,13 +650,13 @@ public class PosViewModel : ViewModelBase
 
     public Task FilterProductsAsync() => LoadProductsAsync();
 
-    public async Task SearchBySkuOrTextAsync(bool identifierOnly = false)
+    public async Task SearchByBarcodeOrTextAsync(bool identifierOnly = false)
     {
         var term = SearchText?.Trim() ?? "";
         if (string.IsNullOrEmpty(term)) { await LoadProductsAsync(); return; }
 
-        // Scanner entry always tries both identifiers. Inside F3 search, exact
-        // auto-add respects the selected Code/Barcode filter; Name filtering
+        // Scanner entry always tries the barcode identifier. Inside F3 search,
+        // exact auto-add respects the selected Barcode filter; Name filtering
         // only narrows the results and never auto-adds a similarly named item.
         Product? p = null;
         var exactField = identifierOnly ? ProductSearchField.All : SearchField;
@@ -665,7 +665,7 @@ public class PosViewModel : ViewModelBase
             await _productLoadGate.WaitAsync();
             try
             {
-                p = await _inventory.GetProductBySkuAsync(term);
+                p = await _inventory.GetProductByBarcodeAsync(term);
             }
             finally
             {
@@ -674,8 +674,6 @@ public class PosViewModel : ViewModelBase
 
             var matchesSelectedField = p != null && (exactField switch
             {
-                ProductSearchField.Code => string.Equals(p.Sku, term,
-                    StringComparison.OrdinalIgnoreCase),
                 ProductSearchField.Barcode => string.Equals(p.Barcode, term,
                     StringComparison.OrdinalIgnoreCase),
                 _ => true
@@ -721,7 +719,6 @@ public class PosViewModel : ViewModelBase
             {
                 ProductId = product.Id,
                 ProductName = product.Name,
-                Sku = product.Sku,
                 CategoryName = product.Category?.Name ?? "Uncategorized",
                 Quantity = qty,
                 Unit = unit,
@@ -924,7 +921,6 @@ public class PosViewModel : ViewModelBase
                     {
                         ProductId = item.ProductId,
                         ProductName = item.ProductName,
-                        Sku = item.Sku,
                         CategoryName = item.CategoryName,
                         Quantity = item.Quantity,
                         Unit = product?.EffectiveUnit ?? item.Unit,

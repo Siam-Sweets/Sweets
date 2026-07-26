@@ -23,37 +23,26 @@
 
         <!-- Filters -->
         <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,16" Padding="16">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="160"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="160"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="140"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{DynamicResource Sales_From}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                <DatePicker Grid.Column="1" x:Name="FromDate"/>
-                <TextBlock Grid.Column="2" Text="{DynamicResource Sales_To}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                <DatePicker Grid.Column="3" x:Name="ToDate"/>
-                <TextBlock Grid.Column="4" Text="{DynamicResource Sales_Status}" VerticalAlignment="Center" Margin="16,0,8,0"/>
-                <ComboBox Grid.Column="5" x:Name="StatusFilter" SelectedIndex="0">
+            <WrapPanel VerticalAlignment="Center">
+                <TextBlock Text="{DynamicResource Sales_From}" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                <DatePicker x:Name="FromDate" Width="220" Margin="0,0,16,8"/>
+                <TextBlock Text="{DynamicResource Sales_To}" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                <DatePicker x:Name="ToDate" Width="220" Margin="0,0,16,8"/>
+                <TextBlock Text="{DynamicResource Sales_Status}" VerticalAlignment="Center" Margin="0,0,8,8"/>
+                <ComboBox x:Name="StatusFilter" SelectedIndex="0" Width="150" Margin="0,0,16,8">
                     <ComboBoxItem Content="{DynamicResource Common_All}" Tag=""/>
                     <ComboBoxItem Content="{DynamicResource Sales_StatusCompleted}" Tag="Completed"/>
                     <ComboBoxItem Content="{DynamicResource Sales_StatusSuspended}" Tag="Suspended"/>
                     <ComboBoxItem Content="{DynamicResource Sales_StatusVoided}" Tag="Voided"/>
                     <ComboBoxItem Content="{DynamicResource Sales_StatusRefunded}" Tag="Refunded"/>
                 </ComboBox>
-                <Button Grid.Column="6" Content="{DynamicResource Sales_Filter}" Style="{StaticResource PrimaryButton}"
-                        Click="Filter_Click" Margin="16,0,0,0" Padding="16,8"/>
-                <Button Grid.Column="7" Content="{DynamicResource Sales_Export}" Style="{StaticResource OutlineButton}"
-                        Click="Export_Click" Margin="8,0,0,0" Padding="16,8"/>
-                <Button Grid.Column="8" Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
-                        Click="PrintHistory_Click" Margin="8,0,0,0" Padding="16,8" HorizontalAlignment="Left"/>
-            </Grid>
+                <Button Content="{DynamicResource Sales_Filter}" Style="{StaticResource PrimaryButton}"
+                        Click="Filter_Click" Margin="0,0,8,8" Padding="16,8"/>
+                <Button Content="{DynamicResource Sales_Export}" Style="{StaticResource OutlineButton}"
+                        Click="Export_Click" Margin="0,0,8,8" Padding="16,8"/>
+                <Button Content="{DynamicResource Common_Print}" Style="{StaticResource OutlineButton}"
+                        Click="PrintHistory_Click" Margin="0,0,0,8" Padding="16,8"/>
+            </WrapPanel>
         </Border>
 
         <!-- Summary -->
