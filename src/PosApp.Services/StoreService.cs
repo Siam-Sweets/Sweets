@@ -240,49 +240,9 @@ public sealed class StoreService : IStoreService
                 IsActive = true
             });
 
-        var existingDiscounts = await _db.Discounts
-            .IgnoreQueryFilters()
-            .Where(discount => discount.StoreId == store.Id)
-            .Select(discount => new { discount.Name, discount.Code })
-            .ToListAsync();
-        var existingDiscountNames = existingDiscounts
-            .Select(discount => discount.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var existingDiscountCodes = existingDiscounts
-            .Where(discount => !string.IsNullOrWhiteSpace(discount.Code))
-            .Select(discount => discount.Code!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (existingDiscountNames.Add("5% Off") &&
-            existingDiscountCodes.Add("SAVE5"))
-            _db.Discounts.Add(new Discount
-            {
-                StoreId = store.Id,
-                Name = "5% Off",
-                Type = DiscountType.Percentage,
-                Value = 5m,
-                Code = "SAVE5",
-                IsActive = true
-            });
-        if (existingDiscountNames.Add("Senior Citizen"))
-            _db.Discounts.Add(new Discount
-            {
-                StoreId = store.Id,
-                Name = "Senior Citizen",
-                Type = DiscountType.Percentage,
-                Value = 10m,
-                IsActive = true
-            });
-        if (existingDiscountNames.Add("50 Off") &&
-            existingDiscountCodes.Add("BD50"))
-            _db.Discounts.Add(new Discount
-            {
-                StoreId = store.Id,
-                Name = "50 Off",
-                Type = DiscountType.FixedAmount,
-                Value = 50m,
-                Code = "BD50",
-                IsActive = true
-            });
+        await EnsureDefaultDiscountAsync(store.Id, "5% Off", DiscountType.Percentage, 5m, "SAVE5");
+        await EnsureDefaultDiscountAsync(store.Id, "Senior Citizen", DiscountType.Percentage, 10m, null);
+        await EnsureDefaultDiscountAsync(store.Id, "50 Off", DiscountType.FixedAmount, 50m, "BD50");
 
         var settings = new StoreSettings
         {
@@ -500,6 +460,191 @@ public sealed class StoreService : IStoreService
             BaseCloudVersion = category.CloudVersion,
             OperationId = SyncOperationScope.CurrentOperationId ?? Guid.NewGuid().ToString("N"),
             PayloadJson = SyncPayloadSerializer.SerializeForSync(category, _db)
+        });
+    }
+
+    private async Task EnsureDefaultDiscountAsync(
+        int storeId,
+        string name,
+        DiscountType type,
+        decimal value,
+        string? code)
+    {
+        var normalizedName = name.Trim();
+        var normalizedNameLower = normalizedName.ToLowerInvariant();
+        var normalizedCode = string.IsNullOrWhiteSpace(code) ? null : code.Trim().ToUpperInvariant();
+        var normalizedCodeLower = normalizedCode?.ToLowerInvariant();
+
+        DetachTrackedDefaultDiscounts(storeId, normalizedNameLower, normalizedCodeLower);
+        await MergeDuplicateDefaultDiscountsAsync(storeId, normalizedNameLower, normalizedCodeLower);
+
+        var now = DateTime.UtcNow;
+        var syncId = Guid.NewGuid().ToString("N");
+        var typeValue = (int)type;
+        if (normalizedCode != null)
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT OR IGNORE INTO "Discounts"
+                    ("StoreId", "SyncId", "Name", "Description", "Type", "Value", "Code",
+                     "ValidFrom", "ValidTo", "MaxUses", "UsedCount", "UsageVersion", "IsActive",
+                     "CreatedAt", "SyncVersion", "SyncUpdatedAt", "CloudVersion")
+                SELECT {storeId}, {syncId}, {normalizedName}, NULL, {typeValue}, {value}, {normalizedCode},
+                       NULL, NULL, NULL, 0, 0, 1, {now}, 1, {now}, 0
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM "Discounts"
+                    WHERE "StoreId" = {storeId}
+                      AND "Code" IS NOT NULL
+                      AND LOWER(TRIM("Code")) = {normalizedCodeLower}
+                );
+                """);
+
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE "Discounts"
+                SET "Name" = {normalizedName},
+                    "Type" = {typeValue},
+                    "Value" = {value},
+                    "Code" = {normalizedCode},
+                    "IsActive" = 1,
+                    "SyncVersion" = CASE WHEN "SyncVersion" < 1 THEN 1 ELSE "SyncVersion" + 1 END,
+                    "SyncUpdatedAt" = {now}
+                WHERE "Id" = (
+                    SELECT "Id" FROM "Discounts"
+                    WHERE "StoreId" = {storeId}
+                      AND "Code" IS NOT NULL
+                      AND LOWER(TRIM("Code")) = {normalizedCodeLower}
+                    ORDER BY "Id"
+                    LIMIT 1
+                );
+                """);
+        }
+        else
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "Discounts"
+                    ("StoreId", "SyncId", "Name", "Description", "Type", "Value", "Code",
+                     "ValidFrom", "ValidTo", "MaxUses", "UsedCount", "UsageVersion", "IsActive",
+                     "CreatedAt", "SyncVersion", "SyncUpdatedAt", "CloudVersion")
+                SELECT {storeId}, {syncId}, {normalizedName}, NULL, {typeValue}, {value}, NULL,
+                       NULL, NULL, NULL, 0, 0, 1, {now}, 1, {now}, 0
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM "Discounts"
+                    WHERE "StoreId" = {storeId}
+                      AND LOWER(TRIM("Name")) = {normalizedNameLower}
+                );
+                """);
+
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE "Discounts"
+                SET "Name" = {normalizedName},
+                    "Type" = {typeValue},
+                    "Value" = {value},
+                    "Code" = NULL,
+                    "IsActive" = 1,
+                    "SyncVersion" = CASE WHEN "SyncVersion" < 1 THEN 1 ELSE "SyncVersion" + 1 END,
+                    "SyncUpdatedAt" = {now}
+                WHERE "Id" = (
+                    SELECT "Id" FROM "Discounts"
+                    WHERE "StoreId" = {storeId}
+                      AND LOWER(TRIM("Name")) = {normalizedNameLower}
+                    ORDER BY "Id"
+                    LIMIT 1
+                );
+                """);
+        }
+
+        if (_context.IsCloudSyncEnabled)
+            await QueueDiscountUpsertAsync(storeId, normalizedNameLower, normalizedCodeLower);
+    }
+
+    private void DetachTrackedDefaultDiscounts(int storeId, string normalizedNameLower, string? normalizedCodeLower)
+    {
+        var tracked = _db.Discounts.Local
+            .Where(discount =>
+                discount.StoreId == storeId &&
+                (normalizedCodeLower != null
+                    ? !string.IsNullOrWhiteSpace(discount.Code) &&
+                      string.Equals(discount.Code.Trim(), normalizedCodeLower, StringComparison.OrdinalIgnoreCase)
+                    : string.Equals(discount.Name.Trim(), normalizedNameLower, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        foreach (var discount in tracked)
+            _db.Entry(discount).State = EntityState.Detached;
+    }
+
+    private async Task MergeDuplicateDefaultDiscountsAsync(
+        int storeId,
+        string normalizedNameLower,
+        string? normalizedCodeLower)
+    {
+        if (normalizedCodeLower != null)
+        {
+            await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                WITH ranked AS (
+                    SELECT "Id",
+                           ROW_NUMBER() OVER (
+                               PARTITION BY "StoreId", LOWER(TRIM("Code"))
+                               ORDER BY "Id"
+                           ) AS "Rank"
+                    FROM "Discounts"
+                    WHERE "StoreId" = {storeId}
+                      AND "Code" IS NOT NULL
+                      AND LOWER(TRIM("Code")) = {normalizedCodeLower}
+                )
+                UPDATE "Discounts"
+                SET "Code" = NULL,
+                    "SyncVersion" = CASE WHEN "SyncVersion" < 1 THEN 1 ELSE "SyncVersion" + 1 END,
+                    "SyncUpdatedAt" = {DateTime.UtcNow}
+                WHERE "Id" IN (
+                    SELECT "Id" FROM ranked WHERE "Rank" > 1
+                );
+                """);
+            return;
+        }
+
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            WITH ranked AS (
+                SELECT "Id",
+                       ROW_NUMBER() OVER (
+                           PARTITION BY "StoreId", LOWER(TRIM("Name"))
+                           ORDER BY "Id"
+                       ) AS "Rank"
+                FROM "Discounts"
+                WHERE "StoreId" = {storeId}
+                  AND LOWER(TRIM("Name")) = {normalizedNameLower}
+                  AND ("Code" IS NULL OR TRIM("Code") = '')
+            )
+            DELETE FROM "Discounts"
+            WHERE "Id" IN (
+                SELECT "Id" FROM ranked WHERE "Rank" > 1
+            );
+            """);
+    }
+
+    private async Task QueueDiscountUpsertAsync(
+        int storeId,
+        string normalizedNameLower,
+        string? normalizedCodeLower)
+    {
+        var discounts = _db.Discounts
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(candidate => candidate.StoreId == storeId);
+        discounts = normalizedCodeLower != null
+            ? discounts.Where(candidate =>
+                candidate.Code != null && candidate.Code.ToLower() == normalizedCodeLower)
+            : discounts.Where(candidate => candidate.Name.ToLower() == normalizedNameLower);
+        var discount = await discounts.OrderBy(candidate => candidate.Id).FirstOrDefaultAsync();
+        if (discount == null) return;
+
+        _db.SyncOutbox.Add(new SyncOutboxItem
+        {
+            StoreId = discount.StoreId,
+            EntityType = nameof(Discount),
+            EntitySyncId = discount.SyncId,
+            Operation = "upsert",
+            EntityVersion = discount.SyncVersion,
+            BaseCloudVersion = discount.CloudVersion,
+            OperationId = SyncOperationScope.CurrentOperationId ?? Guid.NewGuid().ToString("N"),
+            PayloadJson = SyncPayloadSerializer.SerializeForSync(discount, _db)
         });
     }
 

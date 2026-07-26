@@ -1,3 +1,15 @@
+## 1.10.43 — Purchase posting cost concurrency fix
+
+- Fixed new purchase posting falsely failing with `Inventory changed while this purchase was posting` when applying the latest purchase cost.
+- Saved stock quantity and current product cost in the same product update during purchase posting.
+- Added regression coverage for posting a zero-cost purchase and updating the product cost to 0.
+
+## 1.10.42 — New-store discount duplicate fix
+
+- Fixed new-store creation failing with `SQLite Error 19: UNIQUE constraint failed: Discounts.StoreId, Discounts.Code`.
+- Changed default discount seeding to use guarded database upserts instead of tracked EF inserts.
+- Added a sync regression case for existing and pending duplicate `SAVE5` discounts during new-store seeding.
+
 ## 1.10.41 — Net profit dashboard label
 
 - Changed Dashboard and Reports profit labels from Gross Profit to Net Profit.

@@ -119,8 +119,9 @@ try
     await AssertResolutionAsync(db, "pending-conflict", expectedResolved: true);
 
     await AssertStoreSeedingAsync(db, store);
+    await AssertZeroCostPurchasePostingAsync(db, store);
 
-    Console.WriteLine("PosApp synchronized-conflict and store-seeding regressions passed.");
+    Console.WriteLine("PosApp synchronized-conflict, store-seeding, and purchase-cost regressions passed.");
 }
 finally
 {
@@ -233,6 +234,25 @@ static async Task AssertStoreSeedingAsync(AppDbContext db, Store sourceStore)
         SortOrder = 100,
         IsActive = true
     });
+    db.Discounts.Add(new Discount
+    {
+        StoreId = targetStore.Id,
+        Name = "Old Save",
+        Type = DiscountType.FixedAmount,
+        Value = 1m,
+        Code = "save5",
+        IsActive = true
+    });
+    await db.SaveChangesAsync();
+    db.Discounts.Add(new Discount
+    {
+        StoreId = targetStore.Id,
+        Name = "Pending Save",
+        Type = DiscountType.FixedAmount,
+        Value = 2m,
+        Code = "SAVE5",
+        IsActive = true
+    });
 
     var service = new StoreService(
         db,
@@ -252,6 +272,20 @@ static async Task AssertStoreSeedingAsync(AppDbContext db, Store sourceStore)
     Assert(
         categories.Select(category => category.Name.ToUpperInvariant()).Distinct().Count() == 6,
         "New-store seeding did not create exactly the six default categories.");
+    var discounts = await db.Discounts
+        .IgnoreQueryFilters()
+        .AsNoTracking()
+        .Where(discount => discount.StoreId == targetStore.Id)
+        .ToListAsync();
+    var save5 = discounts
+        .Where(discount => string.Equals(discount.Code, "SAVE5", StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    Assert(save5.Count == 1, "New-store seeding did not collapse duplicate SAVE5 discounts.");
+    Assert(save5[0].Name == "5% Off" && save5[0].Type == DiscountType.Percentage && save5[0].Value == 5m,
+        "New-store seeding did not refresh the existing SAVE5 discount.");
+    Assert(
+        discounts.Count(discount => string.Equals(discount.Code, "BD50", StringComparison.OrdinalIgnoreCase)) == 1,
+        "New-store seeding did not create exactly one BD50 discount.");
 
     var seededSamples = await DbSeeder.SeedSampleProductsAsync(db, targetStore.Id);
     Assert(seededSamples, "Sample product seeding reported that no products were added.");
@@ -259,6 +293,67 @@ static async Task AssertStoreSeedingAsync(AppDbContext db, Store sourceStore)
         .IgnoreQueryFilters()
         .CountAsync(product => product.StoreId == targetStore.Id);
     Assert(productCount == 15, $"Expected 15 sample products for the target store, found {productCount}.");
+}
+
+static async Task AssertZeroCostPurchasePostingAsync(AppDbContext db, Store store)
+{
+    var user = await db.Users
+        .IgnoreQueryFilters()
+        .AsNoTracking()
+        .FirstAsync(candidate => candidate.StoreId == store.Id && candidate.IsActive);
+    var category = new Category
+    {
+        StoreId = store.Id,
+        Name = "Purchase Regression",
+        IsActive = true
+    };
+    var supplier = new Supplier
+    {
+        StoreId = store.Id,
+        Name = "Purchase Regression Supplier",
+        IsActive = true
+    };
+    var product = new Product
+    {
+        StoreId = store.Id,
+        Name = "Zero Cost Purchase Product",
+        Category = category,
+        Price = 100m,
+        CostPrice = 50m,
+        StockQuantity = 42m,
+        IsActive = true
+    };
+    db.Categories.Add(category);
+    db.Suppliers.Add(supplier);
+    db.Products.Add(product);
+    await db.SaveChangesAsync();
+
+    var service = new PurchaseService(db);
+    await service.PostPurchaseAsync(new PurchaseDraft
+    {
+        SupplierId = supplier.Id,
+        UserId = user.Id,
+        DocumentDate = DateTime.Today,
+        StockDate = DateTime.Today,
+        Lines =
+        {
+            new PurchaseDraftLine
+            {
+                ProductId = product.Id,
+                ProductName = product.Name,
+                Quantity = 1m,
+                UnitCost = 0m,
+                TaxRate = 0m
+            }
+        }
+    });
+
+    var reloaded = await db.Products
+        .IgnoreQueryFilters()
+        .AsNoTracking()
+        .SingleAsync(candidate => candidate.Id == product.Id);
+    Assert(reloaded.StockQuantity == 43m, "Zero-cost purchase did not increase stock.");
+    Assert(reloaded.CostPrice == 0m, "Zero-cost purchase did not update the product cost to 0.");
 }
 
 file sealed class TestStoreContext(int storeId, string storeSyncId) : IStoreContext

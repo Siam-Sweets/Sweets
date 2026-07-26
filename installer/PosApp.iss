@@ -1,9 +1,9 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.10.41"
+  #define MyAppVersion "1.10.43"
 #endif
 
 #ifndef MyAppNumericVersion
-  #define MyAppNumericVersion "1.10.41.0"
+  #define MyAppNumericVersion "1.10.43.0"
 #endif
 
 #ifndef MyAppSourceDir

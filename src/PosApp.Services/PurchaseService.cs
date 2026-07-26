@@ -150,6 +150,13 @@ public class PurchaseService : IPurchaseService
                 Note = note
             };
 
+            var newestPostedCostProductIds = new HashSet<int>();
+            foreach (var line in draft.Lines.GroupBy(line => line.ProductId).Select(group => group.Last()))
+            {
+                if (await IsLatestPostedPurchaseDateAsync(line.ProductId, document.DocumentDate))
+                    newestPostedCostProductIds.Add(line.ProductId);
+            }
+
             var lineNumber = 0;
             foreach (var line in draft.Lines)
             {
@@ -162,6 +169,8 @@ public class PurchaseService : IPurchaseService
                 var oldQuantity = product.StockQuantity.Value;
                 var newQuantity = oldQuantity + line.Quantity;
                 product.StockQuantity = newQuantity;
+                if (newestPostedCostProductIds.Contains(product.Id))
+                    product.CostPrice = line.UnitCost;
                 product.UpdatedAt = now;
 
                 var purchaseItem = new PurchaseItem
@@ -183,9 +192,6 @@ public class PurchaseService : IPurchaseService
             }
 
             _db.PurchaseDocuments.Add(document);
-            await _db.SaveChangesAsync();
-            foreach (var productId in draft.Lines.Select(line => line.ProductId).Distinct())
-                await ApplyLatestPurchaseCostAsync(productId, now);
             await _db.SaveChangesAsync();
             await _db.CommitExternalTransactionAsync(transaction);
             _db.ChangeTracker.Clear();
@@ -283,6 +289,18 @@ public class PurchaseService : IPurchaseService
 
         product.CostPrice = latest.UnitCost;
         product.UpdatedAt = updatedAt;
+    }
+
+    private async Task<bool> IsLatestPostedPurchaseDateAsync(int productId, DateTime documentDate)
+    {
+        var latestDate = await _db.PurchaseItems.AsNoTracking()
+            .Where(item => item.ProductId == productId &&
+                           item.PurchaseDocument != null &&
+                           item.PurchaseDocument.Status == PurchaseStatus.Posted)
+            .OrderByDescending(item => item.PurchaseDocument!.DocumentDate)
+            .Select(item => (DateTime?)item.PurchaseDocument!.DocumentDate)
+            .FirstOrDefaultAsync();
+        return latestDate == null || documentDate >= latestDate.Value;
     }
 
     private static string NormalizeOperationId(string? value)
